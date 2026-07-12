@@ -48,7 +48,12 @@ export type IndividualSectionKey =
   | "esg" //              578-582 -> EsgSection
   | "execComp" //         583-590 -> ManagementCompSection
   | "catalystTrap" //     591-595 -> CatalystTrapSection
-  | "filings"; //         596-599 -> EventsSection (Latest Filings)
+  | "filings" //          596-599 -> EventsSection (Latest Filings)
+  // Uses of cash. The 500-599 block is fully carved up and 197-200 is only four
+  // slots wide, so this lands in the empty 800s. anyDefByNumber tries the
+  // individual resolver first and no other surface reaches here (economic is
+  // 600+NN, credit 700+NN, and both miss at 800), so the band is free.
+  | "capitalAllocation"; // 800-849 -> UsesOfCashSection
 
 /** Inclusive number ranges per section — the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
@@ -93,6 +98,12 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   ["execComp", 583, 590],
   ["catalystTrap", 591, 595],
   ["filings", 596, 599],
+  // Uses of cash (see the note on IndividualSectionKey above for why the 800s).
+  // The six cash-use metrics themselves already have definitions in the vertical
+  // bands (capex 159, R&D 085, acquisitions 160, buybacks 167, dividends 168,
+  // debt repayment 165, operating cash flow 024), so they are reused rather than
+  // duplicated here. Only the section overview and the derived share metric are new.
+  ["capitalAllocation", 800, 849],
 ];
 
 /** Per-number exceptions; takes precedence over SECTION_RANGES. */

@@ -481,6 +481,62 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "ind.improvement_room", text: "If there are limited ways to improve the business, is value growth ability at risk?" },
       ],
     },
+    // Capital allocation. These sit under the Uses of Cash chart and are drawn from
+    // how practitioners actually interrogate a ten-year allocation record: Giroux
+    // (Capital Allocation), Thorndike (The Outsiders), Damodaran (Applied Corporate
+    // Finance), Fridson (Financial Statement Analysis), Rosenbaum and Pearl
+    // (Investment Banking), and Buffett via Cunningham. Each is deliberately
+    // multi-part, because a question that can be closed with yes or no teaches
+    // nothing. The chart answers "what did they do". These ask "what does it mean".
+    {
+      title: "Capital Allocation — Giroux (Capital Allocation) + Thorndike (The Outsiders) + Damodaran (Applied Corporate Finance)",
+      questions: [
+        {
+          id: "ind.capalloc_drift",
+          text: "Read the drift, not the level. Over the years shown, which use of cash grew as a share of operating cash flow and which shrank? Now put that next to the return on invested capital over the same period. Giroux's finding is that companies raising capital spending faster than their peers tend to deliver weaker earnings growth and weaker stock returns, so rising investment does not justify itself. State what this company earned on the capital it deployed, and say whether the trend in that return supports or contradicts the trend in the spending.",
+        },
+        {
+          id: "ind.capalloc_lifecycle",
+          text: "From the mix alone, where is this company in its life cycle: emerging, growth, mature, or declining? A young company reinvests more than it earns and pays nothing out. A mature one spends roughly its depreciation and returns the rest. A declining one spends less than depreciation and pays out heavily. Now argue against yourself: find the evidence in this chart that contradicts your own answer. Management's narrative is aspirational. The cash flow statement is factual. Where the two disagree, which do you believe, and why?",
+        },
+        {
+          id: "ind.capalloc_capex_split",
+          text: "Split the capital expenditure into maintenance and growth. Using depreciation as the rough proxy for what it costs to hold the asset base flat, how much of the spending is simply standing still, and how much is a genuine bet on the future? Where capex has sat persistently below depreciation, is revenue holding up, and how much longer can that continue before the shrinking asset base constrains it? Where capex has run far above depreciation, what did the last comparable burst of spending actually earn three to five years later?",
+        },
+        {
+          id: "ind.capalloc_rnd",
+          text: "Is research and development a growth engine here, or the cost of standing still? Test it rather than assume it. Has the cumulative R&D of the last five years produced a measurable gain in revenue growth or gross margin, allowing for a lag of two to four years? If R&D is rising while revenue growth decelerates, you must choose between two very different stories: R&D is failing to produce growth, or R&D is the only thing preventing a faster decline. Say which you believe and what evidence would change your mind, because the two carry opposite implications for value.",
+        },
+        {
+          id: "ind.capalloc_buyback_net",
+          text: "Separate gross buybacks from net buybacks. Subtract the stock issued to employees as compensation, then ask the only question that matters: did the share count actually fall, and by how much? Giroux is blunt that the net figure is the honest one. A company repurchasing three billion while issuing two and a half billion in stock compensation has returned almost nothing to long term holders, however aggressive the buyback headline looks. What is the true net repurchase here, and does management's own language acknowledge the difference?",
+        },
+        {
+          id: "ind.capalloc_buyback_timing",
+          text: "Did management buy its own stock when it was cheap, or when it was expensive? Compare the years of heaviest repurchase against the share price and against your own estimate of intrinsic value in those same years. The ordinary pattern is to buy most at the peak, when cash is plentiful and confidence is high, and least at the trough, when the stock is cheapest and the board is most afraid. The Outsiders CEOs inverted that. Which pattern does this company show, and what does that tell you about whether management understands what its own business is worth?",
+        },
+        {
+          id: "ind.capalloc_buyback_funding",
+          text: "How were the buybacks paid for: out of genuine free cash flow, or out of debt? If leverage rose while the company was repurchasing stock, the earnings yield on the shares it bought must exceed the after tax cost of that new debt for the trade to create value. Does it? Fridson's example is IBM, which spent more repurchasing stock between 1995 and 1999 than it earned in the entire period, raising its financial risk in the process. Ask the asymmetric question: if this business deteriorates, what has the company given up by carrying more debt and fewer options?",
+        },
+        {
+          id: "ind.capalloc_dividend",
+          text: "Test the dividend against free cash flow to equity, not against earnings. Would this payout have survived the worst operating year in the record shown? A dividend that rises while organic investment shrinks can make retreat look like discipline. So decide: is this company returning capital because it has genuinely run out of projects that clear its hurdle rate, which is the honest and correct thing to do, or because returning capital is easier than admitting the core business has stopped compounding?",
+        },
+        {
+          id: "ind.capalloc_debt",
+          text: "Where debt repayment takes a large share of the cash, ask whether it was chosen or forced. Accelerating repayment in the years after a large acquisition is not allocation, it is servitude to a debt schedule that a previous decision created. Voluntary deleveraging is different, but it is only wise when the business risk warrants it: paying down cheap debt while the stock trades below intrinsic value forgoes both the tax shield and the buyback return. Which of these is happening here, and what does it reveal about management's appetite for risk as opposed to its judgement about value?",
+        },
+        {
+          id: "ind.capalloc_worst",
+          text: "Every ten year record contains one significant misallocation. Find this company's. Was it an acquisition that never earned its price, a buyback at the top, a capital programme that never produced the promised return, or a dividend defended past the point of prudence? Then ask the question that actually separates good capital allocators from bad ones: has management recognised the mistake and corrected it, or is it still committing it? The Outsiders were not distinguished by being right every time. They were distinguished by correcting errors quickly and never repeating them across cycles.",
+        },
+        {
+          id: "ind.capalloc_retained",
+          text: "Apply Buffett's test to the whole record. Over the period shown, has the company created at least one dollar of market value for every dollar of earnings it retained rather than paid out? Work it through rather than guess. If the answer is no, then the retained earnings would have been worth more in the hands of shareholders than in the hands of management, and that is the single most damning verdict available in capital allocation. If the answer is yes, say which use of cash did the work.",
+        },
+      ],
+    },
     {
       title: "Management Quality",
       questions: [

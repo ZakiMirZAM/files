@@ -873,6 +873,46 @@ export interface IndividualAnalysis {
   ownerEarnings?: OwnerEarningsBlock | null;
   events?: CompanyEvent[] | null;
   dupont?: Dupont | null;
+  usesOfCash?: UsesOfCash | null;
+}
+
+// ── Uses of cash: what each year's operating cash flow was spent on ───────────
+// Mirrors backend/uses_of_cash.py exactly. Two shapes matter here:
+//   * `uses` values are null when the company did not REPORT the line. A null is
+//     not a zero, and `reported` says which is which.
+//   * `sources` carries net borrowing and net divestitures. Those are cash coming
+//     IN. They are never stacked as uses, because borrowing is not spending.
+
+export type UseOfCashKey =
+  | "capex" | "rnd" | "acquisitions" | "buybacks" | "dividends" | "debtRepaid";
+
+export interface UsesOfCashYear {
+  year: number;
+  operatingCashFlow: number | null;
+  ocfPositive: boolean;
+  uses: Record<UseOfCashKey, number | null>;
+  reported: Record<UseOfCashKey, boolean>;
+  sources: {
+    netDebtRaised: number | null;
+    netDivestitures: number | null;
+  };
+  /** null when operating cash flow was not positive; `shareReason` says why. */
+  shareOfOcf: Record<UseOfCashKey, number | null> | null;
+  shareReason: string | null;
+  totalUses: number | null;
+  totalUsesShareOfOcf: number | null;
+}
+
+export interface UsesOfCash {
+  applicable: boolean;
+  reason?: string;
+  years?: UsesOfCashYear[];
+  totals?: Record<UseOfCashKey, number>;
+  totalOperatingCashFlow?: number | null;
+  totalUses?: number;
+  totalShareOfOcf?: Record<UseOfCashKey, number> | null;
+  anyPositiveOcf?: boolean;
+  note?: string;
 }
 
 // ── Extended (5-factor) DuPont decomposition ─────────────────────────────────

@@ -5089,6 +5089,9 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "events": snap.events,
         # Extended (5-factor) DuPont decomposition of ROE
         "dupont": snap.dupont,
+        # Uses of cash: what each year's operating cash flow was spent on. Net
+        # borrowing and net divestitures ride in `sources`, never in `uses`.
+        "usesOfCash": snap.uses_of_cash,
         # Verdict
         "verdict": {
             "qualityScore": snap.quality_score,

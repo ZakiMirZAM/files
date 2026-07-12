@@ -51,6 +51,12 @@ from financial_db import (  # noqa: E402
 # Damodaran Ch.9 earnings/capital normalization (self-contained, no back-import).
 import earnings_normalization as _earn_norm  # noqa: E402
 
+# Uses of cash. Self-contained and imports nothing from this module, so there is
+# no cycle. It owns the cash-flow sign convention, which is not uniform in this
+# database: "Debt Repayment" and "Acquisitions Net" are NET figures whose sign
+# carries the meaning, so a net inflow must never be drawn as a use of cash.
+import uses_of_cash as _uses_of_cash  # noqa: E402
+
 # Bottom-up beta engine (backend/betas). Optional: when the package is missing
 # or BETA_RESOLVER=off, every beta below stays the stored regression value.
 try:
@@ -576,6 +582,12 @@ class IndividualSnapshot:
 
     # Extended (5-factor) DuPont decomposition of ROE. JSON-safe.
     dupont: Optional[dict] = None
+
+    # Uses of cash: what each year's operating cash flow was actually spent on
+    # (capex, R&D, acquisitions, buybacks, dividends, debt paydown), in dollars and
+    # as a share of operating cash flow. Net borrowing and net divestitures are
+    # reported as SOURCES, never as uses. JSON-safe.
+    uses_of_cash: Optional[dict] = None
 
     # Verdict
     strengths: list[str] = field(default_factory=list)
@@ -4944,6 +4956,11 @@ def build_individual_snapshot(
     except Exception as exc:  # noqa: BLE001
         log.warning("credit analysis failed for %s: %s", ticker.upper(), exc)
         credit_analysis = None
+    try:
+        uses_of_cash = _uses_of_cash.build_uses_of_cash(rows)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("uses of cash failed for %s: %s", ticker.upper(), exc)
+        uses_of_cash = None
 
     net_income_growth_latest = horizontal_income["Net Income"].get(years[-1])
     strengths, weaknesses, quality_score, verdict = _build_verdict({
@@ -4998,6 +5015,7 @@ def build_individual_snapshot(
         tobins_q=tobins_q,
         owner_earnings=owner_earnings,
         dupont=dupont,
+        uses_of_cash=uses_of_cash,
         strengths=strengths,
         weaknesses=weaknesses,
         verdict=verdict,

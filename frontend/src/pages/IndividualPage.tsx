@@ -34,6 +34,7 @@ import { CatalystTrapSection } from "../components/individual/CatalystTrapSectio
 import { EventsSection } from "../components/individual/EventsSection";
 import { ShenanigansSection } from "../components/individual/ShenanigansSection";
 import { CreditAnalysisSection } from "../components/individual/CreditAnalysisSection";
+import { UsesOfCashSection } from "../components/individual/UsesOfCashSection";
 import { ChecklistBlock } from "../components/individual/ChecklistBlock";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { DefinitionLink } from "../components/individual/DefinitionsBlock";
@@ -452,6 +453,13 @@ export function IndividualPage() {
           />
         )}
 
+        {/* What management did with the cash the valuation above just modelled. It
+            sits at the seam between the quantitative cluster and the interpretive
+            one, because the chart is a record and the deck below it is the reading. */}
+        {data?.analysis && ticker && (
+          <UsesOfCashSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
+        )}
+
         {data?.analysis && ticker && (
           <StrategicResourcesSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
         )}
@@ -507,6 +515,9 @@ export function IndividualPage() {
               "Board & Governance",
               "Earnings Quality",
               "Catalyst & Value Trap",
+              // Rendered inside UsesOfCashSection. Without this it would also render
+              // here, in the page-bottom bank, and the deck would appear twice.
+              "Capital Allocation — Giroux (Capital Allocation) + Thorndike (The Outsiders) + Damodaran (Applied Corporate Finance)",
             ]}
             dataContext={aiDataContext}
           />
