@@ -1,0 +1,3536 @@
+{
+  "matches": {
+    "TOM.HM": {
+      "us": "TM",
+      "name": "Toyota Motor Corp",
+      "mc": 49173300000000.0
+    },
+    "2330.TW": {
+      "us": "TSM",
+      "name": "Taiwan Semiconductor Manufacturing Company Limited",
+      "mc": 40198900000000.0
+    },
+    "005490.KS": {
+      "us": "PKX",
+      "name": "POSCO Holdings Inc.",
+      "mc": 37024600000000.0
+    },
+    "316140.KS": {
+      "us": "WF",
+      "name": "Woori Financial Group Inc.",
+      "mc": 21229200000000.0
+    },
+    "8411.T": {
+      "us": "MFG",
+      "name": "Mizuho Financial Group, Inc.",
+      "mc": 10242200000000.0
+    },
+    "4502.T": {
+      "us": "TAK",
+      "name": "Takeda Pharmaceutical Company Limited",
+      "mc": 6967570000000.0
+    }
+  },
+  "log": [
+    {
+      "foreign": "MICRO.BK",
+      "us": null,
+      "name": "Micro Leasing Public Company Limited",
+      "reason": "no-strong-match",
+      "mc": 1e+18
+    },
+    {
+      "foreign": "OSMEN.IS",
+      "us": null,
+      "name": "Osmanli Yatirim Menkul Degerler A.S.",
+      "reason": "no-strong-match",
+      "mc": 1e+18
+    },
+    {
+      "foreign": "BCIC.JK",
+      "us": null,
+      "name": "PT Bank JTrust Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 5.00606e+16
+    },
+    {
+      "foreign": "SMSD.IL",
+      "us": null,
+      "name": "Samsung Electronics Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 1.04546e+16
+    },
+    {
+      "foreign": "BBCA.JK",
+      "us": null,
+      "name": "PT Bank Central Asia Tbk",
+      "reason": "no-strong-match",
+      "mc": 1192690000000000.0
+    },
+    {
+      "foreign": "181710.KS",
+      "us": null,
+      "name": "NHN Corporation",
+      "reason": "no-strong-match",
+      "mc": 951455000000000.0
+    },
+    {
+      "foreign": "BBRI.JK",
+      "us": null,
+      "name": "PT Bank Rakyat Indonesia (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 863794000000000.0
+    },
+    {
+      "foreign": "BMRI.JK",
+      "us": null,
+      "name": "PT Bank Mandiri (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 571667000000000.0
+    },
+    {
+      "foreign": "HMSP.JK",
+      "us": null,
+      "name": "PT Hanjaya Mandala Sampoerna Tbk",
+      "reason": "no-strong-match",
+      "mc": 550185000000000.0
+    },
+    {
+      "foreign": "DCII.JK",
+      "us": null,
+      "name": "PT DCI Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 476749000000000.0
+    },
+    {
+      "foreign": "000660.KS",
+      "us": null,
+      "name": "SK hynix Inc.",
+      "reason": "no-strong-match",
+      "mc": 449483000000000.0
+    },
+    {
+      "foreign": "GOTO.JK",
+      "us": null,
+      "name": "PT GoTo Gojek Tokopedia Tbk",
+      "reason": "no-strong-match",
+      "mc": 448506000000000.0
+    },
+    {
+      "foreign": "UNVR.JK",
+      "us": null,
+      "name": "PT Unilever Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 426517000000000.0
+    },
+    {
+      "foreign": "ASII.JK",
+      "us": null,
+      "name": "PT Astra International Tbk",
+      "reason": "no-strong-match",
+      "mc": 336017000000000.0
+    },
+    {
+      "foreign": "MORA.JK",
+      "us": null,
+      "name": "PT Mora Telematika Indonesia",
+      "reason": "no-strong-match",
+      "mc": 284942000000000.0
+    },
+    {
+      "foreign": "PANI.JK",
+      "us": null,
+      "name": "PT Pantai Indah Kapuk Dua Tbk",
+      "reason": "no-strong-match",
+      "mc": 257388000000000.0
+    },
+    {
+      "foreign": "IMPC.JK",
+      "us": null,
+      "name": "PT Impack Pratama Industri Tbk",
+      "reason": "no-strong-match",
+      "mc": 213975000000000.0
+    },
+    {
+      "foreign": "ARTO.JK",
+      "us": null,
+      "name": "PT Bank Jago Tbk",
+      "reason": "no-strong-match",
+      "mc": 212439000000000.0
+    },
+    {
+      "foreign": "SRAJ.JK",
+      "us": null,
+      "name": "PT Sejahteraraya Anugrahjaya Tbk",
+      "reason": "no-strong-match",
+      "mc": 201340000000000.0
+    },
+    {
+      "foreign": "BBNI.JK",
+      "us": null,
+      "name": "PT Bank Negara Indonesia (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 200255000000000.0
+    },
+    {
+      "foreign": "ISAT.JK",
+      "us": null,
+      "name": "PT Indosat Ooredoo Hutchison Tbk",
+      "reason": "no-strong-match",
+      "mc": 198615000000000.0
+    },
+    {
+      "foreign": "BNLI.JK",
+      "us": null,
+      "name": "PT Bank Permata Tbk",
+      "reason": "no-strong-match",
+      "mc": 186334000000000.0
+    },
+    {
+      "foreign": "GGRM.JK",
+      "us": null,
+      "name": "PT Gudang Garam Tbk",
+      "reason": "no-strong-match",
+      "mc": 161239000000000.0
+    },
+    {
+      "foreign": "FILM.JK",
+      "us": null,
+      "name": "PT.MD Entertainment Tbk",
+      "reason": "no-strong-match",
+      "mc": 149337000000000.0
+    },
+    {
+      "foreign": "EMTK.JK",
+      "us": null,
+      "name": "PT Elang Mahkota Teknologi Tbk",
+      "reason": "no-strong-match",
+      "mc": 134325000000000.0
+    },
+    {
+      "foreign": "ICBP.JK",
+      "us": null,
+      "name": "PT Indofood CBP Sukses Makmur Tbk",
+      "reason": "no-strong-match",
+      "mc": 132654000000000.0
+    },
+    {
+      "foreign": "UNTR.JK",
+      "us": null,
+      "name": "PT United Tractors Tbk",
+      "reason": "no-strong-match",
+      "mc": 132047000000000.0
+    },
+    {
+      "foreign": "DNET.JK",
+      "us": null,
+      "name": "PT Indoritel Makmur Internasional Tbk.",
+      "reason": "no-strong-match",
+      "mc": 128720000000000.0
+    },
+    {
+      "foreign": "BRIS.JK",
+      "us": null,
+      "name": "PT Bank Syariah Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 125933000000000.0
+    },
+    {
+      "foreign": "AMRT.JK",
+      "us": null,
+      "name": "PT Sumber Alfaria Trijaya Tbk",
+      "reason": "no-strong-match",
+      "mc": 121667000000000.0
+    },
+    {
+      "foreign": "CPIN.JK",
+      "us": null,
+      "name": "PT Charoen Pokphand Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 118476000000000.0
+    },
+    {
+      "foreign": "MLPT.JK",
+      "us": null,
+      "name": "PT Multipolar Technology Tbk",
+      "reason": "no-strong-match",
+      "mc": 117000000000000.0
+    },
+    {
+      "foreign": "BUKA.JK",
+      "us": null,
+      "name": "PT Bukalapak.com Tbk.",
+      "reason": "no-strong-match",
+      "mc": 114610000000000.0
+    },
+    {
+      "foreign": "MPRO.JK",
+      "us": null,
+      "name": "PT Maha Properti Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 114339000000000.0
+    },
+    {
+      "foreign": "373220.KS",
+      "us": null,
+      "name": "LG Energy Solution, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 103492000000000.0
+    },
+    {
+      "foreign": "RISE.JK",
+      "us": null,
+      "name": "PT Jaya Sukses Makmur Sentosa Tbk",
+      "reason": "no-strong-match",
+      "mc": 98778600000000.0
+    },
+    {
+      "foreign": "WMPP.JK",
+      "us": null,
+      "name": "PT Widodo Makmur Perkasa Tbk",
+      "reason": "no-strong-match",
+      "mc": 97777500000000.0
+    },
+    {
+      "foreign": "KLBF.JK",
+      "us": null,
+      "name": "PT Kalbe Farma Tbk.",
+      "reason": "no-strong-match",
+      "mc": 97218300000000.0
+    },
+    {
+      "foreign": "SMMA.JK",
+      "us": null,
+      "name": "PT Sinar Mas Multiartha Tbk",
+      "reason": "no-strong-match",
+      "mc": 96947700000000.0
+    },
+    {
+      "foreign": "SMGR.JK",
+      "us": null,
+      "name": "PT Semen Indonesia (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 95824000000000.0
+    },
+    {
+      "foreign": "INTP.JK",
+      "us": null,
+      "name": "PT Indocement Tunggal Prakarsa Tbk",
+      "reason": "no-strong-match",
+      "mc": 92030800000000.0
+    },
+    {
+      "foreign": "CASA.JK",
+      "us": null,
+      "name": "PT Capital Financial Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 87706400000000.0
+    },
+    {
+      "foreign": "MEGA.JK",
+      "us": null,
+      "name": "PT Bank Mega Tbk",
+      "reason": "no-strong-match",
+      "mc": 85991900000000.0
+    },
+    {
+      "foreign": "NCKL.JK",
+      "us": null,
+      "name": "PT Trimegah Bangun Persada Tbk",
+      "reason": "no-strong-match",
+      "mc": 82343700000000.0
+    },
+    {
+      "foreign": "TRNFP.ME",
+      "us": null,
+      "name": "Public Joint Stock Company Transneft",
+      "reason": "no-results",
+      "mc": 80830200000000.0
+    },
+    {
+      "foreign": "207940.KS",
+      "us": null,
+      "name": "Samsung Biologics Co.,Ltd.",
+      "reason": "no-strong-match",
+      "mc": 78376800000000.0
+    },
+    {
+      "foreign": "005387.KS",
+      "us": null,
+      "name": "Hyundai Motor Company",
+      "reason": "no-strong-match",
+      "mc": 77183400000000.0
+    },
+    {
+      "foreign": "ANTM.JK",
+      "us": null,
+      "name": "PT Aneka Tambang Tbk",
+      "reason": "no-strong-match",
+      "mc": 75696900000000.0
+    },
+    {
+      "foreign": "BDMN.JK",
+      "us": null,
+      "name": "PT Bank Danamon Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 72843300000000.0
+    },
+    {
+      "foreign": "INDF.JK",
+      "us": null,
+      "name": "PT Indofood Sukses Makmur Tbk",
+      "reason": "no-strong-match",
+      "mc": 69584900000000.0
+    },
+    {
+      "foreign": "MTEL.JK",
+      "us": null,
+      "name": "PT Dayamitra Telekomunikasi Tbk.",
+      "reason": "no-strong-match",
+      "mc": 68842200000000.0
+    },
+    {
+      "foreign": "BELI.JK",
+      "us": null,
+      "name": "PT Global Digital Niaga Tbk",
+      "reason": "no-strong-match",
+      "mc": 65861100000000.0
+    },
+    {
+      "foreign": "PGUN.JK",
+      "us": null,
+      "name": "PT Pradiksi Gunatama Tbk",
+      "reason": "no-strong-match",
+      "mc": 63524600000000.0
+    },
+    {
+      "foreign": "051915.KS",
+      "us": null,
+      "name": "LG Chem, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 63324400000000.0
+    },
+    {
+      "foreign": "MYOR.JK",
+      "us": null,
+      "name": "PT Mayora Indah Tbk",
+      "reason": "no-strong-match",
+      "mc": 62157200000000.0
+    },
+    {
+      "foreign": "TBIG.JK",
+      "us": null,
+      "name": "PT Tower Bersama Infrastructure Tbk",
+      "reason": "no-strong-match",
+      "mc": 61539000000000.0
+    },
+    {
+      "foreign": "EXCL.JK",
+      "us": null,
+      "name": "PT XLSMART Telecom Sejahtera Tbk",
+      "reason": "no-strong-match",
+      "mc": 60142200000000.0
+    },
+    {
+      "foreign": "MAYA.JK",
+      "us": null,
+      "name": "PT Bank Mayapada Internasional Tbk",
+      "reason": "no-strong-match",
+      "mc": 58484200000000.0
+    },
+    {
+      "foreign": "035420.KS",
+      "us": null,
+      "name": "NAVER Corporation",
+      "reason": "no-strong-match",
+      "mc": 56267400000000.0
+    },
+    {
+      "foreign": "BBHI.JK",
+      "us": null,
+      "name": "PT Allo Bank Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 56130800000000.0
+    },
+    {
+      "foreign": "TOWR.JK",
+      "us": null,
+      "name": "PT Sarana Menara Nusantara Tbk.",
+      "reason": "no-strong-match",
+      "mc": 56052200000000.0
+    },
+    {
+      "foreign": "MSIN.JK",
+      "us": null,
+      "name": "PT MNC Digital Entertainment Tbk",
+      "reason": "no-strong-match",
+      "mc": 55162000000000.0
+    },
+    {
+      "foreign": "AVIA.JK",
+      "us": null,
+      "name": "PT Avia Avian Tbk",
+      "reason": "no-strong-match",
+      "mc": 53589800000000.0
+    },
+    {
+      "foreign": "LPPF.JK",
+      "us": null,
+      "name": "PT Matahari Department Store Tbk",
+      "reason": "no-results",
+      "mc": 51339200000000.0
+    },
+    {
+      "foreign": "SCMA.JK",
+      "us": null,
+      "name": "PT Surya Citra Media Tbk",
+      "reason": "no-strong-match",
+      "mc": 51174800000000.0
+    },
+    {
+      "foreign": "TCPI.JK",
+      "us": null,
+      "name": "PT Transcoal Pacific Tbk",
+      "reason": "no-strong-match",
+      "mc": 50250000000000.0
+    },
+    {
+      "foreign": "CBDK.JK",
+      "us": null,
+      "name": "Bangun Kosambi Sukses Tbk.",
+      "reason": "no-strong-match",
+      "mc": 49440200000000.0
+    },
+    {
+      "foreign": "TOM.HM",
+      "us": "TM",
+      "name": "Toyota Motor Corp",
+      "reason": "matched:NYQ",
+      "mc": 49173300000000.0
+    },
+    {
+      "foreign": "035720.KS",
+      "us": null,
+      "name": "Kakao Corp.",
+      "reason": "no-strong-match",
+      "mc": 48616400000000.0
+    },
+    {
+      "foreign": "402340.KS",
+      "us": null,
+      "name": "SK Square Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 48608400000000.0
+    },
+    {
+      "foreign": "012450.KS",
+      "us": null,
+      "name": "Hanwha Aerospace Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 48521700000000.0
+    },
+    {
+      "foreign": "034020.KS",
+      "us": null,
+      "name": "Doosan Enerbility Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 48234200000000.0
+    },
+    {
+      "foreign": "JSMR.JK",
+      "us": null,
+      "name": "PT Jasa Marga (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 47827900000000.0
+    },
+    {
+      "foreign": "000270.KS",
+      "us": null,
+      "name": "Kia Corporation",
+      "reason": "no-strong-match",
+      "mc": 47338800000000.0
+    },
+    {
+      "foreign": "GOOD.JK",
+      "us": null,
+      "name": "PT Garudafood Putra Putri Jaya Tbk",
+      "reason": "no-strong-match",
+      "mc": 46797300000000.0
+    },
+    {
+      "foreign": "PTBA.JK",
+      "us": null,
+      "name": "PT Bukit Asam Tbk",
+      "reason": "no-strong-match",
+      "mc": 45322000000000.0
+    },
+    {
+      "foreign": "329180.KS",
+      "us": null,
+      "name": "Hd Hyundai Heavy Industries Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 45182900000000.0
+    },
+    {
+      "foreign": "BNGA.JK",
+      "us": null,
+      "name": "PT Bank CIMB Niaga Tbk",
+      "reason": "no-strong-match",
+      "mc": 45000800000000.0
+    },
+    {
+      "foreign": "MIKA.JK",
+      "us": null,
+      "name": "PT Mitra Keluarga Karyasehat Tbk",
+      "reason": "no-strong-match",
+      "mc": 44904000000000.0
+    },
+    {
+      "foreign": "MDIY.JK",
+      "us": null,
+      "name": "Daya Intiguna Yasa Tbk.",
+      "reason": "no-strong-match",
+      "mc": 44838900000000.0
+    },
+    {
+      "foreign": "CMRY.JK",
+      "us": null,
+      "name": "PT Cisarua Mountain Dairy Tbk",
+      "reason": "no-strong-match",
+      "mc": 44831000000000.0
+    },
+    {
+      "foreign": "068270.KS",
+      "us": null,
+      "name": "Celltrion, Inc.",
+      "reason": "no-strong-match",
+      "mc": 44829000000000.0
+    },
+    {
+      "foreign": "PNBN.JK",
+      "us": null,
+      "name": "P.T. Bank Pan Indonesia Tbk",
+      "reason": "no-results",
+      "mc": 44803000000000.0
+    },
+    {
+      "foreign": "006405.KS",
+      "us": null,
+      "name": "Samsung SDI Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 42799900000000.0
+    },
+    {
+      "foreign": "BBTN.JK",
+      "us": null,
+      "name": "PT Bank Tabungan Negara (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 42555300000000.0
+    },
+    {
+      "foreign": "3459.T",
+      "us": null,
+      "name": "Samty Residential Investment Corporation",
+      "reason": "no-strong-match",
+      "mc": 42135600000000.0
+    },
+    {
+      "foreign": "SILO.JK",
+      "us": null,
+      "name": "PT Siloam International Hospitals Tbk",
+      "reason": "no-strong-match",
+      "mc": 42062500000000.0
+    },
+    {
+      "foreign": "RIGD.IL",
+      "us": null,
+      "name": "Reliance Industries Limited",
+      "reason": "no-strong-match",
+      "mc": 40316600000000.0
+    },
+    {
+      "foreign": "2330.TW",
+      "us": "TSM",
+      "name": "Taiwan Semiconductor Manufacturing Company Limited",
+      "reason": "matched:NYQ",
+      "mc": 40198900000000.0
+    },
+    {
+      "foreign": "02826K.KS",
+      "us": null,
+      "name": "Samsung C&T Corporation",
+      "reason": "no-strong-match",
+      "mc": 39188700000000.0
+    },
+    {
+      "foreign": "AGRO.JK",
+      "us": null,
+      "name": "PT Bank Raya Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 38953600000000.0
+    },
+    {
+      "foreign": "SBILIFE.NS",
+      "us": null,
+      "name": "SBI Life Insurance Company Limited",
+      "reason": "no-strong-match",
+      "mc": 38405800000000.0
+    },
+    {
+      "foreign": "3666.TWO",
+      "us": null,
+      "name": "Optivision Technology, Inc.",
+      "reason": "no-strong-match",
+      "mc": 38284400000000.0
+    },
+    {
+      "foreign": "SCNP.JK",
+      "us": null,
+      "name": "PT Selaras Citra Nusantara Perkasa Tbk",
+      "reason": "no-strong-match",
+      "mc": 38110000000000.0
+    },
+    {
+      "foreign": "SRTG.JK",
+      "us": null,
+      "name": "PT Saratoga Investama Sedaya Tbk",
+      "reason": "no-strong-match",
+      "mc": 37753500000000.0
+    },
+    {
+      "foreign": "SMBR.JK",
+      "us": null,
+      "name": "PT Semen Baturaja (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 37544900000000.0
+    },
+    {
+      "foreign": "005490.KS",
+      "us": "PKX",
+      "name": "POSCO Holdings Inc.",
+      "reason": "matched:NYQ",
+      "mc": 37024600000000.0
+    },
+    {
+      "foreign": "MKPI.JK",
+      "us": null,
+      "name": "PT Metropolitan Kentjana Tbk",
+      "reason": "no-strong-match",
+      "mc": 36979600000000.0
+    },
+    {
+      "foreign": "VKTR.JK",
+      "us": null,
+      "name": "PT VKTR Teknologi Mobilitas Tbk",
+      "reason": "no-strong-match",
+      "mc": 36968800000000.0
+    },
+    {
+      "foreign": "MNCN.JK",
+      "us": null,
+      "name": "PT. Media Nusantara Citra Tbk",
+      "reason": "no-strong-match",
+      "mc": 36770300000000.0
+    },
+    {
+      "foreign": "007700.KS",
+      "us": null,
+      "name": "F&F Holdings Co., Ltd.",
+      "reason": "empty-sig",
+      "mc": 36162900000000.0
+    },
+    {
+      "foreign": "383220.KS",
+      "us": null,
+      "name": "F&F Co., Ltd",
+      "reason": "empty-sig",
+      "mc": 36162900000000.0
+    },
+    {
+      "foreign": "015360.KS",
+      "us": null,
+      "name": "INVENI Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 35984800000000.0
+    },
+    {
+      "foreign": "042660.KS",
+      "us": null,
+      "name": "Hanwha Ocean Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 34808500000000.0
+    },
+    {
+      "foreign": "BSDE.JK",
+      "us": null,
+      "name": "PT Bumi Serpong Damai Tbk",
+      "reason": "no-strong-match",
+      "mc": 34250400000000.0
+    },
+    {
+      "foreign": "BUVA.JK",
+      "us": null,
+      "name": "PT Bukit Uluwatu Villa Tbk",
+      "reason": "no-strong-match",
+      "mc": 34217700000000.0
+    },
+    {
+      "foreign": "MLBI.JK",
+      "us": null,
+      "name": "PT Multi Bintang Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 33712000000000.0
+    },
+    {
+      "foreign": "323410.KS",
+      "us": null,
+      "name": "KakaoBank Corp.",
+      "reason": "no-strong-match",
+      "mc": 33348600000000.0
+    },
+    {
+      "foreign": "012330.KS",
+      "us": null,
+      "name": "Hyundai Mobis Co.,Ltd",
+      "reason": "no-strong-match",
+      "mc": 33267900000000.0
+    },
+    {
+      "foreign": "PWON.JK",
+      "us": null,
+      "name": "PT Pakuwon Jati Tbk",
+      "reason": "no-strong-match",
+      "mc": 32989300000000.0
+    },
+    {
+      "foreign": "BJBR.JK",
+      "us": null,
+      "name": "PT Bank Pembangunan Daerah Jawa Barat dan Banten Tbk",
+      "reason": "no-strong-match",
+      "mc": 32870400000000.0
+    },
+    {
+      "foreign": "BTPS.JK",
+      "us": null,
+      "name": "PT Bank BTPN Syariah Tbk",
+      "reason": "no-strong-match",
+      "mc": 32738900000000.0
+    },
+    {
+      "foreign": "BMTR.JK",
+      "us": null,
+      "name": "PT Global Mediacom Tbk",
+      "reason": "no-strong-match",
+      "mc": 32025800000000.0
+    },
+    {
+      "foreign": "NISP.JK",
+      "us": null,
+      "name": "PT Bank OCBC NISP Tbk",
+      "reason": "no-strong-match",
+      "mc": 31435100000000.0
+    },
+    {
+      "foreign": "AALI.JK",
+      "us": null,
+      "name": "PT Astra Agro Lestari Tbk",
+      "reason": "no-strong-match",
+      "mc": 31139800000000.0
+    },
+    {
+      "foreign": "MAPA.JK",
+      "us": null,
+      "name": "PT Map Aktif Adiperkasa Tbk",
+      "reason": "no-strong-match",
+      "mc": 30499300000000.0
+    },
+    {
+      "foreign": "JPFA.JK",
+      "us": null,
+      "name": "PT Japfa Comfeed Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 30464500000000.0
+    },
+    {
+      "foreign": "BTPN.JK",
+      "us": null,
+      "name": "PT Bank SMBC Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 30139800000000.0
+    },
+    {
+      "foreign": "JARR.JK",
+      "us": null,
+      "name": "PT Jhonlin Agro Raya Tbk",
+      "reason": "no-strong-match",
+      "mc": 29810700000000.0
+    },
+    {
+      "foreign": "TAPG.JK",
+      "us": null,
+      "name": "PT Triputra Agro Persada Tbk",
+      "reason": "no-strong-match",
+      "mc": 29778800000000.0
+    },
+    {
+      "foreign": "MAPI.JK",
+      "us": null,
+      "name": "PT. Mitra Adiperkasa Tbk",
+      "reason": "no-strong-match",
+      "mc": 29605900000000.0
+    },
+    {
+      "foreign": "ACES.JK",
+      "us": null,
+      "name": "PT Aspirasi Hidup Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 29338400000000.0
+    },
+    {
+      "foreign": "BANK.JK",
+      "us": null,
+      "name": "PT Bank Aladin Syariah Tbk",
+      "reason": "no-strong-match",
+      "mc": 29279800000000.0
+    },
+    {
+      "foreign": "AKRA.JK",
+      "us": null,
+      "name": "PT AKR Corporindo Tbk",
+      "reason": "no-strong-match",
+      "mc": 29112300000000.0
+    },
+    {
+      "foreign": "009540.KS",
+      "us": null,
+      "name": "Korea Shipbuilding & Offshore Engineering Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 28780200000000.0
+    },
+    {
+      "foreign": "090430.KS",
+      "us": null,
+      "name": "Amorepacific Corporation",
+      "reason": "no-strong-match",
+      "mc": 28593300000000.0
+    },
+    {
+      "foreign": "032830.KS",
+      "us": null,
+      "name": "Samsung Life Insurance Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 28301000000000.0
+    },
+    {
+      "foreign": "267260.KS",
+      "us": null,
+      "name": "HD Hyundai Electric Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 27858600000000.0
+    },
+    {
+      "foreign": "018880.KS",
+      "us": null,
+      "name": "Hanon Systems",
+      "reason": "no-strong-match",
+      "mc": 27693100000000.0
+    },
+    {
+      "foreign": "BINA.JK",
+      "us": null,
+      "name": "PT Bank Ina Perdana Tbk",
+      "reason": "no-strong-match",
+      "mc": 27544900000000.0
+    },
+    {
+      "foreign": "MDMG.ME",
+      "us": null,
+      "name": "MD Medical Group Investments Plc",
+      "reason": "no-results",
+      "mc": 27474800000000.0
+    },
+    {
+      "foreign": "003670.KS",
+      "us": null,
+      "name": "Posco Future M Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 27250400000000.0
+    },
+    {
+      "foreign": "051900.KS",
+      "us": null,
+      "name": "LG H&H Co., Ltd.",
+      "reason": "empty-sig",
+      "mc": 27144700000000.0
+    },
+    {
+      "foreign": "086790.KS",
+      "us": null,
+      "name": "Hana Financial Group Inc.",
+      "reason": "no-strong-match",
+      "mc": 26646700000000.0
+    },
+    {
+      "foreign": "BNII.JK",
+      "us": null,
+      "name": "PT Bank Maybank Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 26370500000000.0
+    },
+    {
+      "foreign": "CNMA.JK",
+      "us": null,
+      "name": "PT Nusantara Sejahtera Raya Tbk",
+      "reason": "no-strong-match",
+      "mc": 26337000000000.0
+    },
+    {
+      "foreign": "RMKE.JK",
+      "us": null,
+      "name": "PT RMK Energy Tbk",
+      "reason": "no-strong-match",
+      "mc": 25921900000000.0
+    },
+    {
+      "foreign": "SIDO.JK",
+      "us": null,
+      "name": "PT Industri Jamu dan Farmasi Sido Muncul Tbk",
+      "reason": "no-strong-match",
+      "mc": 25799200000000.0
+    },
+    {
+      "foreign": "066575.KS",
+      "us": null,
+      "name": "LG Electronics Inc.",
+      "reason": "no-strong-match",
+      "mc": 24849100000000.0
+    },
+    {
+      "foreign": "CTRA.JK",
+      "us": null,
+      "name": "PT Ciputra Development Tbk",
+      "reason": "no-strong-match",
+      "mc": 24745200000000.0
+    },
+    {
+      "foreign": "010130.KS",
+      "us": null,
+      "name": "Korea Zinc Company, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 24560500000000.0
+    },
+    {
+      "foreign": "000815.KS",
+      "us": null,
+      "name": "Samsung Fire & Marine Insurance Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 24408200000000.0
+    },
+    {
+      "foreign": "BBYB.JK",
+      "us": null,
+      "name": "PT Bank Neo Commerce Tbk",
+      "reason": "no-strong-match",
+      "mc": 24353900000000.0
+    },
+    {
+      "foreign": "HEAL.JK",
+      "us": null,
+      "name": "PT Medikaloka Hermina Tbk",
+      "reason": "no-strong-match",
+      "mc": 24192300000000.0
+    },
+    {
+      "foreign": "KAEF.JK",
+      "us": null,
+      "name": "PT Kimia Farma (Persero) Tbk",
+      "reason": "no-results",
+      "mc": 23604500000000.0
+    },
+    {
+      "foreign": "LPKR.JK",
+      "us": null,
+      "name": "PT Lippo Karawaci Tbk",
+      "reason": "no-strong-match",
+      "mc": 23568600000000.0
+    },
+    {
+      "foreign": "8306.T",
+      "us": null,
+      "name": "Mitsubishi UFJ Financial Group, Inc.",
+      "reason": "no-strong-match",
+      "mc": 23412400000000.0
+    },
+    {
+      "foreign": "BKSL.JK",
+      "us": null,
+      "name": "PT Sentul City Tbk",
+      "reason": "no-strong-match",
+      "mc": 23311500000000.0
+    },
+    {
+      "foreign": "SMAR.JK",
+      "us": null,
+      "name": "PT Sinar Mas Agro Resources and Technology Tbk",
+      "reason": "no-strong-match",
+      "mc": 23264800000000.0
+    },
+    {
+      "foreign": "TINS.JK",
+      "us": null,
+      "name": "PT TIMAH Tbk",
+      "reason": "no-strong-match",
+      "mc": 23162500000000.0
+    },
+    {
+      "foreign": "SMRA.JK",
+      "us": null,
+      "name": "PT Summarecon Agung Tbk",
+      "reason": "no-strong-match",
+      "mc": 23065500000000.0
+    },
+    {
+      "foreign": "259960.KS",
+      "us": null,
+      "name": "KRAFTON, Inc.",
+      "reason": "no-strong-match",
+      "mc": 22863400000000.0
+    },
+    {
+      "foreign": "BWPT.JK",
+      "us": null,
+      "name": "PT Eagle High Plantations Tbk",
+      "reason": "no-strong-match",
+      "mc": 22844800000000.0
+    },
+    {
+      "foreign": "018260.KS",
+      "us": null,
+      "name": "Samsung SDS Co.,Ltd.",
+      "reason": "no-strong-match",
+      "mc": 22701500000000.0
+    },
+    {
+      "foreign": "CARE.JK",
+      "us": null,
+      "name": "PT Metro Healthcare Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 22610000000000.0
+    },
+    {
+      "foreign": "JSPT.JK",
+      "us": null,
+      "name": "PT Jakarta Setiabudi Internasional Tbk",
+      "reason": "no-strong-match",
+      "mc": 22549700000000.0
+    },
+    {
+      "foreign": "FAPA.JK",
+      "us": null,
+      "name": "PT FAP Agri Tbk",
+      "reason": "no-strong-match",
+      "mc": 22216800000000.0
+    },
+    {
+      "foreign": "TLDN.JK",
+      "us": null,
+      "name": "PT Teladan Prima Agro Tbk",
+      "reason": "no-strong-match",
+      "mc": 22172900000000.0
+    },
+    {
+      "foreign": "BNBR.JK",
+      "us": null,
+      "name": "PT Bakrie & Brothers Tbk",
+      "reason": "no-strong-match",
+      "mc": 22023900000000.0
+    },
+    {
+      "foreign": "NPGF.JK",
+      "us": null,
+      "name": "PT Nusa Palapa Gemilang Tbk",
+      "reason": "no-strong-match",
+      "mc": 21871600000000.0
+    },
+    {
+      "foreign": "316140.KS",
+      "us": "WF",
+      "name": "Woori Financial Group Inc.",
+      "reason": "matched:NYQ",
+      "mc": 21229200000000.0
+    },
+    {
+      "foreign": "LINK.JK",
+      "us": null,
+      "name": "PT Link Net Tbk",
+      "reason": "no-strong-match",
+      "mc": 20994300000000.0
+    },
+    {
+      "foreign": "IDFCFIRSTB.NS",
+      "us": null,
+      "name": "IDFC First Bank Limited",
+      "reason": "no-strong-match",
+      "mc": 20985500000000.0
+    },
+    {
+      "foreign": "BIRD.JK",
+      "us": null,
+      "name": "PT Blue Bird Tbk",
+      "reason": "no-strong-match",
+      "mc": 20625200000000.0
+    },
+    {
+      "foreign": "064350.KS",
+      "us": null,
+      "name": "Hyundai Rotem Company",
+      "reason": "no-strong-match",
+      "mc": 20504000000000.0
+    },
+    {
+      "foreign": "010140.KS",
+      "us": null,
+      "name": "Samsung Heavy Industries Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 20494200000000.0
+    },
+    {
+      "foreign": "YUPI.JK",
+      "us": null,
+      "name": "Yupi Indo Jelly Gum Tbk.",
+      "reason": "no-strong-match",
+      "mc": 20421300000000.0
+    },
+    {
+      "foreign": "AUTO.JK",
+      "us": null,
+      "name": "PT Astra Otoparts Tbk",
+      "reason": "no-strong-match",
+      "mc": 20242900000000.0
+    },
+    {
+      "foreign": "377300.KS",
+      "us": null,
+      "name": "Kakao Pay Corp.",
+      "reason": "no-strong-match",
+      "mc": 20212500000000.0
+    },
+    {
+      "foreign": "POLI.JK",
+      "us": null,
+      "name": "PT Pollux Hotels Group Tbk",
+      "reason": "no-strong-match",
+      "mc": 20064000000000.0
+    },
+    {
+      "foreign": "BMAS.JK",
+      "us": null,
+      "name": "PT Bank Maspion Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 19971300000000.0
+    },
+    {
+      "foreign": "138040.KS",
+      "us": null,
+      "name": "Meritz Financial Group Inc.",
+      "reason": "no-strong-match",
+      "mc": 19818100000000.0
+    },
+    {
+      "foreign": "ALII.JK",
+      "us": null,
+      "name": "Ancara Logistics Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 19781900000000.0
+    },
+    {
+      "foreign": "DMMX.JK",
+      "us": null,
+      "name": "PT Digital Mediatama Maxima Tbk",
+      "reason": "no-strong-match",
+      "mc": 19745700000000.0
+    },
+    {
+      "foreign": "SIMP.JK",
+      "us": null,
+      "name": "PT Salim Ivomas Pratama Tbk",
+      "reason": "no-strong-match",
+      "mc": 19454100000000.0
+    },
+    {
+      "foreign": "ULTJ.JK",
+      "us": null,
+      "name": "PT Ultrajaya Milk Industry & Trading Company Tbk",
+      "reason": "no-strong-match",
+      "mc": 19409900000000.0
+    },
+    {
+      "foreign": "011200.KS",
+      "us": null,
+      "name": "HMM Co.,Ltd",
+      "reason": "no-strong-match",
+      "mc": 19336400000000.0
+    },
+    {
+      "foreign": "017670.KS",
+      "us": null,
+      "name": "SK Telecom Co.,Ltd",
+      "reason": "no-strong-match",
+      "mc": 19266900000000.0
+    },
+    {
+      "foreign": "009155.KS",
+      "us": null,
+      "name": "Samsung Electro-Mechanics Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 19265000000000.0
+    },
+    {
+      "foreign": "036570.KS",
+      "us": null,
+      "name": "Ncsoft Corporation",
+      "reason": "no-results",
+      "mc": 19185100000000.0
+    },
+    {
+      "foreign": "PTPP.JK",
+      "us": null,
+      "name": "PT PP (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 18846400000000.0
+    },
+    {
+      "foreign": "CLEO.JK",
+      "us": null,
+      "name": "PT Sariguna Primatirta Tbk",
+      "reason": "no-strong-match",
+      "mc": 18837000000000.0
+    },
+    {
+      "foreign": "BBKP.JK",
+      "us": null,
+      "name": "PT Bank KB Bukopin Tbk",
+      "reason": "no-results",
+      "mc": 18787100000000.0
+    },
+    {
+      "foreign": "03473K.KS",
+      "us": null,
+      "name": "SK Inc.",
+      "reason": "empty-sig",
+      "mc": 18741900000000.0
+    },
+    {
+      "foreign": "SSMS.JK",
+      "us": null,
+      "name": "PT Sawit Sumbermas Sarana Tbk.",
+      "reason": "no-strong-match",
+      "mc": 18573800000000.0
+    },
+    {
+      "foreign": "CMNT.JK",
+      "us": null,
+      "name": "PT Cemindo Gemilang Tbk",
+      "reason": "no-strong-match",
+      "mc": 18324300000000.0
+    },
+    {
+      "foreign": "BFIN.JK",
+      "us": null,
+      "name": "PT BFI Finance Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 18122500000000.0
+    },
+    {
+      "foreign": "STTP.JK",
+      "us": null,
+      "name": "PT Siantar Top Tbk",
+      "reason": "no-strong-match",
+      "mc": 17848800000000.0
+    },
+    {
+      "foreign": "8035.T",
+      "us": null,
+      "name": "Tokyo Electron Limited",
+      "reason": "no-strong-match",
+      "mc": 17786000000000.0
+    },
+    {
+      "foreign": "CITA.JK",
+      "us": null,
+      "name": "PT Cita Mineral Investindo Tbk",
+      "reason": "no-strong-match",
+      "mc": 17702800000000.0
+    },
+    {
+      "foreign": "BSIM.JK",
+      "us": null,
+      "name": "PT Bank Sinarmas Tbk",
+      "reason": "no-strong-match",
+      "mc": 17547400000000.0
+    },
+    {
+      "foreign": "BHIT.JK",
+      "us": null,
+      "name": "PT MNC Asia Holding Tbk",
+      "reason": "no-strong-match",
+      "mc": 17509300000000.0
+    },
+    {
+      "foreign": "ARKO.JK",
+      "us": null,
+      "name": "PT. Arkora Hydro Tbk",
+      "reason": "no-strong-match",
+      "mc": 17424500000000.0
+    },
+    {
+      "foreign": "SOHO.JK",
+      "us": null,
+      "name": "PT Soho Global Health Tbk",
+      "reason": "no-strong-match",
+      "mc": 17387600000000.0
+    },
+    {
+      "foreign": "302440.KS",
+      "us": null,
+      "name": "SK bioscience Co.,Ltd.",
+      "reason": "no-strong-match",
+      "mc": 17212500000000.0
+    },
+    {
+      "foreign": "APIC.JK",
+      "us": null,
+      "name": "PT Pacific Strategic Financial Tbk",
+      "reason": "no-strong-match",
+      "mc": 17178800000000.0
+    },
+    {
+      "foreign": "6861.T",
+      "us": null,
+      "name": "Keyence Corporation",
+      "reason": "no-strong-match",
+      "mc": 16964700000000.0
+    },
+    {
+      "foreign": "033780.KS",
+      "us": null,
+      "name": "KT&G Corporation",
+      "reason": "empty-sig",
+      "mc": 16958800000000.0
+    },
+    {
+      "foreign": "024110.KS",
+      "us": null,
+      "name": "Industrial Bank of Korea",
+      "reason": "no-strong-match",
+      "mc": 16706100000000.0
+    },
+    {
+      "foreign": "298040.KS",
+      "us": null,
+      "name": "Hyosung Heavy Industries Corporation",
+      "reason": "no-strong-match",
+      "mc": 16584700000000.0
+    },
+    {
+      "foreign": "LSIP.JK",
+      "us": null,
+      "name": "PT Perusahaan Perkebunan London Sumatra Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 16545400000000.0
+    },
+    {
+      "foreign": "000157.KS",
+      "us": null,
+      "name": "Doosan Corporation",
+      "reason": "no-strong-match",
+      "mc": 16466600000000.0
+    },
+    {
+      "foreign": "006805.KS",
+      "us": null,
+      "name": "Mirae Asset Securities Co. Ltd.",
+      "reason": "no-strong-match",
+      "mc": 16452100000000.0
+    },
+    {
+      "foreign": "TSPC.JK",
+      "us": null,
+      "name": "PT Tempo Scan Pacific Tbk",
+      "reason": "no-strong-match",
+      "mc": 16425000000000.0
+    },
+    {
+      "foreign": "MPPA.JK",
+      "us": null,
+      "name": "PT Matahari Putra Prima Tbk",
+      "reason": "no-strong-match",
+      "mc": 16402800000000.0
+    },
+    {
+      "foreign": "DSNG.JK",
+      "us": null,
+      "name": "PT Dharma Satya Nusantara Tbk",
+      "reason": "no-strong-match",
+      "mc": 16323800000000.0
+    },
+    {
+      "foreign": "PPRO.JK",
+      "us": null,
+      "name": "PT Pembangunan Perumahan Properti Tbk",
+      "reason": "no-strong-match",
+      "mc": 16316500000000.0
+    },
+    {
+      "foreign": "AXB.IL",
+      "us": null,
+      "name": "Axis Bank Limited",
+      "reason": "no-strong-match",
+      "mc": 16141500000000.0
+    },
+    {
+      "foreign": "LIFE.JK",
+      "us": null,
+      "name": "PT MSIG Life Insurance Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 16065000000000.0
+    },
+    {
+      "foreign": "0R15.L",
+      "us": null,
+      "name": "SoftBank Group Corp.",
+      "reason": "no-strong-match",
+      "mc": 15944900000000.0
+    },
+    {
+      "foreign": "096775.KS",
+      "us": null,
+      "name": "SK Innovation Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 15911100000000.0
+    },
+    {
+      "foreign": "6501.T",
+      "us": null,
+      "name": "Hitachi, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 15906700000000.0
+    },
+    {
+      "foreign": "MSKY.JK",
+      "us": null,
+      "name": "PT MNC Sky Vision Tbk",
+      "reason": "no-strong-match",
+      "mc": 15897200000000.0
+    },
+    {
+      "foreign": "FALABELLA.SN",
+      "us": null,
+      "name": "Falabella S.A.",
+      "reason": "no-strong-match",
+      "mc": 15765600000000.0
+    },
+    {
+      "foreign": "BBSI.JK",
+      "us": null,
+      "name": "PT Krom Bank Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 15433800000000.0
+    },
+    {
+      "foreign": "OXUR.BR",
+      "us": null,
+      "name": "Oxurion N.V.",
+      "reason": "no-strong-match",
+      "mc": 15329800000000.0
+    },
+    {
+      "foreign": "950210.KS",
+      "us": null,
+      "name": "Prestige BioPharma Limited",
+      "reason": "no-strong-match",
+      "mc": 15024000000000.0
+    },
+    {
+      "foreign": "9432.T",
+      "us": null,
+      "name": "NTT, Inc.",
+      "reason": "no-strong-match",
+      "mc": 14984000000000.0
+    },
+    {
+      "foreign": "251270.KS",
+      "us": null,
+      "name": "Netmarble Corporation",
+      "reason": "no-strong-match",
+      "mc": 14943500000000.0
+    },
+    {
+      "foreign": "3468.T",
+      "us": null,
+      "name": "Star Asia Investment Corporation",
+      "reason": "no-strong-match",
+      "mc": 14892700000000.0
+    },
+    {
+      "foreign": "KPIG.JK",
+      "us": null,
+      "name": "PT MNC Tourism Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 14702700000000.0
+    },
+    {
+      "foreign": "IPTV.JK",
+      "us": null,
+      "name": "PT MNC Vision Networks Tbk",
+      "reason": "no-strong-match",
+      "mc": 14683800000000.0
+    },
+    {
+      "foreign": "HERO.JK",
+      "us": null,
+      "name": "PT DFI Retail Nusantara Tbk",
+      "reason": "no-strong-match",
+      "mc": 14659100000000.0
+    },
+    {
+      "foreign": "STAA.JK",
+      "us": null,
+      "name": "PT Sumber Tani Agung Resources Tbk",
+      "reason": "no-strong-match",
+      "mc": 14554700000000.0
+    },
+    {
+      "foreign": "003555.KS",
+      "us": null,
+      "name": "LG Corp.",
+      "reason": "empty-sig",
+      "mc": 14549000000000.0
+    },
+    {
+      "foreign": "MIDI.JK",
+      "us": null,
+      "name": "PT Midi Utama Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 14377200000000.0
+    },
+    {
+      "foreign": "8058.T",
+      "us": null,
+      "name": "Mitsubishi Corporation",
+      "reason": "no-strong-match",
+      "mc": 14336900000000.0
+    },
+    {
+      "foreign": "9983.T",
+      "us": null,
+      "name": "Fast Retailing Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 14307900000000.0
+    },
+    {
+      "foreign": "TCS.NS",
+      "us": null,
+      "name": "Tata Consultancy Services Limited",
+      "reason": "no-strong-match",
+      "mc": 14283800000000.0
+    },
+    {
+      "foreign": "DMAS.JK",
+      "us": null,
+      "name": "PT Puradelta Lestari Tbk",
+      "reason": "no-strong-match",
+      "mc": 14266600000000.0
+    },
+    {
+      "foreign": "WSBP.JK",
+      "us": null,
+      "name": "PT Waskita Beton Precast Tbk",
+      "reason": "no-strong-match",
+      "mc": 14235000000000.0
+    },
+    {
+      "foreign": "POLU.JK",
+      "us": null,
+      "name": "PT Golden Flower Tbk",
+      "reason": "no-strong-match",
+      "mc": 14118800000000.0
+    },
+    {
+      "foreign": "352820.KS",
+      "us": null,
+      "name": "HYBE Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 14047400000000.0
+    },
+    {
+      "foreign": "IMAS.JK",
+      "us": null,
+      "name": "PT Indomobil Sukses Internasional Tbk",
+      "reason": "no-strong-match",
+      "mc": 13962200000000.0
+    },
+    {
+      "foreign": "JRPT.JK",
+      "us": null,
+      "name": "PT Jaya Real Property, Tbk.",
+      "reason": "no-strong-match",
+      "mc": 13915500000000.0
+    },
+    {
+      "foreign": "JKON.JK",
+      "us": null,
+      "name": "PT Jaya Konstruksi Manggala Pratama Tbk",
+      "reason": "no-strong-match",
+      "mc": 13862200000000.0
+    },
+    {
+      "foreign": "SGRO.JK",
+      "us": null,
+      "name": "PT Sampoerna Agro Tbk",
+      "reason": "no-strong-match",
+      "mc": 13775800000000.0
+    },
+    {
+      "foreign": "PNLF.JK",
+      "us": null,
+      "name": "PT Panin Financial Tbk",
+      "reason": "no-strong-match",
+      "mc": 13769500000000.0
+    },
+    {
+      "foreign": "010120.KS",
+      "us": null,
+      "name": "LS ELECTRIC Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 13664300000000.0
+    },
+    {
+      "foreign": "010955.KS",
+      "us": null,
+      "name": "S-Oil Corporation",
+      "reason": "no-strong-match",
+      "mc": 13621200000000.0
+    },
+    {
+      "foreign": "4519.T",
+      "us": null,
+      "name": "Chugai Pharmaceutical Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 13565200000000.0
+    },
+    {
+      "foreign": "086280.KS",
+      "us": null,
+      "name": "Hyundai Glovis Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 13544600000000.0
+    },
+    {
+      "foreign": "267250.KS",
+      "us": null,
+      "name": "HD Hyundai Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 13320000000000.0
+    },
+    {
+      "foreign": "MDIA.JK",
+      "us": null,
+      "name": "PT Intermedia Capital Tbk",
+      "reason": "no-strong-match",
+      "mc": 13039200000000.0
+    },
+    {
+      "foreign": "DMND.JK",
+      "us": null,
+      "name": "PT Diamond Food Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 12971700000000.0
+    },
+    {
+      "foreign": "NICL.JK",
+      "us": null,
+      "name": "PT PAM Mineral Tbk",
+      "reason": "no-strong-match",
+      "mc": 12922300000000.0
+    },
+    {
+      "foreign": "011170.KS",
+      "us": null,
+      "name": "Lotte Chemical Corporation",
+      "reason": "no-strong-match",
+      "mc": 12920900000000.0
+    },
+    {
+      "foreign": "OMED.JK",
+      "us": null,
+      "name": "PT Jayamas Medica Industri Tbk",
+      "reason": "no-strong-match",
+      "mc": 12880000000000.0
+    },
+    {
+      "foreign": "BCI.SN",
+      "us": null,
+      "name": "Banco de Cr\u00e9dito e Inversiones",
+      "reason": "no-results",
+      "mc": 12766500000000.0
+    },
+    {
+      "foreign": "4063.T",
+      "us": null,
+      "name": "Shin-Etsu Chemical Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 12736300000000.0
+    },
+    {
+      "foreign": "MOL.WA",
+      "us": null,
+      "name": "MOL Magyar Olaj- \u00e9s G\u00e1zipari Nyilv\u00e1nosan Muk\u00f6do R\u00e9szv\u00e9nyt\u00e1rsas\u00e1g",
+      "reason": "no-results",
+      "mc": 12513000000000.0
+    },
+    {
+      "foreign": "PRAY.JK",
+      "us": null,
+      "name": "PT Famon Awal Bros Sedaya Tbk",
+      "reason": "no-strong-match",
+      "mc": 12423900000000.0
+    },
+    {
+      "foreign": "PNP.TO",
+      "us": null,
+      "name": "Pinetree Capital Ltd.",
+      "reason": "no-strong-match",
+      "mc": 12381900000000.0
+    },
+    {
+      "foreign": "002790.KS",
+      "us": null,
+      "name": "AMOREPACIFIC Group",
+      "reason": "no-results",
+      "mc": 12160300000000.0
+    },
+    {
+      "foreign": "042700.KS",
+      "us": null,
+      "name": "HANMI Semiconductor Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 12142700000000.0
+    },
+    {
+      "foreign": "326030.KS",
+      "us": null,
+      "name": "SK Biopharmaceuticals Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 12128400000000.0
+    },
+    {
+      "foreign": "034220.KS",
+      "us": null,
+      "name": "LG Display Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 12040500000000.0
+    },
+    {
+      "foreign": "WIFI.JK",
+      "us": null,
+      "name": "PT Solusi Sinergi Digital Tbk",
+      "reason": "no-strong-match",
+      "mc": 11948300000000.0
+    },
+    {
+      "foreign": "023530.KS",
+      "us": null,
+      "name": "Lotte Shopping Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 11941700000000.0
+    },
+    {
+      "foreign": "KREN.JK",
+      "us": null,
+      "name": "PT Quantum Clovera Investama Tbk",
+      "reason": "no-strong-match",
+      "mc": 11926500000000.0
+    },
+    {
+      "foreign": "CMNP.JK",
+      "us": null,
+      "name": "PT Citra Marga Nusaphala Persada Tbk",
+      "reason": "no-strong-match",
+      "mc": 11901600000000.0
+    },
+    {
+      "foreign": "ASRI.JK",
+      "us": null,
+      "name": "PT Alam Sutera Realty Tbk",
+      "reason": "no-strong-match",
+      "mc": 11890600000000.0
+    },
+    {
+      "foreign": "450080.KS",
+      "us": null,
+      "name": "Ecopro Mat",
+      "reason": "no-strong-match",
+      "mc": 11865000000000.0
+    },
+    {
+      "foreign": "CYBR.JK",
+      "us": null,
+      "name": "PT ITSEC Asia Tbk",
+      "reason": "no-strong-match",
+      "mc": 11856000000000.0
+    },
+    {
+      "foreign": "DUTI.JK",
+      "us": null,
+      "name": "PT Duta Pertiwi Tbk",
+      "reason": "no-strong-match",
+      "mc": 11840000000000.0
+    },
+    {
+      "foreign": "7974.T",
+      "us": null,
+      "name": "Nintendo Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 11770500000000.0
+    },
+    {
+      "foreign": "SMSM.JK",
+      "us": null,
+      "name": "PT Selamat Sempurna Tbk",
+      "reason": "no-strong-match",
+      "mc": 11574900000000.0
+    },
+    {
+      "foreign": "6098.T",
+      "us": null,
+      "name": "Recruit Holdings Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 11523300000000.0
+    },
+    {
+      "foreign": "361610.KS",
+      "us": null,
+      "name": "SK IE Technology Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 11493600000000.0
+    },
+    {
+      "foreign": "ASSA.JK",
+      "us": null,
+      "name": "PT Adi Sarana Armada Tbk",
+      "reason": "no-strong-match",
+      "mc": 11490500000000.0
+    },
+    {
+      "foreign": "6753.T",
+      "us": null,
+      "name": "Sharp Corporation",
+      "reason": "no-strong-match",
+      "mc": 11484800000000.0
+    },
+    {
+      "foreign": "BBMD.JK",
+      "us": null,
+      "name": "PT Bank Mestika Dharma Tbk",
+      "reason": "no-strong-match",
+      "mc": 11451400000000.0
+    },
+    {
+      "foreign": "WTON.JK",
+      "us": null,
+      "name": "PT Wijaya Karya Beton Tbk",
+      "reason": "no-strong-match",
+      "mc": 11330100000000.0
+    },
+    {
+      "foreign": "BJTM.JK",
+      "us": null,
+      "name": "PT Bank Pembangunan Daerah Jawa Timur Tbk",
+      "reason": "no-strong-match",
+      "mc": 11261600000000.0
+    },
+    {
+      "foreign": "047810.KS",
+      "us": null,
+      "name": "Korea Aerospace Industries, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 11235100000000.0
+    },
+    {
+      "foreign": "8766.T",
+      "us": null,
+      "name": "Tokio Marine Holdings, Inc.",
+      "reason": "no-strong-match",
+      "mc": 11164700000000.0
+    },
+    {
+      "foreign": "TMAS.JK",
+      "us": null,
+      "name": "PT Temas Tbk.",
+      "reason": "no-strong-match",
+      "mc": 11096200000000.0
+    },
+    {
+      "foreign": "ABSLAMC.NS",
+      "us": null,
+      "name": "Aditya Birla Sun Life AMC Limited",
+      "reason": "no-strong-match",
+      "mc": 10934300000000.0
+    },
+    {
+      "foreign": "ADMF.JK",
+      "us": null,
+      "name": "PT Adira Dinamika Multi Finance Tbk",
+      "reason": "no-strong-match",
+      "mc": 10900000000000.0
+    },
+    {
+      "foreign": "EPMT.JK",
+      "us": null,
+      "name": "PT Enseval Putera Megatrading Tbk.",
+      "reason": "no-strong-match",
+      "mc": 10834600000000.0
+    },
+    {
+      "foreign": "022100.KS",
+      "us": null,
+      "name": "Posco Dx Company Ltd.",
+      "reason": "no-strong-match",
+      "mc": 10566900000000.0
+    },
+    {
+      "foreign": "8031.T",
+      "us": null,
+      "name": "Mitsui & Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 10360400000000.0
+    },
+    {
+      "foreign": "BHARTIARTL.NS",
+      "us": null,
+      "name": "Bharti Airtel Limited",
+      "reason": "no-strong-match",
+      "mc": 10324000000000.0
+    },
+    {
+      "foreign": "ASMI.JK",
+      "us": null,
+      "name": "PT Asuransi Maximus Graha Persada Tbk",
+      "reason": "no-strong-match",
+      "mc": 10292500000000.0
+    },
+    {
+      "foreign": "272210.KS",
+      "us": null,
+      "name": "Hanwha Systems Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 10277200000000.0
+    },
+    {
+      "foreign": "9022.T",
+      "us": null,
+      "name": "Central Japan Railway Company",
+      "reason": "no-strong-match",
+      "mc": 10250000000000.0
+    },
+    {
+      "foreign": "8411.T",
+      "us": "MFG",
+      "name": "Mizuho Financial Group, Inc.",
+      "reason": "matched:NYQ",
+      "mc": 10242200000000.0
+    },
+    {
+      "foreign": "INPP.JK",
+      "us": null,
+      "name": "PT Indonesian Paradise Property Tbk",
+      "reason": "no-strong-match",
+      "mc": 10231500000000.0
+    },
+    {
+      "foreign": "FIRE.JK",
+      "us": null,
+      "name": "PT Alfa Energi Investama Tbk",
+      "reason": "no-strong-match",
+      "mc": 10159900000000.0
+    },
+    {
+      "foreign": "9434.T",
+      "us": null,
+      "name": "SoftBank Corp.",
+      "reason": "no-strong-match",
+      "mc": 10119300000000.0
+    },
+    {
+      "foreign": "047050.KS",
+      "us": null,
+      "name": "Posco International Corporation",
+      "reason": "no-strong-match",
+      "mc": 10072900000000.0
+    },
+    {
+      "foreign": "PADI.JK",
+      "us": null,
+      "name": "PT Minna Padi Investama Sekuritas Tbk",
+      "reason": "no-strong-match",
+      "mc": 10063400000000.0
+    },
+    {
+      "foreign": "2914.T",
+      "us": null,
+      "name": "Japan Tobacco Inc.",
+      "reason": "no-strong-match",
+      "mc": 10013300000000.0
+    },
+    {
+      "foreign": "071055.KS",
+      "us": null,
+      "name": "Korea Investment Holdings Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 9958290000000.0
+    },
+    {
+      "foreign": "BSWD.JK",
+      "us": null,
+      "name": "PT Bank of India Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 9923050000000.0
+    },
+    {
+      "foreign": "HRTA.JK",
+      "us": null,
+      "name": "PT Hartadinata Abadi Tbk",
+      "reason": "no-strong-match",
+      "mc": 9901310000000.0
+    },
+    {
+      "foreign": "8001.T",
+      "us": null,
+      "name": "ITOCHU Corporation",
+      "reason": "no-strong-match",
+      "mc": 9867060000000.0
+    },
+    {
+      "foreign": "SLIS.JK",
+      "us": null,
+      "name": "PT Gaya Abadi Sempurna Tbk",
+      "reason": "no-strong-match",
+      "mc": 9829080000000.0
+    },
+    {
+      "foreign": "9433.T",
+      "us": null,
+      "name": "KDDI Corporation",
+      "reason": "no-strong-match",
+      "mc": 9554420000000.0
+    },
+    {
+      "foreign": "RALS.JK",
+      "us": null,
+      "name": "PT Ramayana Lestari Sentosa Tbk",
+      "reason": "no-strong-match",
+      "mc": 9546400000000.0
+    },
+    {
+      "foreign": "ERAA.JK",
+      "us": null,
+      "name": "PT Erajaya Swasembada Tbk",
+      "reason": "no-strong-match",
+      "mc": 9539080000000.0
+    },
+    {
+      "foreign": "003495.KS",
+      "us": null,
+      "name": "Korean Air Lines Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 9443660000000.0
+    },
+    {
+      "foreign": "MTDL.JK",
+      "us": null,
+      "name": "PT Metrodata Electronics Tbk",
+      "reason": "no-strong-match",
+      "mc": 9379540000000.0
+    },
+    {
+      "foreign": "005830.KS",
+      "us": null,
+      "name": "DB Insurance Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 9282140000000.0
+    },
+    {
+      "foreign": "4568.T",
+      "us": null,
+      "name": "Daiichi Sankyo Company, Limited",
+      "reason": "no-strong-match",
+      "mc": 9243940000000.0
+    },
+    {
+      "foreign": "079550.KS",
+      "us": null,
+      "name": "LIG Nex1 Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 9197170000000.0
+    },
+    {
+      "foreign": "003230.KS",
+      "us": null,
+      "name": "Samyang Foods Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 9180800000000.0
+    },
+    {
+      "foreign": "6740.T",
+      "us": null,
+      "name": "Japan Display Inc.",
+      "reason": "no-strong-match",
+      "mc": 9163480000000.0
+    },
+    {
+      "foreign": "CLAY.JK",
+      "us": null,
+      "name": "PT Citra Putra Realty Tbk",
+      "reason": "no-strong-match",
+      "mc": 9149200000000.0
+    },
+    {
+      "foreign": "000105.KS",
+      "us": null,
+      "name": "Yuhan Corporation",
+      "reason": "no-strong-match",
+      "mc": 9121150000000.0
+    },
+    {
+      "foreign": "307950.KS",
+      "us": null,
+      "name": "Hyundai Autoever Corporation",
+      "reason": "no-strong-match",
+      "mc": 9105100000000.0
+    },
+    {
+      "foreign": "ADES.JK",
+      "us": null,
+      "name": "PT Akasha Wira International Tbk",
+      "reason": "no-strong-match",
+      "mc": 9099160000000.0
+    },
+    {
+      "foreign": "BIM.ST",
+      "us": null,
+      "name": "BIMobject AB",
+      "reason": "no-strong-match",
+      "mc": 9079760000000.0
+    },
+    {
+      "foreign": "TARA.JK",
+      "us": null,
+      "name": "PT Agung Semesta Sejahtera Tbk",
+      "reason": "no-strong-match",
+      "mc": 8861290000000.0
+    },
+    {
+      "foreign": "007660.KS",
+      "us": null,
+      "name": "ISU Petasys Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 8752740000000.0
+    },
+    {
+      "foreign": "443060.KS",
+      "us": null,
+      "name": "HD Hyundai Marine Solution Co",
+      "reason": "no-results",
+      "mc": 8674410000000.0
+    },
+    {
+      "foreign": "SGER.JK",
+      "us": null,
+      "name": "PT Sumber Global Energy Tbk",
+      "reason": "no-strong-match",
+      "mc": 8671060000000.0
+    },
+    {
+      "foreign": "PRDA.JK",
+      "us": null,
+      "name": "PT Prodia Widyahusada Tbk",
+      "reason": "no-strong-match",
+      "mc": 8625000000000.0
+    },
+    {
+      "foreign": "011070.KS",
+      "us": null,
+      "name": "LG Innotek Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 8614060000000.0
+    },
+    {
+      "foreign": "BCAP.JK",
+      "us": null,
+      "name": "PT MNC Kapital Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 8522980000000.0
+    },
+    {
+      "foreign": "URBN.JK",
+      "us": null,
+      "name": "PT Urban Jakarta Propertindo Tbk.",
+      "reason": "no-strong-match",
+      "mc": 8503380000000.0
+    },
+    {
+      "foreign": "IKAN.JK",
+      "us": null,
+      "name": "PT Era Mandiri Cemerlang Tbk",
+      "reason": "no-strong-match",
+      "mc": 8500000000000.0
+    },
+    {
+      "foreign": "TFAS.JK",
+      "us": null,
+      "name": "PT Telefast Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 8491190000000.0
+    },
+    {
+      "foreign": "7011.T",
+      "us": null,
+      "name": "Mitsubishi Heavy Industries, Ltd.",
+      "reason": "no-strong-match",
+      "mc": 8486950000000.0
+    },
+    {
+      "foreign": "MLPL.JK",
+      "us": null,
+      "name": "PT Multipolar Tbk",
+      "reason": "no-strong-match",
+      "mc": 8404060000000.0
+    },
+    {
+      "foreign": "JGLE.JK",
+      "us": null,
+      "name": "PT Graha Andrasentra Propertindo Tbk.",
+      "reason": "no-strong-match",
+      "mc": 8379810000000.0
+    },
+    {
+      "foreign": "18064K.KS",
+      "us": null,
+      "name": "Hanjin Kal",
+      "reason": "no-strong-match",
+      "mc": 8345080000000.0
+    },
+    {
+      "foreign": "6902.T",
+      "us": null,
+      "name": "DENSO Corporation",
+      "reason": "no-strong-match",
+      "mc": 8336140000000.0
+    },
+    {
+      "foreign": "ROTI.JK",
+      "us": null,
+      "name": "PT Nippon Indosari Corpindo Tbk",
+      "reason": "no-strong-match",
+      "mc": 8298220000000.0
+    },
+    {
+      "foreign": "MCAS.JK",
+      "us": null,
+      "name": "PT M Cash Integrasi Tbk",
+      "reason": "no-strong-match",
+      "mc": 8267060000000.0
+    },
+    {
+      "foreign": "001045.KS",
+      "us": null,
+      "name": "CJ Corporation",
+      "reason": "empty-sig",
+      "mc": 8202430000000.0
+    },
+    {
+      "foreign": "VIVA.JK",
+      "us": null,
+      "name": "PT Visi Media Asia Tbk",
+      "reason": "no-strong-match",
+      "mc": 8198800000000.0
+    },
+    {
+      "foreign": "NATO.JK",
+      "us": null,
+      "name": "PT Surya Permata Andalan Tbk",
+      "reason": "no-strong-match",
+      "mc": 8167770000000.0
+    },
+    {
+      "foreign": "GAZP.ME",
+      "us": null,
+      "name": "Public Joint Stock Company Gazprom",
+      "reason": "no-results",
+      "mc": 8095810000000.0
+    },
+    {
+      "foreign": "ADHI.JK",
+      "us": null,
+      "name": "PT Adhi Karya (Persero) Tbk",
+      "reason": "no-strong-match",
+      "mc": 8088840000000.0
+    },
+    {
+      "foreign": "RODA.JK",
+      "us": null,
+      "name": "PT Pikko Land Development Tbk",
+      "reason": "no-strong-match",
+      "mc": 8087320000000.0
+    },
+    {
+      "foreign": "YESBANK.NS",
+      "us": null,
+      "name": "Yes Bank Limited",
+      "reason": "no-strong-match",
+      "mc": 8060890000000.0
+    },
+    {
+      "foreign": "CENCOSUD.SN",
+      "us": null,
+      "name": "Cencosud S.A.",
+      "reason": "no-strong-match",
+      "mc": 8039700000000.0
+    },
+    {
+      "foreign": "000725.KS",
+      "us": null,
+      "name": "Hyundai Engineering & Construction Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 8018710000000.0
+    },
+    {
+      "foreign": "4661.T",
+      "us": null,
+      "name": "Oriental Land Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7993060000000.0
+    },
+    {
+      "foreign": "2222.SR",
+      "us": null,
+      "name": "Saudi Arabian Oil Company",
+      "reason": "no-strong-match",
+      "mc": 7983790000000.0
+    },
+    {
+      "foreign": "NASA.JK",
+      "us": null,
+      "name": "PT Andalan Perkasa Abadi Tbk",
+      "reason": "no-strong-match",
+      "mc": 7978570000000.0
+    },
+    {
+      "foreign": "ICON.L",
+      "us": null,
+      "name": "Iconic Labs Plc",
+      "reason": "no-strong-match",
+      "mc": 7935010000000.0
+    },
+    {
+      "foreign": "DEPO.JK",
+      "us": null,
+      "name": "PT Caturkarda Depo Bangunan Tbk",
+      "reason": "no-strong-match",
+      "mc": 7926000000000.0
+    },
+    {
+      "foreign": "6178.T",
+      "us": null,
+      "name": "Japan Post Holdings Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7920000000000.0
+    },
+    {
+      "foreign": "6594.T",
+      "us": null,
+      "name": "Nidec Corporation",
+      "reason": "no-strong-match",
+      "mc": 7854640000000.0
+    },
+    {
+      "foreign": "032640.KS",
+      "us": null,
+      "name": "LG Uplus Corp.",
+      "reason": "no-strong-match",
+      "mc": 7837170000000.0
+    },
+    {
+      "foreign": "SSIA.JK",
+      "us": null,
+      "name": "PT Surya Semesta Internusa Tbk",
+      "reason": "no-strong-match",
+      "mc": 7831140000000.0
+    },
+    {
+      "foreign": "KOTA.JK",
+      "us": null,
+      "name": "PT DMS Propertindo Tbk",
+      "reason": "no-strong-match",
+      "mc": 7804670000000.0
+    },
+    {
+      "foreign": "APLN.JK",
+      "us": null,
+      "name": "PT Agung Podomoro Land Tbk",
+      "reason": "no-strong-match",
+      "mc": 7790220000000.0
+    },
+    {
+      "foreign": "035250.KS",
+      "us": null,
+      "name": "Kangwon Land, Inc.",
+      "reason": "no-strong-match",
+      "mc": 7785180000000.0
+    },
+    {
+      "foreign": "454910.KS",
+      "us": null,
+      "name": "Doosan Robotics Inc.",
+      "reason": "no-strong-match",
+      "mc": 7781530000000.0
+    },
+    {
+      "foreign": "UCID.JK",
+      "us": null,
+      "name": "PT Uni-Charm Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 7772790000000.0
+    },
+    {
+      "foreign": "005945.KS",
+      "us": null,
+      "name": "NH Investment & Securities Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7667890000000.0
+    },
+    {
+      "foreign": "GJTL.JK",
+      "us": null,
+      "name": "PT. Gajah Tunggal Tbk",
+      "reason": "no-strong-match",
+      "mc": 7666560000000.0
+    },
+    {
+      "foreign": "004020.KS",
+      "us": null,
+      "name": "Hyundai Steel Company",
+      "reason": "no-strong-match",
+      "mc": 7660460000000.0
+    },
+    {
+      "foreign": "BNBA.JK",
+      "us": null,
+      "name": "PT Bank Bumi Arta Tbk",
+      "reason": "no-strong-match",
+      "mc": 7609140000000.0
+    },
+    {
+      "foreign": "7182.T",
+      "us": null,
+      "name": "JAPAN POST BANK Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7519500000000.0
+    },
+    {
+      "foreign": "161390.KS",
+      "us": null,
+      "name": "Hankook Tire & Technology Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7517980000000.0
+    },
+    {
+      "foreign": "4391.T",
+      "us": null,
+      "name": "Logizard Co.,Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7500570000000.0
+    },
+    {
+      "foreign": "128940.KS",
+      "us": null,
+      "name": "Hanmi Pharm. Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7432900000000.0
+    },
+    {
+      "foreign": "139480.KS",
+      "us": null,
+      "name": "E-MART Inc.",
+      "reason": "no-strong-match",
+      "mc": 7425590000000.0
+    },
+    {
+      "foreign": "009835.KS",
+      "us": null,
+      "name": "Hanwha Solutions Corporation",
+      "reason": "no-strong-match",
+      "mc": 7407190000000.0
+    },
+    {
+      "foreign": "KAP.IL",
+      "us": null,
+      "name": "JSC National Atomic Company Kazatomprom",
+      "reason": "no-results",
+      "mc": 7335480000000.0
+    },
+    {
+      "foreign": "QUINENCO.SN",
+      "us": null,
+      "name": "Qui\u00f1enco S.A.",
+      "reason": "no-results",
+      "mc": 7282890000000.0
+    },
+    {
+      "foreign": "NIRO.JK",
+      "us": null,
+      "name": "PT City Retail Developments Tbk",
+      "reason": "no-strong-match",
+      "mc": 7281230000000.0
+    },
+    {
+      "foreign": "008930.KS",
+      "us": null,
+      "name": "Hanmi Science Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7268410000000.0
+    },
+    {
+      "foreign": "ARNA.JK",
+      "us": null,
+      "name": "PT Arwana Citramulia Tbk",
+      "reason": "no-strong-match",
+      "mc": 7234840000000.0
+    },
+    {
+      "foreign": "CENT.JK",
+      "us": null,
+      "name": "PT Centratama Telekomunikasi Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 7234560000000.0
+    },
+    {
+      "foreign": "016360.KS",
+      "us": null,
+      "name": "Samsung Securities Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7150400000000.0
+    },
+    {
+      "foreign": "BMHS.JK",
+      "us": null,
+      "name": "PT Bundamedik Tbk",
+      "reason": "no-strong-match",
+      "mc": 7140840000000.0
+    },
+    {
+      "foreign": "HILL.JK",
+      "us": null,
+      "name": "PT Hillcon Tbk",
+      "reason": "no-strong-match",
+      "mc": 7134890000000.0
+    },
+    {
+      "foreign": "021240.KS",
+      "us": null,
+      "name": "COWAY Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 7104910000000.0
+    },
+    {
+      "foreign": "078935.KS",
+      "us": null,
+      "name": "GS Holdings Corp.",
+      "reason": "empty-sig",
+      "mc": 7102210000000.0
+    },
+    {
+      "foreign": "BEST.JK",
+      "us": null,
+      "name": "PT Bekasi Fajar Industrial Estate Tbk",
+      "reason": "no-strong-match",
+      "mc": 7033590000000.0
+    },
+    {
+      "foreign": "TOTO.JK",
+      "us": null,
+      "name": "PT Surya Toto Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 7028950000000.0
+    },
+    {
+      "foreign": "BALI.JK",
+      "us": null,
+      "name": "PT Bali Towerindo Sentra Tbk",
+      "reason": "no-strong-match",
+      "mc": 7003580000000.0
+    },
+    {
+      "foreign": "MALLPLAZA.SN",
+      "us": null,
+      "name": "Plaza S.A.",
+      "reason": "no-strong-match",
+      "mc": 6977560000000.0
+    },
+    {
+      "foreign": "SINI.JK",
+      "us": null,
+      "name": "PT Singaraja Putra Tbk",
+      "reason": "no-strong-match",
+      "mc": 6974500000000.0
+    },
+    {
+      "foreign": "088350.KS",
+      "us": null,
+      "name": "Hanwha Life Insurance Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6972630000000.0
+    },
+    {
+      "foreign": "CAMP.JK",
+      "us": null,
+      "name": "PT Campina Ice Cream Industry, Tbk.",
+      "reason": "no-strong-match",
+      "mc": 6972190000000.0
+    },
+    {
+      "foreign": "4502.T",
+      "us": "TAK",
+      "name": "Takeda Pharmaceutical Company Limited",
+      "reason": "matched:NYQ",
+      "mc": 6967570000000.0
+    },
+    {
+      "foreign": "039490.KS",
+      "us": null,
+      "name": "Kiwoom Securities Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6966530000000.0
+    },
+    {
+      "foreign": "LPCK.JK",
+      "us": null,
+      "name": "PT Lippo Cikarang Tbk",
+      "reason": "no-strong-match",
+      "mc": 6950140000000.0
+    },
+    {
+      "foreign": "BTEK.JK",
+      "us": null,
+      "name": "PT Bumi Teknokultura Unggul Tbk",
+      "reason": "no-strong-match",
+      "mc": 6941620000000.0
+    },
+    {
+      "foreign": "6367.T",
+      "us": null,
+      "name": "Daikin Industries,Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6924010000000.0
+    },
+    {
+      "foreign": "SBID.L",
+      "us": null,
+      "name": "State Bank of India",
+      "reason": "no-strong-match",
+      "mc": 6886900000000.0
+    },
+    {
+      "foreign": "5713.T",
+      "us": null,
+      "name": "Sumitomo Metal Mining Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6773680000000.0
+    },
+    {
+      "foreign": "DRMA.JK",
+      "us": null,
+      "name": "PT Dharma Polimetal Tbk",
+      "reason": "no-strong-match",
+      "mc": 6682350000000.0
+    },
+    {
+      "foreign": "TGKA.JK",
+      "us": null,
+      "name": "PT Tigaraksa Satria Tbk",
+      "reason": "no-strong-match",
+      "mc": 6682030000000.0
+    },
+    {
+      "foreign": "DILD.JK",
+      "us": null,
+      "name": "PT Intiland Development Tbk",
+      "reason": "no-strong-match",
+      "mc": 6673610000000.0
+    },
+    {
+      "foreign": "7741.T",
+      "us": null,
+      "name": "HOYA Corporation",
+      "reason": "no-strong-match",
+      "mc": 6625470000000.0
+    },
+    {
+      "foreign": "MTFN.JK",
+      "us": null,
+      "name": "PT Capitalinc Investment Tbk",
+      "reason": "no-strong-match",
+      "mc": 6623150000000.0
+    },
+    {
+      "foreign": "TBLA.JK",
+      "us": null,
+      "name": "PT Tunas Baru Lampung Tbk",
+      "reason": "no-strong-match",
+      "mc": 6544060000000.0
+    },
+    {
+      "foreign": "SEMG.TA",
+      "us": null,
+      "name": "Seach Medical Group Ltd",
+      "reason": "no-strong-match",
+      "mc": 6530800000000.0
+    },
+    {
+      "foreign": "MDLN.JK",
+      "us": null,
+      "name": "PT Modernland Realty Tbk",
+      "reason": "no-strong-match",
+      "mc": 6517200000000.0
+    },
+    {
+      "foreign": "NETV.JK",
+      "us": null,
+      "name": "PT MDTV Media Technologies Tbk",
+      "reason": "no-strong-match",
+      "mc": 6452240000000.0
+    },
+    {
+      "foreign": "ROSN.ME",
+      "us": null,
+      "name": "Public Joint Stock Company Rosneft Oil Company",
+      "reason": "no-results",
+      "mc": 6423030000000.0
+    },
+    {
+      "foreign": "SBER.ME",
+      "us": null,
+      "name": "Sberbank of Russia",
+      "reason": "no-results",
+      "mc": 6417860000000.0
+    },
+    {
+      "foreign": "027410.KS",
+      "us": null,
+      "name": "BGF Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6414990000000.0
+    },
+    {
+      "foreign": "AISA.JK",
+      "us": null,
+      "name": "PT FKS Food Sejahtera Tbk",
+      "reason": "no-strong-match",
+      "mc": 6284900000000.0
+    },
+    {
+      "foreign": "137310.KS",
+      "us": null,
+      "name": "SD BioSensor, Inc",
+      "reason": "no-strong-match",
+      "mc": 6268450000000.0
+    },
+    {
+      "foreign": "DLTA.JK",
+      "us": null,
+      "name": "PT Delta Djakarta Tbk",
+      "reason": "no-strong-match",
+      "mc": 6245140000000.0
+    },
+    {
+      "foreign": "011790.KS",
+      "us": null,
+      "name": "SKC Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6242420000000.0
+    },
+    {
+      "foreign": "019170.KS",
+      "us": null,
+      "name": "Shinpoong Pharmaceutical Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 6240740000000.0
+    },
+    {
+      "foreign": "019175.KS",
+      "us": null,
+      "name": "Shinpoong Pharmaceutical Co.,Ltd",
+      "reason": "no-strong-match",
+      "mc": 6240740000000.0
+    },
+    {
+      "foreign": "020150.KS",
+      "us": null,
+      "name": "Lotte Energy Materials Corp.",
+      "reason": "no-strong-match",
+      "mc": 6224960000000.0
+    },
+    {
+      "foreign": "SAME.JK",
+      "us": null,
+      "name": "PT Sarana Meditama Metropolitan Tbk",
+      "reason": "no-strong-match",
+      "mc": 6210870000000.0
+    },
+    {
+      "foreign": "097950.KS",
+      "us": null,
+      "name": "CJ Cheiljedang Corporation",
+      "reason": "no-strong-match",
+      "mc": 6208910000000.0
+    },
+    {
+      "foreign": "PALM.JK",
+      "us": null,
+      "name": "PT Provident Investasi Bersama Tbk",
+      "reason": "no-strong-match",
+      "mc": 6156010000000.0
+    },
+    {
+      "foreign": "LICI.NS",
+      "us": null,
+      "name": "Life Insurance Corporation of India",
+      "reason": "no-strong-match",
+      "mc": 6139040000000.0
+    },
+    {
+      "foreign": "00088K.KS",
+      "us": null,
+      "name": "Hanwha Corporation",
+      "reason": "no-strong-match",
+      "mc": 6132890000000.0
+    },
+    {
+      "foreign": "KIJA.JK",
+      "us": null,
+      "name": "PT Kawasan Industri Jababeka Tbk",
+      "reason": "no-strong-match",
+      "mc": 6080870000000.0
+    },
+    {
+      "foreign": "6146.T",
+      "us": null,
+      "name": "Disco Corporation",
+      "reason": "no-strong-match",
+      "mc": 6047090000000.0
+    },
+    {
+      "foreign": "HINDUNILVR.NS",
+      "us": null,
+      "name": "Hindustan Unilever Limited",
+      "reason": "no-strong-match",
+      "mc": 6015780000000.0
+    },
+    {
+      "foreign": "029780.KS",
+      "us": null,
+      "name": "Samsung Card Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5965140000000.0
+    },
+    {
+      "foreign": "ELPI.JK",
+      "us": null,
+      "name": "PT Pelayaran Nasional Ekalya Purnamasari Tbk",
+      "reason": "no-strong-match",
+      "mc": 5929600000000.0
+    },
+    {
+      "foreign": "NFCX.JK",
+      "us": null,
+      "name": "PT NFC Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 5928590000000.0
+    },
+    {
+      "foreign": "AGII.JK",
+      "us": null,
+      "name": "PT Samator Indo Gas Tbk",
+      "reason": "no-strong-match",
+      "mc": 5905270000000.0
+    },
+    {
+      "foreign": "SQMI.JK",
+      "us": null,
+      "name": "PT Wilton Makmur indonesia Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5873210000000.0
+    },
+    {
+      "foreign": "SDRA.JK",
+      "us": null,
+      "name": "PT Bank Woori Saudara Indonesia 1906 Tbk",
+      "reason": "no-strong-match",
+      "mc": 5857110000000.0
+    },
+    {
+      "foreign": "DATA.JK",
+      "us": null,
+      "name": "Remala Abadi Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5775000000000.0
+    },
+    {
+      "foreign": "BPII.JK",
+      "us": null,
+      "name": "PT Batavia Prosperindo Internasional Tbk",
+      "reason": "no-strong-match",
+      "mc": 5732810000000.0
+    },
+    {
+      "foreign": "PCAR.JK",
+      "us": null,
+      "name": "PT Prima Cakrawala Abadi Tbk",
+      "reason": "no-strong-match",
+      "mc": 5731730000000.0
+    },
+    {
+      "foreign": "BISI.JK",
+      "us": null,
+      "name": "PT BISI International Tbk",
+      "reason": "no-strong-match",
+      "mc": 5700000000000.0
+    },
+    {
+      "foreign": "CBUT.JK",
+      "us": null,
+      "name": "PT Citra Borneo Utama Tbk",
+      "reason": "no-strong-match",
+      "mc": 5677080000000.0
+    },
+    {
+      "foreign": "6503.T",
+      "us": null,
+      "name": "Mitsubishi Electric Corporation",
+      "reason": "no-strong-match",
+      "mc": 5661720000000.0
+    },
+    {
+      "foreign": "CPRO.JK",
+      "us": null,
+      "name": "PT Central Proteina Prima Tbk",
+      "reason": "no-strong-match",
+      "mc": 5659380000000.0
+    },
+    {
+      "foreign": "6981.T",
+      "us": null,
+      "name": "Murata Manufacturing Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5657120000000.0
+    },
+    {
+      "foreign": "011930.KS",
+      "us": null,
+      "name": "Shinsung E&G Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5632000000000.0
+    },
+    {
+      "foreign": "SMMT.JK",
+      "us": null,
+      "name": "PT Golden Eagle Energy Tbk",
+      "reason": "no-strong-match",
+      "mc": 5622750000000.0
+    },
+    {
+      "foreign": "SAMF.JK",
+      "us": null,
+      "name": "PT Saraswanti Anugerah Makmur, Tbk",
+      "reason": "no-strong-match",
+      "mc": 5611880000000.0
+    },
+    {
+      "foreign": "6273.T",
+      "us": null,
+      "name": "SMC Corporation",
+      "reason": "no-strong-match",
+      "mc": 5592070000000.0
+    },
+    {
+      "foreign": "BHNY.TA",
+      "us": null,
+      "name": "Beeio Honey Ltd",
+      "reason": "no-strong-match",
+      "mc": 5591260000000.0
+    },
+    {
+      "foreign": "KMTR.JK",
+      "us": null,
+      "name": "PT Kirana Megatara Tbk",
+      "reason": "no-strong-match",
+      "mc": 5583580000000.0
+    },
+    {
+      "foreign": "3382.T",
+      "us": null,
+      "name": "Seven & i Holdings Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5569800000000.0
+    },
+    {
+      "foreign": "294870.KS",
+      "us": null,
+      "name": "HDC Hyundai Development Company",
+      "reason": "no-results",
+      "mc": 5562960000000.0
+    },
+    {
+      "foreign": "241560.KS",
+      "us": null,
+      "name": "Doosan Bobcat Inc.",
+      "reason": "no-strong-match",
+      "mc": 5530890000000.0
+    },
+    {
+      "foreign": "MBSS.JK",
+      "us": null,
+      "name": "PT Mitrabahtera Segara Sejati Tbk",
+      "reason": "no-strong-match",
+      "mc": 5477580000000.0
+    },
+    {
+      "foreign": "SWIGGY.NS",
+      "us": null,
+      "name": "Swiggy Limited",
+      "reason": "no-strong-match",
+      "mc": 5471970000000.0
+    },
+    {
+      "foreign": "BESS.JK",
+      "us": null,
+      "name": "PT Batulicin Nusantara Maritim Tbk",
+      "reason": "no-strong-match",
+      "mc": 5470330000000.0
+    },
+    {
+      "foreign": "006260.KS",
+      "us": null,
+      "name": "LS Corp.",
+      "reason": "empty-sig",
+      "mc": 5466870000000.0
+    },
+    {
+      "foreign": "IPCC.JK",
+      "us": null,
+      "name": "PT Indonesia Kendaraan Terminal Tbk",
+      "reason": "no-strong-match",
+      "mc": 5456470000000.0
+    },
+    {
+      "foreign": "UANG.JK",
+      "us": null,
+      "name": "PT Pakuan, Tbk",
+      "reason": "no-strong-match",
+      "mc": 5445000000000.0
+    },
+    {
+      "foreign": "028050.KS",
+      "us": null,
+      "name": "Samsung Engineering Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5435000000000.0
+    },
+    {
+      "foreign": "036460.KS",
+      "us": null,
+      "name": "Korea Gas Corporation",
+      "reason": "no-strong-match",
+      "mc": 5402100000000.0
+    },
+    {
+      "foreign": "MAIN.JK",
+      "us": null,
+      "name": "PT Malindo Feedmill Tbk",
+      "reason": "no-strong-match",
+      "mc": 5381630000000.0
+    },
+    {
+      "foreign": "BAJFINANCE.NS",
+      "us": null,
+      "name": "Bajaj Finance Limited",
+      "reason": "no-strong-match",
+      "mc": 5381020000000.0
+    },
+    {
+      "foreign": "6702.T",
+      "us": null,
+      "name": "Fujitsu Limited",
+      "reason": "no-strong-match",
+      "mc": 5363800000000.0
+    },
+    {
+      "foreign": "MAPB.JK",
+      "us": null,
+      "name": "PT. Map Boga Adiperkasa Tbk",
+      "reason": "no-strong-match",
+      "mc": 5358150000000.0
+    },
+    {
+      "foreign": "PYFA.JK",
+      "us": null,
+      "name": "PT Pyridam Farma Tbk",
+      "reason": "no-strong-match",
+      "mc": 5348660000000.0
+    },
+    {
+      "foreign": "CASS.JK",
+      "us": null,
+      "name": "PT Cahaya Aero Services Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5342590000000.0
+    },
+    {
+      "foreign": "LTOD.L",
+      "us": null,
+      "name": "Larsen & Toubro Limited",
+      "reason": "no-strong-match",
+      "mc": 5334120000000.0
+    },
+    {
+      "foreign": "008355.KS",
+      "us": null,
+      "name": "Namsun Aluminum Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5330740000000.0
+    },
+    {
+      "foreign": "WOOD.JK",
+      "us": null,
+      "name": "PT Integra Indocabinet Tbk",
+      "reason": "no-strong-match",
+      "mc": 5328750000000.0
+    },
+    {
+      "foreign": "INCF.JK",
+      "us": null,
+      "name": "PT Indo Komoditi Korpora Tbk",
+      "reason": "no-strong-match",
+      "mc": 5303570000000.0
+    },
+    {
+      "foreign": "MSTI.JK",
+      "us": null,
+      "name": "Mastersystem Infotama Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5288920000000.0
+    },
+    {
+      "foreign": "BOGA.JK",
+      "us": null,
+      "name": "PT Bintang Oto Global Tbk",
+      "reason": "no-results",
+      "mc": 5286900000000.0
+    },
+    {
+      "foreign": "GOLF.JK",
+      "us": null,
+      "name": "Intra Golflink Resorts Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5261430000000.0
+    },
+    {
+      "foreign": "YULE.JK",
+      "us": null,
+      "name": "PT Yulie Sekuritas Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 5238050000000.0
+    },
+    {
+      "foreign": "MASB.JK",
+      "us": null,
+      "name": "PT Bank Multiarta Sentosa Tbk",
+      "reason": "no-strong-match",
+      "mc": 5215480000000.0
+    },
+    {
+      "foreign": "AMAR.JK",
+      "us": null,
+      "name": "PT Bank Amar Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 5192320000000.0
+    },
+    {
+      "foreign": "MPMX.JK",
+      "us": null,
+      "name": "PT Mitra Pinasthika Mustika Tbk",
+      "reason": "no-strong-match",
+      "mc": 5174240000000.0
+    },
+    {
+      "foreign": "TRIN.JK",
+      "us": null,
+      "name": "PT Perintis Triniti Properti Tbk",
+      "reason": "no-strong-match",
+      "mc": 5149390000000.0
+    },
+    {
+      "foreign": "2413.T",
+      "us": null,
+      "name": "M3, Inc.",
+      "reason": "empty-sig",
+      "mc": 5138170000000.0
+    },
+    {
+      "foreign": "6954.T",
+      "us": null,
+      "name": "Fanuc Corporation",
+      "reason": "no-strong-match",
+      "mc": 5138140000000.0
+    },
+    {
+      "foreign": "HRME.JK",
+      "us": null,
+      "name": "PT Menteng Heritage Realty Tbk",
+      "reason": "no-strong-match",
+      "mc": 5124530000000.0
+    },
+    {
+      "foreign": "138930.KS",
+      "us": null,
+      "name": "BNK Financial Group Inc.",
+      "reason": "no-strong-match",
+      "mc": 5119460000000.0
+    },
+    {
+      "foreign": "002380.KS",
+      "us": null,
+      "name": "KCC Corporation",
+      "reason": "no-strong-match",
+      "mc": 5094350000000.0
+    },
+    {
+      "foreign": "FAST.JK",
+      "us": null,
+      "name": "PT Fast Food Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 5087600000000.0
+    },
+    {
+      "foreign": "ITC.NS",
+      "us": null,
+      "name": "ITC Limited",
+      "reason": "no-strong-match",
+      "mc": 5086880000000.0
+    },
+    {
+      "foreign": "MINA.JK",
+      "us": null,
+      "name": "PT Sanurhasta Mitra Tbk",
+      "reason": "no-strong-match",
+      "mc": 5085940000000.0
+    },
+    {
+      "foreign": "PNIN.JK",
+      "us": null,
+      "name": "PT Paninvest Tbk",
+      "reason": "no-strong-match",
+      "mc": 5065060000000.0
+    },
+    {
+      "foreign": "271560.KS",
+      "us": null,
+      "name": "ORION Corp.",
+      "reason": "no-strong-match",
+      "mc": 5059710000000.0
+    },
+    {
+      "foreign": "BUKK.JK",
+      "us": null,
+      "name": "PT Bukaka Teknik Utama Tbk.",
+      "reason": "no-strong-match",
+      "mc": 5054050000000.0
+    },
+    {
+      "foreign": "KALYANKJIL.NS",
+      "us": null,
+      "name": "Kalyan Jewellers India Limited",
+      "reason": "no-strong-match",
+      "mc": 5041870000000.0
+    },
+    {
+      "foreign": "7201.T",
+      "us": null,
+      "name": "Nissan Motor Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5007890000000.0
+    },
+    {
+      "foreign": "8725.T",
+      "us": null,
+      "name": "MS&AD Insurance Group Holdings, Inc.",
+      "reason": "no-strong-match",
+      "mc": 5006620000000.0
+    },
+    {
+      "foreign": "175330.KS",
+      "us": null,
+      "name": "JB Financial Group Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 5005290000000.0
+    },
+    {
+      "foreign": "285130.KS",
+      "us": null,
+      "name": "SK Chemicals Co.,Ltd",
+      "reason": "no-strong-match",
+      "mc": 5002800000000.0
+    },
+    {
+      "foreign": "BHAT.JK",
+      "us": null,
+      "name": "PT Bhakti Multi Artha Tbk",
+      "reason": "no-strong-match",
+      "mc": 5000000000000.0
+    },
+    {
+      "foreign": "MMLP.JK",
+      "us": null,
+      "name": "PT Mega Manunggal Property Tbk",
+      "reason": "no-strong-match",
+      "mc": 5000000000000.0
+    },
+    {
+      "foreign": "ELSA.JK",
+      "us": null,
+      "name": "PT Elnusa Tbk",
+      "reason": "no-strong-match",
+      "mc": 4999470000000.0
+    },
+    {
+      "foreign": "LKOH.ME",
+      "us": null,
+      "name": "PJSC LUKOIL",
+      "reason": "no-results",
+      "mc": 4989570000000.0
+    },
+    {
+      "foreign": "7751.T",
+      "us": null,
+      "name": "Canon Inc.",
+      "reason": "no-strong-match",
+      "mc": 4989460000000.0
+    },
+    {
+      "foreign": "ABDA.JK",
+      "us": null,
+      "name": "PT Asuransi Bina Dana Arta Tbk",
+      "reason": "no-strong-match",
+      "mc": 4950930000000.0
+    },
+    {
+      "foreign": "KINO.JK",
+      "us": null,
+      "name": "PT Kino Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 4900000000000.0
+    },
+    {
+      "foreign": "011210.KS",
+      "us": null,
+      "name": "HYUNDAI WIA Corporation",
+      "reason": "no-strong-match",
+      "mc": 4888800000000.0
+    },
+    {
+      "foreign": "0700.HK",
+      "us": null,
+      "name": "Tencent Holdings Limited",
+      "reason": "no-strong-match",
+      "mc": 4887930000000.0
+    },
+    {
+      "foreign": "BABP.JK",
+      "us": null,
+      "name": "PT Bank MNC Internasional Tbk",
+      "reason": "no-strong-match",
+      "mc": 4883300000000.0
+    },
+    {
+      "foreign": "004800.KS",
+      "us": null,
+      "name": "Hyosung Corporation",
+      "reason": "no-strong-match",
+      "mc": 4873980000000.0
+    },
+    {
+      "foreign": "MTLA.JK",
+      "us": null,
+      "name": "PT Metropolitan Land Tbk",
+      "reason": "no-strong-match",
+      "mc": 4822730000000.0
+    },
+    {
+      "foreign": "SHID.JK",
+      "us": null,
+      "name": "PT Hotel Sahid Jaya International Tbk",
+      "reason": "no-strong-match",
+      "mc": 4813100000000.0
+    },
+    {
+      "foreign": "6857.T",
+      "us": null,
+      "name": "Advantest Corporation",
+      "reason": "no-strong-match",
+      "mc": 4780360000000.0
+    },
+    {
+      "foreign": "GMTD.JK",
+      "us": null,
+      "name": "PT Gowa Makassar Tourism Development Tbk",
+      "reason": "no-strong-match",
+      "mc": 4751980000000.0
+    },
+    {
+      "foreign": "268280.KS",
+      "us": null,
+      "name": "Miwon Specialty Chemical Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 4735190000000.0
+    },
+    {
+      "foreign": "TRIM.JK",
+      "us": null,
+      "name": "PT Trimegah Sekuritas Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 4727680000000.0
+    },
+    {
+      "foreign": "4578.T",
+      "us": null,
+      "name": "Otsuka Holdings Co., Ltd.",
+      "reason": "no-strong-match",
+      "mc": 4703550000000.0
+    },
+    {
+      "foreign": "5108.T",
+      "us": null,
+      "name": "Bridgestone Corporation",
+      "reason": "no-strong-match",
+      "mc": 4674730000000.0
+    },
+    {
+      "foreign": "BACA.JK",
+      "us": null,
+      "name": "PT Bank Capital Indonesia Tbk",
+      "reason": "no-strong-match",
+      "mc": 4669010000000.0
+    }
+  ]
+}

@@ -1,0 +1,703 @@
+import type { QualitativeGroup, SectionKey } from "./types";
+
+export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
+  economic: [
+    {
+      title: "Market Psychology",
+      questions: [
+        { id: "econ.fomo", text: "Is a fear-of-missing-out mentality present in the broader market right now?" },
+        { id: "econ.amateur_sentiment", text: "How would you describe amateur investor sentiment?" },
+        { id: "econ.new_era", text: "Is there a 'new era economy' mentality at play, and what's driving it?" },
+        { id: "econ.psych_spectrum", text: "Overconfidence, pessimism, optimism, new-era mindset — which dominates and where?" },
+        { id: "econ.risk_perception", text: "How does the general public perceive risk today?" },
+        { id: "econ.news_psych", text: "Is news reporting psychology skewing positive or negative? Where?" },
+        { id: "econ.recovery_euphoria", text: "Is today's optimism rooted in a long recovery from war, a past recession, or a prior crash, and is that history being read as proof the good times will keep going? (Dalio, Mastering the Market Cycle)" },
+        { id: "econ.visible_winners", text: "Are a handful of highly visible winners (star stocks, sectors, or founders) held up as proof the whole market will keep rising? (Shiller, Irrational Exuberance)" },
+        { id: "econ.permanent_prosperity", text: "Is there a belief in permanent prosperity, that recessions and bear markets are a thing of the past? (Shiller, Irrational Exuberance)" },
+        { id: "econ.herd", text: "How strong is herd behavior right now, with buyers piling in mainly because everyone else is buying? (Shiller; Nofsinger)" },
+        { id: "econ.valuation_vs_fundamentals", text: "Are prices being set by story and momentum rather than fundamentals like earnings, cash flow, and reasonable valuations? (Nofsinger, The Psychology of Investing)" },
+        { id: "econ.greed_to_fear", text: "If a first real market decline hit, how fast could the mood flip from greed to fear, and what would signal that the turn has begun? (Dalio, Mastering the Market Cycle)" },
+      ],
+    },
+    {
+      title: "Credit & Debt",
+      questions: [
+        { id: "econ.debt_quality", text: "What's the quality of debt currently being financed?" },
+        { id: "econ.leverage_personal", text: "Overall leverage — Personal credit: how stretched is the consumer?" },
+        { id: "econ.leverage_private", text: "Overall leverage — Private credit: where are the bubbles?" },
+        { id: "econ.leverage_government", text: "Overall leverage — Government credit: which sovereigns are at risk?" },
+        { id: "econ.leverage_corporate", text: "Overall leverage — Company / industrial credit: who's over-levered?" },
+        { id: "econ.tightening_into_debt", text: "Is the central bank raising interest rates into an economy already carrying heavy debt across companies (especially the bubble's hot names), households, and bank loans written (often at record highs or rising quickly), partly to fight inflation that the boom itself helped create? (Dalio, Mastering the Market Cycle)" },
+        { id: "econ.bank_loans_health", text: "If bank loans are high or increasing quickly, are the loans being written healthy (sound credit standards, solid borrowers and collateral) or is weak credit being extended on easy terms? Weigh the evidence, staying skeptical without assuming the worst." },
+      ],
+    },
+    {
+      title: "Innovation & Capital Formation",
+      questions: [
+        { id: "econ.innovation_news", text: "Which new innovations are emerging now, how early are you spotting them, and how likely is each to disrupt existing businesses? The best investors identify important innovations before the crowd, so gauge each new technology's potential to replace what people use today." },
+        { id: "econ.ipo_vc", text: "What's the state of new IPOs and venture capital funding?" },
+        { id: "econ.acquisitions", text: "How elevated is acquisition activity?" },
+        { id: "econ.business_progress", text: "How much emphasis is the market putting on actual business progress vs. narrative?" },
+        { id: "econ.demographics", text: "What are the demographics of current investors driving flows?" },
+      ],
+    },
+    {
+      title: "Macro Drivers",
+      questions: [
+        { id: "econ.gdp_inflation_debt", text: "What's actually driving GDP growth, inflation, and increasing debt?" },
+        { id: "econ.geography", text: "What geographic constraints and benefits are shaping individual economies and industries?" },
+        { id: "econ.political_tradeoffs", text: "What are the tradeoffs of recent political and economic decisions?" },
+      ],
+    },
+    {
+      title: "Long-Term Growth, Productivity & Demographics",
+      questions: [
+        { id: "econ.growth.productivity", text: "Is productivity rising in this economy, meaning the amount each worker produces, and how does that trend compare with the past and with other countries? Long-run gains in a nation's wealth, living standards, and power come mostly from rising productivity, so this is the single most important force to judge." },
+        { id: "econ.growth.position", text: "Are the businesses you favor based in industries and regions of the world that are actually growing, rather than shrinking or standing still? Owning companies inside expanding industries and expanding economic regions gives a natural tailwind that a strong company in a declining area does not have." },
+        { id: "econ.growth.industry_rates", text: "When you compare the growth rates of different industries, which ones are expanding fastest and which are falling behind? Ranking industries by how quickly they grow helps point money toward the parts of the economy with the most room to expand." },
+        { id: "econ.growth.demographics", text: "Is this country's birth rate high enough to grow its workforce, and if not, is it making up for that through immigration, policies that encourage having children, higher exports, or better productivity? A country with falling birth rates and none of these offsets will eventually struggle to grow its economy." },
+        { id: "econ.growth.real_longterm", text: "Is your analysis centered on each region's real, long-term growth, meaning growth in actual output after the effect of rising prices is removed? Real long-term growth is the main thing global investors should focus on, because growth that is only higher prices or only short-lived does not build lasting value." },
+        { id: "econ.growth.capex_offset", text: "Does growing this economy require heavy spending on new factories, equipment, and infrastructure? Faster economic growth does not automatically raise company earnings, because the investment needed to grow uses up cash that would otherwise reach owners. Capital spending here means money put into long-lived assets such as plants and machines." },
+        { id: "econ.growth.earnings_need_growth", text: "Is the broader economy growing, and if it is barely growing, how would the companies you follow still increase their earnings? When the overall economy is flat, earnings growth is much harder to achieve, because a company must take sales from rivals or cut costs instead of riding a rising tide." },
+      ],
+    },
+    {
+      title: "Trade, Competition & Global Supply Chains",
+      questions: [
+        { id: "econ.trade.foreign_competition", text: "If a bigger company from another country entered this market, could it threaten the survival of the local companies you are looking at, or do government regulations block new entrants from coming in? Unless rules keep new entrants out, larger foreign businesses can move in and put local companies' existence at risk." },
+        { id: "econ.trade.profit_attracts_entry", text: "How profitable is this business or market, and could that profitability itself invite new competitors in? The more profitable a business is, the easier and more tempting it becomes for others to enter the market, especially competitors that benefit from a lower cost structure, meaning they can make the same thing for less." },
+        { id: "econ.trade.container_ports", text: "How much access does this economy have to large container ports, the big sea shipping hubs where goods move in and out by the containerload? Access to large container ports tends to mean a stronger economy, because it lets a country trade goods at scale." },
+        { id: "econ.trade.china_ports", text: "How dependent is the situation you are analyzing on China's ports, and what would happen to it if those ports were disrupted? Chinese ports are a critical part of the global supply chain, the worldwide network that moves goods from raw materials to finished products, so anything that affects these ports affects the entire economy." },
+        { id: "econ.trade.global_trade_threats", text: "What could disrupt global trade, and which of these threats is most relevant right now: economic shutdowns, wars, pandemics or growing viruses that could force a shutdown, tariffs (taxes a government places on imported goods), economic panics, the balance of supply and demand, intellectual property rights, free trade agreements, natural disasters, labor shortages, raw material scarcity, overproduction of products, and underproduction of products? Also weigh the actions of intergovernmental organizations such as the WTO (World Trade Organization), the OECD (Organisation for Economic Co-operation and Development), UNCTAD (UN Conference on Trade and Development), and the Bank for International Settlements, and ask whether current global events, incidents, or growing viruses could trigger a shutdown." },
+        { id: "econ.trade.shipping_bottlenecks", text: "Which major shipping bottlenecks does the trade you are analyzing rely on, and what would happen if one of them were blocked: the Danish Straits, the English Channel, the Strait of Malacca, the Panama Canal, the Suez Canal, the Strait of Hormuz, or the Turkish Straits? A bottleneck is a narrow stretch of sea that a large share of global shipping has to pass through, so a closure at any one of them can choke trade and ripple across the whole economy." },
+        { id: "econ.trade.baltic_dry_index", text: "What is the Baltic Dry Index doing, and what could be moving it? This index tracks the average price paid for shipping dry bulk goods (loose, unpackaged commodities such as grain, coal, and iron ore) by sea, so it rises and falls with the cost of ocean freight and the balance between how many goods need moving and how many ships are available, which makes it an early read on global trade activity." },
+        { id: "econ.trade.shipping_cost_cycle", text: "When demand for goods rises, are shipping costs rising with it, and how is that flowing through to shipping company profits and then to the prices consumers pay? Higher demand for goods drives up shipping costs, which increases profits for shipping companies but also raises the price of goods, and dearer goods can cause consumers to buy less, which starts a cycle." },
+      ],
+    },
+    {
+      title: "Productive vs unproductive credit — Dalio, Big Debt Crises, Part 1",
+      questions: [
+        { id: "econ.dalio_credit.1_1", text: "Of the credit currently being extended in this economy or sector, what proportion is financing assets that will themselves generate enough future income to repay the loan, versus assets that produce no income stream and can only be repaid by selling the asset or borrowing again? This is Dalio's central test, and it matters because credit financing income-producing capacity allocates resources well and benefits both lender and borrower, while credit financing non-income-producing assets means repayment depends entirely on rising asset prices or fresh borrowing, which is the structural setup for a bust." },
+        { id: "econ.dalio_credit.1_2", text: "When you trace the specific use of the borrowed money, is it funding something whose lifetime economic benefit exceeds its full cost even if part of the loan is eventually written down, or is it funding consumption and speculation with no durable return? Ask this because, as Dalio's subway case shows, a project can have its debt written down 50% and still be a good use of credit if the asset delivers utility worth more than the loss spread over its life. The structural question is not \"will every loan be repaid\" but \"does the underlying asset create real economic value per dollar of cost.\"" },
+        { id: "econ.dalio_credit.1_3", text: "Is total debt growing faster than the income available to service it, meaning borrowing is lifting spending and incomes above the economy's consistent productivity growth rate? This matters because the gap between debt-fueled spending and underlying productivity growth is the mechanism that eventually forces income below the cost of the loans. The structural cause to identify is whether the current level of activity is self-funded by earned income or is being borrowed forward from the future." },
+        { id: "econ.dalio_credit.1_4", text: "How tight or loose are current lending standards: do lenders require near-certainty of repayment, or are they extending credit on the assumption that above-trend growth continues indefinitely? Ask this because tight standards produce too little development while loose standards produce development plus future debt problems that erase the benefits, and because policymakers and lenders systematically drift loose late in the cycle when near-term growth seems to justify it. Lending standards are the leading structural cause of whether credit stays productive." },
+        { id: "econ.dalio_credit.1_5", text: "What share of the economy's or sector's growth is being driven by debt-financed building of fixed investment, real estate, and infrastructure, as opposed to recurring demand? This matters because the rate of building long-lived assets is not sustainable: when the office building or housing stock is finished, the spending and the jobs attached to it fall toward zero, and growth then depends on other demand. The structural vulnerability is a sector whose apparent productivity is really a one-time construction surge pulling demand forward." },
+        { id: "econ.dalio_credit.1_6", text: "Is the debt denominated in a currency that local policymakers control, and do those policymakers have enough influence over how creditors and debtors behave to spread any losses over many years? Ask this because the downside risk of a large debt load depends heavily on whether losses can be socialized and stretched (a 16%-of-GDP loss spread over 15 years is about 1% a year and tolerable, but intolerable if not spread). The structural determinant of severity is currency denomination plus policy control, not the debt level alone." },
+      ],
+    },
+    {
+      title: "Credit analysis of the economy — Pragmatist's Guide (Ch. 6, 10, 25) + Dalio overlay",
+      questions: [
+        { id: "econ.credit_analysis.2_1", text: "(Macro context) Before analyzing any individual credit, what is the broad macro and market backdrop: which financing themes are currently in vogue (for example a business type suddenly favored for leveraged buyouts), and what is the supply-and-demand technical picture of how much uninvested cash sits with portfolio managers versus how many new financings are coming to market? Establish this first so you are reading each credit against the cycle rather than trying to be a global economist and a credit analyst at once, because the same credit metrics mean different things depending on liquidity conditions and issuance volume." },
+        { id: "econ.credit_analysis.2_2", text: "(The borrower) What business lines is the entity in, where is it in its life cycle, which industry dynamics (price cutting, acquisition activity) are most influencing it, and what operating trends and ownership or management issues are present? Answer this because the qualitative position of the borrower determines how to interpret the financial metrics that follow, and because life-cycle stage and industry dynamics are structural causes of whether current cash flows are durable or about to turn." },
+        { id: "econ.credit_analysis.2_3", text: "(Liquidity, the first component) Does the entity generate enough cash flow from operations to service its debt, and if not, what other sources of liquidity (cash on hand, asset sales, undrawn facilities) exist and how sensitive are these to an operational decline? This is the foundational question of leveraged credit analysis because liquidity failure is the proximate trigger of default, and stress-testing the sensitivity of the key metrics exposes the structural fragility hidden by a benign base case." },
+        { id: "econ.credit_analysis.2_4", text: "(Asset value, the second component) If liquidity is insufficient, what is the underlying asset value available to repay the debt through a sale of the company or of selected assets, how long would realizing that value take, and how much equity cushion sits beneath your claim? Ask this because asset value is the second line of repayment when cash flow fails, and the size and sellability of that cushion (a valuable brand or patent can outweigh idle hard assets) is the structural backstop that separates recoverable from impaired credit." },
+        { id: "econ.credit_analysis.2_5", text: "(Coverage and leverage ratios) What do the key ratios read and, more importantly, what trend and trajectory do they show: EBITDA/total interest and EBITDA/cash interest for the ability to cover interest, (EBITDA minus capital expenditures)/interest for the more honest coverage after necessary investment, and Debt/EBITDA for asset protection? Compute these knowing a ratio near 1x means cash generation only just covers the obligation, and read them as a moving trend rather than a single static snapshot, because the direction of the ratios is the structural signal while the level is only the starting point." },
+        { id: "econ.credit_analysis.2_6", text: "(Structure and ranking) Which entities actually issued the debt and hold the assets, where does your instrument rank (secured, unsecured, subordinated), and do covenants permit materially more debt to be placed senior to your position? This matters because two claims on the same enterprise can have very different recovery, and the structural subordination and covenant package is what determines your real position regardless of how strong the headline credit looks." },
+        { id: "econ.credit_analysis.2_7", text: "(Event analysis) What upcoming events could change the credit (refinancing, maintenance covenant violation, sale, acquisition, IPO, dividend, or buyback), and for each, what is its probability, its likely impact on the security, who else would be involved, and the time frame? Lay these out as a decision tree because credit prices move on discrete events, and identifying the structural triggers in advance is what lets you react to breaking news rather than be surprised by it." },
+        { id: "econ.credit_analysis.2_8", text: "(Relative value and decision) How do this credit's financial and operating metrics, pricing, and yield compare to relevant comparables and benchmarks, do the potential returns look attractive relative to the risks, and what would trigger a review of the decision (for example a 15% or greater move in the underlying or peer equity, or the passing of a thesis event)? Keep the credit-quality judgment and the relative-value judgment separate, because the central trap is letting a high yield or a low price substitute for the conclusion that the credit can fundamentally survive." },
+        { id: "econ.credit_analysis.2_9", text: "(Dalio overlay) Given everything above, which phase of the long-term debt cycle is the whole system in (early cycle, bubble, top, depression, beautiful deleveraging, pushing on a string, or normalization), is the aggregate debt in a currency policymakers control, and can losses be spread? Answer this last because the cycle phase is the structural context that tells you whether identical credit metrics are benign or dangerous, and because currency denomination and policy flexibility determine how a system-wide deleveraging actually resolves." },
+      ],
+    },
+    {
+      title: "Sector-wide qualitative analysis — Porter (Investment Analysis Ch. 9) + Giroux (Capital Allocation) + Thorndike (The Outsiders)",
+      questions: [
+        { id: "econ.sector_qual.3_1", text: "(Industry structure first) Under the five competitive forces (rivalry, threat of entry, supplier power, buyer power, substitutes), how much profit does this industry's structure actually permit, and where specifically are the forces concentrated? Determine the competitive structure of the industry before looking at any single firm, because the forces set the profit ceiling for the entire sector: high entry barriers with weak buyer and supplier power allow returns above the cost of capital, while low barriers and strong buyer power compete returns away even when demand is growing." },
+        { id: "econ.sector_qual.3_2", text: "(Strategy identification) What specific competitive strategy is each major firm employing, is it defensive (positioning to deflect the forces, for example investing in assets to lower cost or building a brand) or offensive (using strengths to reshape the forces, as Walmart used buying power on suppliers), and is that strategy reasonable for this industry? Ask this because the same industry rewards different strategies, and the structural question is whether each firm's chosen posture is matched to the competitive environment it actually faces." },
+        { id: "econ.sector_qual.3_3", text: "(Generic strategy and its durability) Is the firm pursuing low-cost leadership or differentiation, and for a differentiator, is the differentiating factor truly unique, is it sustainable, what does it cost, and does the price premium it commands exceed that cost so the firm earns above-average returns? This matters because differentiation only creates value when the premium beats the extra cost of being unique, and the structural cause of durable sector returns is whether the advantage can be defended rather than merely claimed." },
+        { id: "econ.sector_qual.3_4", text: "(Life-cycle fit) Does each firm's strategy fit the industry's current life-cycle stage, given that differentiation tends to work during early growth while cost leadership tends to win as the industry matures and firms shift to lowering cost? Evaluate the strategy over time rather than at a single point, because a differentiator in a maturing, cost-driven sector is structurally exposed, and the mismatch between strategy and life-cycle stage is a leading cause of deteriorating returns." },
+        { id: "econ.sector_qual.3_5", text: "(Capital allocation discipline) Across the firms in this sector, how does management deploy excess capital, and does the pattern match the sub-optimal average (buying back stock at the highs and stopping at the lows, raising capital expenditure in the mid-to-late expansion right before demand declines, and pursuing acquisitions that return below the cost of capital)? Ask this because, as Giroux's compounders show, organic growth rarely exceeds nominal GDP for long, so capital deployment becomes the dominant driver of long-run shareholder returns, and the structural separator within a sector is the disciplined allocator versus the serial value destroyer that repeats the same process mistakes." },
+        { id: "econ.sector_qual.3_6", text: "(Cash-return policy matched to cyclicality) Is each firm's mix of buybacks and dividends matched to the cyclicality of its cash flows: are secularly challenged or heavily cyclical firms avoiding buybacks in favor of special dividends, and is the ordinary dividend set at a level that will not need to be cut in the next downturn? This matters because a payout that looks fine at the top of a cycle becomes a forced cut when volatile cash flow falls, and the structural test is whether the capital-return policy survives a full cycle rather than only the good years." },
+        { id: "econ.sector_qual.3_7", text: "(Hurdle rate) Does the firm apply a clear hurdle rate, set by the CEO and exceeding the blended cost of equity and debt, against which every use of cash (organic reinvestment, acquisitions, buybacks, dividends, debt paydown) must compete, and is the projected return high enough to compensate for the uncertainty of the estimates and the cost of raising the capital? Ask this because the hurdle rate is the structural mechanism that forces capital toward its highest-return use, and its presence or absence is what distinguishes value-creating allocation from cash sprayed into empire-building." },
+      ],
+    },
+    {
+      title: "Conflicts, trade imbalances, economic geography — Erickson, Global Investing (Parts II, III, Conclusion)",
+      questions: [
+        { id: "econ.geo_conflict.4_1", text: "(Sovereign quality screen) Does the country in which a business is domiciled clear a strict minimum sovereign credit rating set as a hard investment criterion, and does it carry high levels of sovereign or consumer debt or high or rapidly rising inflation? Use the sovereign rating as the single cleanest proxy for accumulated geopolitical, fiscal, and trade-imbalance risk, because a country's external and fiscal fragility shows up first in its sovereign debt and inflation profile, which is the structural cause of the currency and funding shocks that damage even good companies." },
+        { id: "econ.geo_conflict.4_2", text: "(Concentration and conflict exposure) Is any business overly exposed to or reliant on a single region or country whose economy is at risk of war or other geopolitical events, and is the portfolio diversified enough that no one such event is decisive? Ask this because the book's response to conflict risk is portfolio construction rather than forecasting, given that no one predicts these events reliably, so the structural defense is removing single-point dependence rather than trying to time the shock." },
+        { id: "econ.geo_conflict.4_3", text: "(Real versus inflationary growth) Of a region's measured economic growth, how much is genuine increase in production and how much is simply rising prices, given that of the roughly $67 trillion rise in world GDP over two decades about $44 trillion was inflation and only about $23 trillion was real growth? Separate these because only real, productivity-driven growth sustainably supports earnings, and confusing price-level growth for real expansion is a structural error that overstates a region's true opportunity." },
+        { id: "econ.geo_conflict.4_4", text: "(Where productivity is migrating) Where is productivity and economic transformation actually shifting, and is an innovation or a policy or regulatory change making a particular industry or an entire country more competitive and attractive for foreign investment, or less? Ask this with deliberate skepticism toward distinguishing genuine, durable shifts from fads, because the structural cause of long-run regional outperformance is rising workforce productivity (the China case), and identifying it early is where the generational opportunity sits." },
+        { id: "econ.geo_conflict.4_5", text: "(Trade imbalance and supply chains) Does a persistent trade imbalance or a contested supply chain expose this country or sector, for example through dependence on a critical component that policymakers are now pushing to produce domestically? Analyze this because trade imbalances and conflict drive reshoring and supply-chain redrawing that reprice whole sectors, and the structural fragility lies with deficit countries dependent on external funding and businesses reliant on a single contested chokepoint, while the beneficiaries are domestic producers and critical-supply industries." },
+        { id: "econ.geo_conflict.4_6", text: "(Cycle position) Where does the country sit in its economic and market cycle (early, mid, late, slowdown, or repair, and bull versus bear), recognizing that stock markets usually peak and trough six to nine months before the economy and that the corporate sector almost always overinvests when times are good and cuts too much when times are bad? Ask this because the cycle position is the structural context that sets whether current valuations and earnings are near a peak about to reverse or a trough about to recover." },
+      ],
+    },
+    {
+      title: "Valuation Inputs, Liquidity & Reflexivity",
+      questions: [
+        { id: "econ.implied_erp", text: "Is the forward (implied) equity risk premium above or below its long-run history, and does that make equities cheap or expensive versus bonds right now? (Damodaran, Investment Valuation Ch.7)" },
+        { id: "econ.terminal_ceiling", text: "What is nominal GDP growth this cycle, and therefore the hard ceiling on any company's perpetual-growth assumption? (Damodaran Ch.15)" },
+        { id: "econ.real_rates", text: "Are real (inflation-adjusted) yields positive or negative, and what does that do to long-duration equity valuations?" },
+        { id: "econ.cb_liquidity", text: "Is the central bank expanding or draining liquidity (QE/QT, reserves, RRP, TGA), and how close are funding markets to stress?" },
+        { id: "econ.fiscal_dominance", text: "Is monetary policy becoming subordinate to financing government deficits (fiscal dominance), and what does that imply for inflation and the currency?" },
+        { id: "econ.reflexivity", text: "Where are price trends actively changing the fundamentals they reflect (credit-fuelled asset booms, momentum financing), setting up a self-reinforcing loop that later reverses? (Soros, Alchemy of Finance)" },
+        { id: "econ.big_market_macro", text: "Which 'everyone wins' themes (AI, EV, GLP-1) are attracting aggregate capital that cannot collectively earn its cost of capital? (Damodaran, Narrative and Numbers: the big-market delusion)" },
+        { id: "econ.anchoring_macro", text: "Is the market anchored to a recent index level or narrative such that incremental news is being misframed? (Nofsinger, Psychology of Investing)" },
+      ],
+    },
+    {
+      title: "Supply Chains",
+      questions: [
+        { id: "econ.supply.supplier-and-business-health", text: "How do the supply chains a company depends on hold up, given that many companies rely on foreign sources for the components used in their products? The point claims that what could affect those supply chains comes down to two things, supplier health and business health: if supplier health declines it creates inflationary pressure (meaning prices rise), and if business health declines it creates deflationary pressure from overproduction (meaning prices fall)." },
+        { id: "econ.supply.shortages-consumer-confidence", text: "How might supply chain shortages affect prices and how people feel about spending? The point claims that supply chain shortages have the potential to cause inflationary pressure (rising prices), and as a result consumer confidence (how willing people are to spend) declines until inflation lowers to a point where consumers start purchasing again." },
+        { id: "econ.supply.supplier-health-in-quality-industry", text: "How healthy are the suppliers in a high quality industry? The point asks you to assess the financial and operational health of the suppliers that this industry depends on." },
+        { id: "econ.supply.inventory-management", text: "How well does the business manage the amount of product it keeps on hand, and what is the trade off involved? The point claims the best businesses generally minimize product kept on hand (measured by the cash conversion cycle, days sales outstanding, days inventory outstanding, and days payables outstanding), that this also matters at the industry level especially for industries whose products rapidly lose value such as technology, that holding little inventory makes a business dependent on the prompt arrival of components, and that excess inventory is highly unproductive while most capital intensive industries carry high inventory within their asset base." },
+        { id: "econ.supply.shortages-in-other-industries", text: "How could supply shortages in other industries affect this industry, in the way a shortage of semiconductor chips (the tiny electronic parts inside modern cars) caused car prices to explode and delayed car deliveries? The point asks you to trace how a shortage somewhere else in the supply chain can ripple into this industry's prices and delivery times." },
+      ],
+    },
+    {
+      title: "Global Financial Markets",
+      questions: [
+        { id: "econ.gfm.markets-as-math-model", text: "How can you think of financial markets as a mathematical version of the real world? The idea is that prices, rates, and trading activity are essentially numbers that translate everyday economic life (companies, jobs, spending, fear, and greed) into measurable values you can study and compare." },
+        { id: "econ.gfm.capital-to-productive-use", text: "How might markets fail to send money (capital, meaning the funds available to invest) to where it would be used most productively, and how often is the cause investor psychology? In a healthy system money should flow easily toward the best uses, but human emotions like fear and greed often push it toward the wrong places instead." },
+        { id: "econ.gfm.trust-in-financial-system", text: "What could damage public trust in a country's financial system and in how business is done, and in what ways could business be carried out incorrectly or inefficiently (consider studying the Great Depression and other past bubbles)? Trust that the system is fair and that companies behave honestly is essential for steady, lasting economic growth, so its breakdown can stall an entire economy." },
+      ],
+    },
+    {
+      title: "Credit Spreads",
+      questions: [
+        { id: "econ.creditspread.spreads-measure-psychology", text: "What does the credit spread (the extra interest a riskier borrower pays over a safe government bond) tell you about investor psychology, and what does it mean when that spread falls? Falling spreads mean investors feel confident enough to lend to riskier companies because they expect to be paid back, and you can track this using the US Corporate Baa-rated Bond Spread (Baa is a middle credit-quality rating)." },
+        { id: "econ.creditspread.higher-spreads-higher-cost", text: "How do higher credit spreads raise a company's financing costs and cause it to cancel projects? When spreads are high it becomes more expensive for companies to borrow, so they skip projects that would have been profitable if borrowing had stayed cheaper." },
+        { id: "econ.creditspread.falling-from-high-signals-bottom", text: "Why might credit spreads falling from a high point signal that the market has reached a bottom? When spreads start dropping after spiking, it suggests fear is fading and investors are regaining confidence, which often lines up with the low point of a market downturn." },
+      ],
+    },
+    {
+      title: "Currency Markets",
+      questions: [
+        { id: "econ.fxmarket.declining-currency-hurts-equities", text: "How could a rapidly falling currency hurt the stock market (equity markets, meaning the markets where company shares are traded)? When a currency drops quickly it can shake confidence, raise the cost of imports, and pull money out of local stocks, dragging share prices down." },
+        { id: "econ.fxmarket.avoid-excessive-debt-inflation", text: "Why should you avoid investing in countries whose external and domestic debt is too large compared with their ability to repay it, while still asking why a particular economy can handle high debt? High debt gives a country an incentive to create inflation (a general rise in prices), which lowers the real value of the debt but also lowers the value of the currency." },
+        { id: "econ.fxmarket.diversify-beyond-dollar", text: "Instead of holding only US dollars, what other stores of value could you consider holding? Options include the Swiss Franc (backed by a very low risk government structure), G10 and G6 currency funds (baskets of major world currencies), real assets such as RAXX or a leveraged real asset fund, and gold and other commodities." },
+      ],
+    },
+    {
+      title: "Managing Market Cycle Risk",
+      questions: [
+        { id: "econ.cycle.game-plan-before-panic", text: "Do you have a clear plan ready before the next market panic hits? Having a game plan decided in advance, meaning your buy, sell, and hold rules set before prices crash, is a critical ingredient of investment success." },
+        { id: "econ.cycle.sentiment-peak-extreme", text: "When investor sentiment (the overall mood of optimism or fear among investors) feels its most upbeat, what does that signal about prices? Investor sentiment reaches an extreme high at the peak of market valuations, which is when prices are most stretched." },
+        { id: "econ.cycle.growth-to-inflation-chain", text: "Can you trace how a growing economy gradually builds inflationary pressure (a broad rise in prices across the economy)? During growth a chain plays out: consumers spend more on goods and services, businesses respond by increasing supply, that leads to more jobs which accelerates wealth creation, eventually there are not enough people to fill job vacancies, so companies must raise wages to attract employees, and all of these factors together create inflationary pressure." },
+        { id: "econ.cycle.central-bank-rate-hikes", text: "What do central banks (the institutions that manage a country's money supply and interest rates) do when growth runs too hot? Central banks intervene to slow growth by raising interest rates, which makes borrowing more expensive and cools spending." },
+      ],
+    },
+    {
+      title: "Currency Risk",
+      questions: [
+        { id: "econ.fxrisk.fiat-currency", text: "Why is a currency called a fiat currency? The point claims that a fiat currency (meaning money whose value comes from government decree rather than from a physical commodity such as gold) has value because the government declares it to." },
+        { id: "econ.fxrisk.supply-demand", text: "How is the exchange rate between two countries determined? The point claims that the exchange rate (the price of one country's currency expressed in another's) is set by supply and demand for those currencies." },
+        { id: "econ.fxrisk.real-interest-rate", text: "What is the most important factor driving currency movements, and why? The point claims it is the real interest rate (meaning the interest rate minus inflation), so the inflation-adjusted return offered by a currency matters more than the headline interest rate alone." },
+        { id: "econ.fxrisk.self-correcting", text: "How does the self correcting mechanism in exchange rates push prices back toward normal? The point claims that when a country's currency rises (usually because of low rates) its goods become expensive for foreign buyers, so they import less, demand for the currency drops, and it falls; and when a currency weakens, foreign demand for its exports rises, which increases demand for the currency." },
+        { id: "econ.fxrisk.measure-real-rates", text: "How do you measure real interest rates against currency value, and which countries are safer to analyze? The point claims you should compare real interest rates against currency value across countries, and that it is safer to study developed, high GDP countries (those with a large gross domestic product, the total value of goods and services a country produces)." },
+        { id: "econ.fxrisk.trade-commodity-index", text: "How do you measure the trade index against currency value and against real commodity price indices? The point claims you should also track a country's trade index (a measure of its trade activity) against its currency value, and against real commodity price indices (commodity prices adjusted for inflation)." },
+        { id: "econ.fxrisk.safe-haven-currencies", text: "How do safe haven currencies behave when global equity markets fall, and what happens to commodities after looser policy? The point claims that safe haven currencies (currencies investors flee to in turbulent times, namely the G7 currencies, the Yen, the US dollar, and the Franc) tend to strengthen as global stock markets fall and act as a shock absorber, and that once looser policy (lower real interest rates) is implemented and credit is infused into the economy, commodities like gold and silver appreciate in price." },
+        { id: "econ.fxrisk.commodity-exporters", text: "Why are higher commodity prices positive for commodity exporters such as Australia, Canada, and even China? The point claims that rising commodity prices benefit the currencies and economies of countries that export commodities, including Australia, Canada, and even China." },
+        { id: "econ.fxrisk.usd-emerging-markets", text: "Why is a stronger US dollar harmful for emerging market economies while a weaker US dollar supports them, and what are risk assets? The point claims that because most emerging market debt is denominated in US dollars, a rising USD makes that debt more expensive to service, and it defines risk assets (such as equity markets, commodity-linked currencies, and emerging markets) as assets that do well when investors accept more risk, while bonds and safe haven currencies appreciate when investors want to avoid risk." },
+        { id: "econ.fxrisk.cash-diversification", text: "Why should you avoid holding all of your remaining cash in a single currency, and what are the alternatives? The point claims you should not keep all your cash in one currency, and instead invest it in safe bonds, or in a diversified currency portfolio (cash spread across several currencies) if rates are favorable." },
+        { id: "econ.fxrisk.multi-year-returns", text: "Looking at a table of multi-year currency returns, why and how did some currencies deliver greater returns than the US dollar in certain years? The point asks you to explain what made certain currencies outperform the USD across particular years in the data." },
+      ],
+    },
+    {
+      title: "Currency Debasement & Crashes",
+      questions: [
+        { id: "econ.debasement.deliberate-devaluation", text: "How can you figure out why, how, and when a country might deliberately devalue or prop up its currency? Countries can make their currency appreciate or depreciate against foreign currencies, and those wanting to help their exporters often weaken their currency because a weaker currency makes their goods cheaper for foreign buyers." },
+        { id: "econ.debasement.productivity-inflation-crisis", text: "Are you watching for declining productivity (output produced per worker or per hour) and rampant inflation (broad, fast rising prices)? Over the long term these can cause a currency crisis, and holding a basket (a mix) of different currencies and commodities helps you resist such problems." },
+        { id: "econ.debasement.currency-peg", text: "Has the country pegged its currency to a major currency such as the US dollar? Countries do this to create exchange rate stability, and a peg means fixing the currency's value to another currency so the two trade at a set rate." },
+        { id: "econ.debasement.bank-crisis-causes", text: "Do you understand what really fuels a bank crisis? Bank crises are preceded by rising prices of assets like homes and equities (shares of companies), but they are actually fueled by unhealthy lending standards that come from overly optimistic investor sentiment, which is itself powered by high liquidity (lots of money and credit easily available in the system)." },
+        { id: "econ.debasement.liquidity-precedes-debt-crisis", text: "Are you tracking liquidity as an early warning? Declining liquidity, meaning money and credit becoming harder to get, tends to come before debt crises." },
+        { id: "econ.debasement.credit-contraction-loop", text: "Do you see how falling liquidity can trigger a credit contraction feedback loop? Declining liquidity also reduces the value of homes, and because the loan-to-value ratio (the size of the loan compared with the value of the asset backing it) rises, the chance of delinquency (borrowers failing to make payments) increases, which feeds further contraction." },
+        { id: "econ.debasement.inflation-refinance-crash", text: "Are inflation and an inability to refinance debt present? Inflation and the inability to refinance debt (replace maturing debt with new borrowing) have preceded currency crashes, especially in countries that suffered frequent bouts of inflation in the past." },
+        { id: "econ.debasement.inflate-away-debt", text: "Does the country have high external debt (money owed to foreign lenders) and sometimes high domestic debt (money owed inside the country)? Such countries have a history of deliberately stimulating inflation to inflate away their debt burden, meaning rising prices make the fixed amount they owe worth less in real terms." },
+        { id: "econ.debasement.four-debt-options", text: "When a country cannot repay its debt, which of the four options is it using: reduce spending and increase taxes, renegotiate the terms of the debt, default (stop paying), or devalue the debt through inflation? These four are also the main levers used to manage debt problems." },
+        { id: "econ.debasement.impending-crisis-signs", text: "Which signs of an impending debt crisis can you check for: are prices high relative to traditional measures, are prices already pricing in future rapid price appreciation, are purchases being financed by high leverage (lots of borrowed money), are buyers or companies making forward purchases (buying now to lock in future supply), would tightening (raising interest rates or reducing credit) risk popping the bubble, have new participants entered the market, is there broad bullish (optimistic) sentiment, are there new era mindsets (beliefs that old rules no longer apply), is there emphasis on business success based on price appreciation and the visibility of winners, is there a myth of permanent prosperity, is there overconfidence in investor sentiment, is there fear of missing out, and are valuations based on something other than fundamentals (real earnings, cash flow, and assets)?" },
+        { id: "econ.debasement.bubble-top-forces", text: "Which forces seen near the top of bubbles and market cycles can you spot: a large number of IPOs (initial public offerings, companies first selling shares to the public), rapidly rising prices, high merger and acquisition activity (companies buying or combining with each other), easy availability of credit, optimistic covers of newspapers and magazines, higher than average trading volumes, historically high valuation multiples (price compared with earnings or other fundamentals), booming art and luxury markets, soaring financial media viewership, declarations that this time is different, amateur investors moving into the equities (stocks) asset class, spiking speculative asset prices, and record venture capital funding (money invested in young, unproven companies)?" },
+        { id: "econ.debasement.bubble-pop-forces", text: "What are the main forces that cause a bubble to pop? Rising real rates (interest rates after subtracting inflation) and falling real liquidity, smaller initial market declines that change investor mentality, and high initial volatility (sharp up and down or flat moves in the market)." },
+        { id: "econ.debasement.market-bottom-conditions", text: "Which conditions commonly seen near market cycle bottoms can you identify: no mergers and acquisitions, no IPOs, low venture capital funding, historically low price-to-earnings and EV/EBITDA multiples (low valuations relative to earnings and to operating profit before interest, taxes, depreciation, and amortization), many companies trading below book value (priced under their accounting net worth), speculative asset prices down hugely, central banks easing (cutting rates or adding money) for six or more months with rising liquidity, a recession officially declared, previously favorite sectors now hated, credit available only to high quality borrowers, amateur investors filled with caution, negative covers of newspapers and magazines, and negative, depressed consumer sentiment?" },
+        { id: "econ.debasement.policy-debasement-response", text: "Are you taking seriously any government policies that appear to promote price inflation and currency debasement (the loss of a currency's value)? If you are very skeptical about where the situation is headed, you should sell the shares of companies in that country." },
+      ],
+    },
+    {
+      title: "Geopolitical Risks",
+      questions: [
+        { id: "econ.geopol.diplomacy", text: "How is diplomacy being used here? Diplomacy means convincing foreign citizens that your policies are the most desirable path for them to follow, and it includes using propaganda (information spread to promote a particular political cause). When relations break down, withdrawing embassy and consular staff (the officials a country keeps in another country) is one of the first actions taken." },
+        { id: "econ.geopol.economic-incentives", text: "Are economic incentives being used to entice an opposing country toward a desired settlement, given that wealthier countries are better positioned to use them when diplomacy alone does not work? A country can offer trade concessions (easier trading terms) and economic aid, for example reducing or increasing trade tariffs (taxes on imported goods), helping a foreign country develop infrastructure, supplying goods and loans, and forgiving loans." },
+        { id: "econ.geopol.trade-wars-sanctions", text: "Are trade wars or sanctions in play now that economic incentives have proven ineffective? Tit-for-tat tariffs (taxes on imports each side raises in retaliation) make the target country's exports more expensive for domestic buyers, reducing demand and hurting that country economically, and they usually hurt both economies, especially when the two indirectly rely on each other; economic sanctions (official penalties one country places on another) include freezing the assets of politically influential individuals, blocking the import of certain goods, and preventing the export of certain goods such as oil." },
+        { id: "econ.geopol.military-coercion", text: "Is military coercion (threatening to use military force to make weaker countries concede) involved, and how would it affect your holdings? The world's top military powers have large economies because wealth is needed to supply and support a military; large cap stocks (shares of the biggest companies) tend to perform better in wartime, but inflation (the general rise in prices) rises during wartime which makes bonds less profitable, initial reactions to a war drive the stock market down and the market tends to recover quickly once investors understand the war's scope and magnitude, and war mainly affects the economies where the war is actually located." },
+      ],
+    },
+    {
+      title: "Managing Geopolitical Risk",
+      questions: [
+        { id: "econ.geopolmgmt.escalation-recognition", text: "Can you recognize when a disagreement between two or more countries is likely to escalate to the point where economic or military coercion (pressure applied through trade penalties or the threat of force) is used? Spotting escalation early helps you act before the risk is priced in." },
+        { id: "econ.geopolmgmt.minimum-credit-rating", text: "Have you set a minimum credit rating for each country you plan to invest in as an investment constraint (a rule you set for yourself before investing)? A sovereign credit rating, meaning a grade for how safely a country can repay its debts, reflects how safe it is to invest in that country." },
+        { id: "econ.geopolmgmt.watching-statements", text: "Are you watching for political statements from countries whose actions could affect the businesses you have invested in? Use social media posts and a diversified set of news outlets (a mix of different news sources) so you do not rely on a single viewpoint." },
+        { id: "econ.geopolmgmt.conflict-likelihood", text: "When analyzing propaganda, political statements, and disputes between countries, is a military conflict likely, and are you avoiding investment in those countries until investors understand the consequences? This matters especially when a confrontation is likely to inflict considerable damage on a country's economy, while recognizing that most modern conflicts do not massively damage economies." },
+      ],
+    },
+  ],
+
+  credit: [
+    {
+      title: "The Credit Cycle & Condition",
+      questions: [
+        { id: "credit.cycle_stage", text: "Where in the credit cycle are we: early expansion (standards easing, spreads narrowing), late boom (record loan growth, thin spreads, lax underwriting), turn (standards tightening, spreads widening), or crunch (credit contracting, defaults rising)? Ziegel: easy credit late in a boom funds the very assets that later default." },
+        { id: "credit.underwriting_quality", text: "Is loan growth being driven by healthy demand and sound underwriting, or by loosening credit standards? A record or fast-rising loan level is not proof of trouble by itself; the quality and the rate of change matter more than the level. Stay skeptical without assuming the worst." },
+        { id: "credit.standards_direction", text: "What is the Senior Loan Officer survey saying about the direction of lending standards, and does that lead the loan-growth and delinquency data by the several quarters Ziegel expects?" },
+        { id: "credit.condition_for_obligors", text: "Given the macro 'Condition' (the third of Ziegel's five C's), how does the current credit environment expand or constrain the debt capacity of the average corporate obligor you might analyze?" },
+      ],
+    },
+    {
+      title: "Spreads, Default Risk & Confidence",
+      questions: [
+        { id: "credit.spread_signal", text: "What are high-yield and investment-grade spreads pricing in: complacency (very tight), normal compensation, or fear (blowing out)? Ziegel treats the spread as the market's real-time risk rating; where is it in its historical range?" },
+        { id: "credit.spread_migration", text: "Is stress confined to high-yield, or is it migrating up the quality ladder toward investment grade and the BBB-/Baa3 borderline that marks Ziegel's investment-grade cutoff?" },
+        { id: "credit.spread_vs_realised", text: "Do market-priced risk (spreads) and realised deterioration (delinquencies, charge-offs) agree, or is one leading the other, and which do you trust more right now?" },
+        { id: "credit.confidence_liquidity", text: "Is there any sign of the confidence/liquidity channel Ziegel calls the dominant bank risk (deposit outflows, funding-market stress, a rising financial-stress index) that could turn a solvency worry into a run?" },
+      ],
+    },
+    {
+      title: "Banking-System Health & Concentration",
+      questions: [
+        { id: "credit.asset_quality", text: "Are delinquencies and net charge-offs still low, or beginning to rise even while loan totals keep growing? Rising losses beneath a still-growing book is an early warning that the cycle is about to turn down." },
+        { id: "credit.capital_adequacy", text: "Is bank capital (equity-to-assets, Tier-1) adequate for the risk in the book? Reserves cover expected loss; capital covers unexpected loss (the Basel distinction); is the cushion sized for a downturn?" },
+        { id: "credit.concentration", text: "Where is concentration building: a single sector (CRE, as in the 1990s failures), geography, or borrower type? Ziegel calls concentration 'perhaps the single most significant issue in credit-risk management.'" },
+        { id: "credit.margin_and_funding", text: "Is the net interest margin healthy enough to absorb loan losses and fund the equity return, and is the deposit funding base stable rather than flighty?" },
+        { id: "credit.shadow_and_nonbank", text: "Is credit migrating from banks to non-bank lenders (private credit, securitization/'originate-and-distribute'), so the bank data understates true system leverage, the shadow-banking blind spot behind 2008?" },
+      ],
+    },
+  ],
+
+  sector: [
+    {
+      title: "Capital Flows",
+      questions: [
+        { id: "sec.capital_flow", text: "Where is capital flowing into / out of this sector right now, and why?" },
+        { id: "sec.share_of_sp500", text: "What share of the S&P 500 (or relevant benchmark) does the sector represent, and is that share rising or falling?" },
+        { id: "sec.fund_positioning", text: "How are large institutional funds positioned in this sector — overweight, underweight, or neutral?" },
+      ],
+    },
+    {
+      title: "Macro Sensitivity",
+      questions: [
+        { id: "sec.rate_sensitivity", text: "How sensitive is the sector to interest rates? Which direction helps it?" },
+        { id: "sec.cycle_position", text: "Where is the sector in the business cycle (early, mid, late, recession)?" },
+        { id: "sec.commodity_dependence", text: "Which commodities or input costs materially move the sector's earnings?" },
+        { id: "sec.fx_exposure", text: "How exposed is the sector to FX moves and international demand?" },
+      ],
+    },
+    {
+      title: "Structural Position",
+      questions: [
+        { id: "sec.secular_tailwinds", text: "What are the secular tailwinds (demographics, technology, regulation) supporting the sector long-term?" },
+        { id: "sec.secular_headwinds", text: "What secular headwinds are working against it?" },
+        { id: "sec.regulation_risk", text: "How exposed is the sector to regulatory change? Which agencies matter?" },
+        { id: "sec.disruption_risk", text: "What technologies or business models could disrupt incumbents?" },
+      ],
+    },
+    {
+      title: "Profitability & Quality",
+      questions: [
+        { id: "sec.aggregate_roic", text: "Does the sector earn its cost of capital in aggregate? Which industries inside the sector drag the average?" },
+        { id: "sec.margin_trend", text: "Are aggregate margins expanding, compressing, or holding flat — and what's driving the trend?" },
+        { id: "sec.dispersion", text: "How wide is the dispersion between best and worst performers within the sector?" },
+      ],
+    },
+    {
+      title: "Sentiment & Positioning",
+      questions: [
+        { id: "sec.sentiment", text: "How does sell-side and retail sentiment toward the sector compare to the fundamentals?" },
+        { id: "sec.short_interest", text: "What does short interest look like across the sector?" },
+        { id: "sec.contrarian", text: "Is there a contrarian opportunity here — sector hated, but fundamentals improving?" },
+      ],
+    },
+    {
+      title: "Capital Cycle & Value Chain",
+      questions: [
+        { id: "sec.capital_cycle", text: "Is sector capacity and capex growing faster than demand? Rising investment predicts falling future returns, and falling investment predicts rising returns. (Chancellor, Capital Returns)" },
+        { id: "sec.profit_pool", text: "Across the chain (suppliers, producers, distributors, retail), who captures the economic profit, and is that capture shifting? (Gadiesh & Gilbert, profit pools)" },
+        { id: "sec.pricing_power", text: "Is real pricing power rising or falling (price versus input costs), independent of volume?" },
+        { id: "sec.cost_curve", text: "Where do the sector's players sit on the global cost curve, and who is the marginal producer setting the price?" },
+        { id: "sec.concentration_trend", text: "Is the sector consolidating toward oligopoly or fragmenting, and is concentration rising?" },
+        { id: "sec.channel_inventory", text: "Is there excess inventory in the channel that will depress near-term demand (the bullwhip effect)?" },
+      ],
+    },
+  ],
+
+  industry: [
+    {
+      title: "Investor Psychology",
+      questions: [
+        { id: "ind.investor_psych", text: "Describe the psychology of investors who invest within this industry." },
+        { id: "ind.reputability", text: "How reputable and likable is the industry — does it project clear core values?" },
+        { id: "ind.management_mindsets", text: "What's the mindset of management at the highest market-cap companies in the industry?" },
+      ],
+    },
+    {
+      title: "ESG & Sustainability",
+      questions: [
+        { id: "ind.esg", text: "ESG analysis (especially relevant for oil & gas, tech) — strengths and risks?" },
+      ],
+    },
+    {
+      title: "Strategic Position",
+      questions: [
+        { id: "ind.swot", text: "SWOT analysis of the industry: strengths, weaknesses, opportunities, threats." },
+        { id: "ind.why_growth", text: "Who, what, where, when, why, how, and what significance — for why this industry could be the fastest-growing consistently in the future?" },
+        { id: "ind.innovations", text: "What innovations could affect the industry?" },
+        { id: "ind.cross_industry", text: "How do other industries affect this one? Which industry has the most impact on it?" },
+      ],
+    },
+    {
+      title: "Consumer & Resource Dynamics",
+      questions: [
+        { id: "ind.buyer_incentives", text: "What incentives do people have to buy products / investments / services from this industry over others?" },
+        { id: "ind.economy_tradeoffs", text: "What tradeoffs does this industry create for the broader economy?" },
+        { id: "ind.resources", text: "How do resource needs affect industry performance?" },
+      ],
+    },
+    {
+      title: "Money Flow",
+      questions: [
+        { id: "ind.growth_leader", text: "Which industry has the highest growth currently — and in the future? What could stop that growth?" },
+        { id: "ind.capital_concentration", text: "Which industry has the most money currently, and which will have the most money in the future?" },
+      ],
+    },
+    {
+      title: "Industry Mechanics & KPIs",
+      questions: [
+        { id: "ind.kpi", text: "What single industry-specific operating metric best predicts returns here (same-store sales, ARPU and churn, book-to-bill, RevPAR, FFO, load factor, net interest margin), and what is it doing?" },
+        { id: "ind.moat_mechanism", text: "Is the industry protected by scale economies, customer captivity (habit, switching, search costs), or proprietary technology, or merely by incumbency? (Greenwald)" },
+        { id: "ind.lifecycle_stage", text: "What life-cycle stage is the industry in (emerging, growth, shakeout, mature, decline), and what does that imply for sustainable margins and terminal growth?" },
+        { id: "ind.cyclicality", text: "How cyclical is demand, what is current capacity utilization, and are current earnings above or below mid-cycle?" },
+        { id: "ind.value_capture", text: "Which segment of the industry captures the most economic profit, and why?" },
+        { id: "ind.consolidation", text: "Is the industry consolidating or fragmenting, and who are the acquirers versus the targets?" },
+      ],
+    },
+  ],
+
+  comparative: [
+    {
+      title: "Business Comparison",
+      questions: [
+        { id: "comp.descriptions", text: "Comparing what each company actually does based on its description." },
+        { id: "comp.products_services", text: "Explanations of the products and services each company provides." },
+      ],
+    },
+    {
+      title: "Industry-Specific Success Factors",
+      questions: [
+        { id: "comp.success_factors", text: "What key factors make a business succeed or fail in this industry?" },
+        { id: "comp.optimal_management", text: "What are the optimal qualities management should have within this specific industry?" },
+      ],
+    },
+    {
+      title: "Relative Valuation Discipline",
+      questions: [
+        { id: "comp2.companion_var", text: "After adjusting each multiple for its companion variable (P/E for growth, P/B for ROE, EV/EBITDA for ROIC and reinvestment, P/S for margin), is this name actually cheaper than peers or just lower quality? (Damodaran, Investment Valuation Ch.17-20)" },
+        { id: "comp2.relative_vs_absolute", text: "Is the whole peer set rich or cheap versus its own history, so that 'cheapest in the group' might still be overvalued? (Damodaran Ch.17)" },
+        { id: "comp2.comp_validity", text: "Are these truly comparable in risk, growth, and margin, or just the same industry code? Would size and geography tiering change the set? (Rosenbaum & Pearl)" },
+        { id: "comp2.forward_basis", text: "On forward (not just trailing) estimates, does the ranking change?" },
+        { id: "comp2.discount_reason", text: "Why does the market assign this name a discount or premium versus peers: fundamentals, or neglect and sentiment? (Tilson & Heins, The Art of Value Investing)" },
+        { id: "comp2.acquirer_value", text: "Would a strategic acquirer pay a control premium for any of these, setting a price floor? (precedent transactions)" },
+      ],
+    },
+    {
+      title: "Relative Quality, Moat & Resilience",
+      questions: [
+        { id: "comp2.low_cost", text: "Which company is the low-cost producer, and how durable is that cost gap? (Greenwald)" },
+        { id: "comp2.relative_moat", text: "Which competitor has the widest moat, and is it widening or narrowing relative to the others?" },
+        { id: "comp2.relative_capital", text: "Which management team has the best incremental-ROIC and buyback-at-a-discount record among the peers? (Thorndike, The Outsiders)" },
+        { id: "comp2.relative_eq", text: "Whose earnings are the highest quality among the peers (operating cash flow versus net income, accruals)?" },
+        { id: "comp2.relative_balance", text: "Who survives a downturn best (net debt to EBITDA, covenant headroom, maturity wall) among the peers?" },
+        { id: "comp2.share_shift", text: "Who is gaining versus losing market share within the peer set, and is the shift accelerating?" },
+      ],
+    },
+  ],
+
+  individual: [
+    {
+      title: "What This Company Does",
+      questions: [
+        { id: "ind.biz.what", text: "In plain terms, what does the company sell or do, and who pays it and for what?" },
+        { id: "ind.biz.streams", text: "What are the company's main revenue streams, and roughly what share of revenue does each contribute?" },
+        { id: "ind.biz.model", text: "What is the business model (one-time sales, recurring subscriptions, usage or transaction fees, licensing, advertising, or interest and fees), and how does that shape how reliable the revenue is?" },
+        { id: "ind.biz.customers", text: "Who are the company's customers, and is revenue concentrated in a few large customers or spread across many?" },
+        { id: "ind.biz.segments", text: "How is revenue split across the company's business segments and across geographies?" },
+        { id: "ind.biz.valuechain", text: "What does the company do in-house versus buy from suppliers, and where does it sit in its industry's value chain?" },
+        { id: "ind.biz.competitors", text: "Who are the company's main competitors, and roughly what is its position or market share among them?" },
+      ],
+    },
+    {
+      title: "SWOT",
+      questions: [
+        { id: "ind.swot.strengths", text: "Strengths: what are the company's durable competitive advantages (brand, scale, low-cost position, switching costs, network effects, patents), and what in the financials confirms them?" },
+        { id: "ind.swot.weaknesses", text: "Weaknesses: what structural disadvantages does the company carry versus competitors (high cost position, customer or supplier concentration, capital intensity, a weak balance sheet, weak governance)?" },
+        { id: "ind.swot.opportunities", text: "Opportunities: what specific and realistic opportunities could grow earnings over the next several years (new markets, new products, pricing power, secular demand, accretive acquisitions, margin expansion)?" },
+        { id: "ind.swot.threats", text: "Threats: what specific threats could impair the business (new or low-cost competition, technological disruption, regulation, rising input costs, cyclicality, loss of a key customer or supplier)?" },
+      ],
+    },
+    {
+      title: "Hypothetical Competition Test",
+      questions: [
+        { id: "ind.compete", text: "If I had ample capital and skilled personnel, how would I compete with this company?" },
+      ],
+    },
+    {
+      title: "Product / Service Quality",
+      questions: [
+        { id: "ind.needed_desired", text: "Does the company's product or service originate from something needed or desired?" },
+        { id: "ind.no_substitute", text: "Do customers have no close substitute to its product or service?" },
+        { id: "ind.no_price_reg", text: "Is the business free from price regulation?" },
+        { id: "ind.no_superstar", text: "Does the business require a 'superstar' to produce great results? (If yes, it isn't great.)" },
+      ],
+    },
+    {
+      title: "Customer Orientation",
+      questions: [
+        { id: "ind.customer_first", text: "Does the company prioritize its customers first? Do consumers favor it?" },
+      ],
+    },
+    {
+      title: "Structural Disadvantages to Avoid",
+      questions: [
+        { id: "ind.not_undiff", text: "Does the company avoid having undifferentiated products?" },
+        { id: "ind.not_easy_entry", text: "Is the industry hard to enter?" },
+        { id: "ind.not_many_comp", text: "Is competition limited (not many competitors)?" },
+        { id: "ind.not_overcap", text: "Is there no over-capacity in the industry?" },
+      ],
+    },
+    {
+      title: "Competitive Advantage Durability",
+      questions: [
+        { id: "ind.moat", text: "Does the company have a sustainable competitive advantage?" },
+        { id: "ind.fast_change", text: "Is it in a fast-changing industry? (If so, the moat is harder to defend.)" },
+        { id: "ind.copyable", text: "Can competitors easily replicate the company's improvements?" },
+        { id: "ind.entry_obstacles", text: "Are there obstacles that make it tough for new companies to enter?" },
+        { id: "ind.unique_asset", text: "Does the business have something no one else has — or can copy, take away, or get in the future? Can these advantages be translated into business value?" },
+      ],
+    },
+    {
+      title: "Cash Flow Drivers",
+      questions: [
+        { id: "ind.cashflow_factors", text: "What factors were responsible for generating cash flow? Are they present today? How about in the future?" },
+        { id: "ind.cashflow_forces", text: "What forces could change them?" },
+        { id: "ind.improvement_room", text: "If there are limited ways to improve the business, is value growth ability at risk?" },
+      ],
+    },
+    {
+      title: "Management Quality",
+      questions: [
+        { id: "ind.mgmt_traits", text: "Is management proven — with integrity, talent, passion, hard work, brains, respect, and personal commitment?" },
+        { id: "ind.skill_allocation", text: "Is the company allocating workers and leaders based on skill? (Counter-example: Microsoft + Xbox.)" },
+        { id: "ind.reinvestment", text: "How is the company reinvesting earnings? Evaluate 'what will they do with the money?' against 'what do we have now?'" },
+        { id: "ind.layoffs", text: "Is the company laying off workers — especially engineers and builders — without proven reasons?" },
+      ],
+    },
+    {
+      title: "CEO Evaluation",
+      questions: [
+        { id: "ind.ceo_fit", text: "Does the company have the right CEO? What are people and workers saying about them?" },
+        { id: "ind.ceo_comp", text: "Is the CEO overreaching in terms of compensation?" },
+        { id: "ind.acquisitions", text: "Are proposed acquisitions likely to create or destroy per-share value?" },
+        { id: "ind.capital_required", text: "How much additional capital was required to produce additional earnings?" },
+      ],
+    },
+    {
+      title: "Bad Manager Red Flags",
+      questions: [
+        { id: "ind.bad_mgr", text: "Does management avoid problem-solving, accepting reality, working with workers/customers, creativity, hard work, clarity, learning from mistakes, or growth mindsets?" },
+      ],
+    },
+    {
+      title: "Earnings Quality",
+      questions: [
+        { id: "ind.earning_power", text: "Can this company maintain above average levels of earning power and profitability within its respective industry. How?" },
+        { id: "ind.earnings_source", text: "Who, what, where, when, why, how, and what significance — how did earnings actually increase?" },
+      ],
+    },
+    {
+      title: "Workforce Quality",
+      questions: [
+        { id: "ind.workers", text: "Are the workers talented, honest, nice, and trustworthy?" },
+        { id: "ind.reputation_risk", text: "How could the company lose its reputation?" },
+      ],
+    },
+    {
+      title: "Risk / Reward",
+      questions: [
+        { id: "ind.loss_gain", text: "Is the loss/gain ratio favorable? Do I gain a lot if I'm right and lose little if I'm wrong?" },
+      ],
+    },
+    {
+      title: "Earnings Quality & Forensics",
+      questions: [
+        { id: "indiv.accruals", text: "Does operating cash flow track net income over 5+ years, or has an accruals gap opened (earnings rising while operating cash flow stalls)? (Sloan; Lev & Gu)" },
+        { id: "indiv.dso_dio", text: "Are receivables (DSO) or inventory (DIO) growing faster than revenue, signalling channel stuffing or demand weakness? (Schilit, Financial Shenanigans)" },
+        { id: "indiv.nongaap", text: "How far do non-GAAP 'adjusted' earnings diverge from GAAP, and what gets added back every quarter (recurring 'one-time' items)? (Fridson)" },
+        { id: "indiv.policy_change", text: "Has the company taken a big-bath write-off, lengthened depreciation lives, or changed revenue recognition to flatter a weak period? (Fridson)" },
+        { id: "indiv.rev_practices", text: "Any related-party deals, bill-and-hold sales, or sell-in (to distributors) versus sell-through (to end users) revenue? (Schilit)" },
+        { id: "indiv.auditor", text: "Has the auditor changed, has there been a restatement, or are internal-control weaknesses disclosed? (Fridson)" },
+        { id: "indiv.smoothness", text: "Does it beat estimates by a penny every quarter (suspiciously smooth earnings), and what discretion enables that? (Fridson)" },
+        { id: "indiv.fcf_props", text: "Is reported free cash flow propped up by deferring maintenance capex, stretching payables, or factoring receivables? (Damodaran)" },
+      ],
+    },
+    {
+      title: "Intangibles & Hidden Value",
+      questions: [
+        { id: "indiv.value_explained", text: "What share of enterprise value is explained by reported book value and earnings? If low, which intangible (brand, network, data, IP) is doing the work? (Lev & Gu, The End of Accounting)" },
+        { id: "indiv.rd_expensed", text: "Is heavy R&D or customer-acquisition spend expensed immediately, understating earnings and invested capital so ROIC looks better than it is? (Lev & Gu; Stewart)" },
+        { id: "indiv.organic_vs_acq", text: "How much of revenue growth is organic versus bought through acquisitions, and at what multiples? (Lev & Gu)" },
+      ],
+    },
+    {
+      title: "Narrative & Expectations",
+      questions: [
+        { id: "indiv.story_test", text: "Is the growth story possible (does it exceed its addressable market or beat GDP forever), plausible (consistent with margins, reinvestment, competition), and probable? (Damodaran, Narrative and Numbers)" },
+        { id: "indiv.reverse_dcf", text: "What growth and margin does today's price imply (reverse DCF), and is that more or less optimistic than my own forecast? (Mauboussin & Rappaport, Expectations Investing)" },
+        { id: "indiv.narrative_break", text: "What single event or data point would break the narrative, and am I watching for it? (Damodaran)" },
+        { id: "indiv.big_market", text: "Does the story rely on a big market that many competitors are chasing, so the winners cannot all earn their cost of capital? (Damodaran)" },
+      ],
+    },
+    {
+      title: "Concentration, Capital Intensity & Solvency",
+      questions: [
+        { id: "indiv.cust_concentration", text: "What share of revenue and profit is the top customer, and the top five, and what happens if one leaves? (Munger)" },
+        { id: "indiv.supplier_dependence", text: "How dependent is the company on a single supplier, input, or contested supply-chain chokepoint? (Munger)" },
+        { id: "indiv.maint_capex", text: "Is this a low-reinvestment cash compounder (See's Candies) or a high-return but capital-hungry business (FlightSafety)? What is maintenance capex versus growth capex? (Buffett)" },
+        { id: "indiv.refi_wall", text: "What is the debt-maturity wall and covenant headroom, and can the company self-fund through a downturn without dilution?" },
+        { id: "indiv.downturn_coverage", text: "In a recession scenario, how far can EBIT fall before interest coverage breaks?" },
+      ],
+    },
+    {
+      title: "Process / Edge / Behavioral",
+      questions: [
+        { id: "indiv.circle", text: "Is this within my circle of competence, or am I leaning on management's claims because I do not understand the business? (Buffett; Tilson & Heins)" },
+        { id: "indiv.inefficiency", text: "What specific inefficiency am I exploiting (neglect, forced selling, complexity, time-horizon arbitrage), and why does it persist? (Tilson & Heins)" },
+        { id: "indiv.premortem", text: "What would have to be true for this to be worth half the price, and double, and which is more likely?" },
+        { id: "indiv.falsification", text: "What evidence would prove the thesis wrong, and have I pre-committed to act on it? (Munger)" },
+        { id: "indiv.anchoring", text: "Am I anchoring on the purchase price, a 52-week high, or a prior valuation instead of on intrinsic value? (Nofsinger)" },
+        { id: "indiv.biases", text: "Where might confirmation bias, overconfidence, or recency bias be distorting my read of this company? (Nofsinger; Munger)" },
+        { id: "indiv.lollapalooza", text: "Is there a lollapalooza of reinforcing advantages (scale, captivity, brand, switching costs), or of reinforcing risks? (Munger)" },
+        { id: "indiv.sell_discipline", text: "What is my predefined sell discipline and time horizon, and can I hold through multi-year underperformance? (Tilson & Heins)" },
+        { id: "indiv.bubble_overvalued", text: "Explain why this equity is overvalued based on investor behavior and statement trends (price and valuation climbing faster than revenue, earnings, and cash flow). Which of the bubble patterns below are at work? (Shiller; Dalio; Nofsinger)" },
+        { id: "indiv.bubble_narrative", text: "Is a 'new era' story driving the price: a belief in permanent prosperity, recovery euphoria after war or past recessions, and a few highly visible winners taken as proof the boom will last? (Shiller, Irrational Exuberance; Dalio)" },
+        { id: "indiv.bubble_psychology", text: "Are buyers acting on overconfidence, herd mentality, and fear of missing out (FOMO) so the price is set by the crowd rather than by fundamentals like earnings and cash flow? (Nofsinger, The Psychology of Investing; Shiller)" },
+        { id: "indiv.bubble_turn", text: "What could end the bubble: rising interest rates while companies and households already carry heavy debt, and a first market decline that flips the mood from greed to fear? (Dalio, Mastering the Market Cycle)" },
+      ],
+    },
+    {
+      title: "Recent Price Moves",
+      questions: [
+        { id: "indiv.price_decline", text: "If the company has faced recent stock declines, what is the most probable reason why this equity has declined in value? Is the decline genuine or just based off irrational investor pessimism? Why are investors selling this equity?" },
+        { id: "indiv.price_increase", text: "If the company has faced recent stock increases, what is the most probable reason why this equity has increased in value? Is the rate of increase justified or just based off investor hype and speculation? Why are investors buying this equity?" },
+      ],
+    },
+    {
+      title: "Strategic Resources",
+      questions: [
+        { id: "ind.sr.inventory", text: "Much of a modern company's value sits in resources the balance sheet never records, such as brands, patents, data, networks, and talent. What is this company's single most important strategic resource, and does that resource appear in the accounts or stay invisible?" },
+        { id: "ind.sr.development", text: "A strategic resource has to be built and refreshed, usually through spending that accounting books as an expense instead of an investment. How much does this company spend to create and expand the key resource through research, marketing, or capital projects, and is that spending rising or falling?" },
+        { id: "ind.sr.preservation", text: "A resource that rivals can copy or that fades over time confers no lasting edge. How does this company defend the key resource against imitation, patent expiry, and obsolescence, whether through secrecy, contracts, or steady reinvestment?" },
+        { id: "ind.sr.deployment", text: "A valuable resource left idle helps a company no more than a resource the company never owned. Is this company using the key resource fully across products, markets, and channels, or does a large share of the resource sit unused?" },
+        { id: "ind.sr.value_creation", text: "The final test of a strategic resource is whether the resource earns money. Does this company's key resource turn into real economic results, such as pricing power, market-share gains, or high returns on capital?" },
+        { id: "ind.sr.concentration", text: "Leaning on a single resource creates a single point of failure. How exposed is this company if the key resource weakens, whether a patent lapses, a core team departs, or a platform loses its network?" },
+        { id: "ind.sr.reinvestment", text: "A resource compounds only when the company keeps feeding the resource and still has room to grow it. Does this company hold both the opportunities and the discipline to reinvest in the resource for years, or has the resource nearly reached the limit of what the resource can produce?" },
+      ],
+    },
+    {
+      title: "The 7 Powers",
+      questions: [
+        { id: "ind.pw.scale", text: "Scale economies appear when a company's cost per unit drops as the company produces more. Does this company hold the largest volume in a market where size genuinely lowers cost, and would a smaller competitor have to win similar share before the competitor could match that cost?" },
+        { id: "ind.pw.network", text: "A network effect means every additional user makes the product more useful to all the other users. Does the value of this company's product grow as more people use the product, and would a rival have to recreate the entire user base at once to compete?" },
+        { id: "ind.pw.counter", text: "Counter-positioning is a new business model that established rivals refuse to copy because copying would wreck the profits the rivals already earn. Has this company built such a model, and do the incumbents hold back from imitating the model to protect their existing business?" },
+        { id: "ind.pw.switching", text: "Switching costs are the money, time, and risk a customer absorbs to move from one supplier to another. What would a customer actually sacrifice by leaving this company, and does that lock-in show up as high retention or as room to raise prices without losing accounts?" },
+        { id: "ind.pw.branding", text: "A branding power lets a company charge more than a functionally identical product because buyers trust the name. Does this company earn a durable price premium on reputation alone, and did that reputation take years of consistent history that a competitor cannot simply buy?" },
+        { id: "ind.pw.cornered", text: "A cornered resource is a scarce asset, such as a patent, a critical input, or irreplaceable talent, that a company controls on favorable terms. Does this company control such a resource, and are competitors unable to obtain the same resource at any sensible price?" },
+        { id: "ind.pw.process", text: "Process power is an advantage built into how a company operates that rivals cannot copy even after watching closely. Does this company do something in production or logistics that competitors have studied for years and still cannot reproduce?" },
+        { id: "ind.pw.synthesis", text: "Naming a power is worthless unless the power is real and lasting. Of the seven powers above, which ones does this company truly hold today, and for each power you claim, state the exact benefit the company gains and the exact barrier that keeps rivals out?" },
+      ],
+    },
+    {
+      title: "ESG Analysis",
+      questions: [
+        { id: "ind.esg.materiality", text: "An ESG issue matters to a valuation only when the issue moves cash flow or the cost of capital. Which specific environmental, social, or governance factors are financially material to this particular company, and which factors are noise that ratings flag but that leave the numbers unchanged?" },
+        { id: "ind.esg.environmental", text: "Environmental exposure covers emissions, resource use, regulation, and the risk that a business model ages badly as rules or technology change. What environmental factors could raise this company's future costs or leave part of the company's assets stranded and worthless?" },
+        { id: "ind.esg.social", text: "Social capital covers a company's standing with employees, customers, and the communities that grant the company a license to operate. How much does this company rely on attracting skilled workers and holding customer trust, and what event would break those relationships?" },
+        { id: "ind.esg.governance", text: "Governance decides whether managers serve shareholders or serve themselves, and research ties governance quality to profitability. Are this company's management incentives aligned with long-term owners, and does the ownership structure protect minority shareholders from being exploited?" },
+        { id: "ind.esg.label", text: "A high ESG score can reflect real quality or skilled marketing. Does this company's ESG strength show up in operating results and lower risk, or is the strength a label that the underlying figures fail to support?" },
+        { id: "ind.esg.controversy", text: "Past conduct forecasts future risk more reliably than a sustainability brochure. Has this company faced fines, lawsuits, recalls, or labor disputes, and does management treat those events as isolated accidents or as symptoms of how the company operates?" },
+        { id: "ind.esg.valuation", text: "ESG analysis earns its place only when the analysis changes a number. If the risks you identified for this company actually came to pass, how would you adjust the company's cash-flow forecast or the discount rate you apply?" },
+      ],
+    },
+    {
+      title: "Executive Compensation",
+      questions: [
+        { id: "ind.comp.level", text: "The first test of executive pay is whether the amount holds up against company size, peers, and real results. Is this company's total chief-executive pay defensible on those grounds, or does the pay read as overreach, such as a bonus guaranteed no matter how the company performs?" },
+        { id: "ind.comp.structure", text: "The structure of a pay package decides which behavior the package rewards, and structure matters more than the headline figure. What is the split between salary, cash bonus, and equity at this company, and does the equity vest on several years of performance rather than on time served alone?" },
+        { id: "ind.comp.p4p", text: "Compensation should climb when shareholders prosper and shrink when shareholders suffer. Over the past several years, has this company's executive pay followed long-run shareholder value, or has the pay risen even in years when the business stalled or shrank?" },
+        { id: "ind.comp.metrics", text: "The targets behind a bonus reveal what the board actually rewards. Are this company's bonus targets tied to figures management can massage, such as adjusted earnings per share, or to durable measures such as return on invested capital and free cash flow?" },
+        { id: "ind.comp.dilution", text: "Stock-based compensation is a real cost that hands ownership from existing shareholders to employees. How much does this company's stock compensation dilute current owners each year, and does management treat the compensation as a genuine expense rather than dismissing the compensation as merely non-cash?" },
+        { id: "ind.comp.capital", text: "Incentives should steer managers toward disciplined use of capital, not toward growth for the sake of size. Do this company's incentives reward high returns on the capital managers deploy, or do the incentives reward bigger revenue and a bigger empire regardless of the returns?" },
+        { id: "ind.comp.redflags", text: "A few pay features reward failure and expose a captured board. Does this company use guaranteed bonuses, repriced options, or golden parachutes that pay executives well even after the executives perform poorly?" },
+      ],
+    },
+    {
+      title: "Board & Governance",
+      questions: [
+        { id: "ind.gov.independence", text: "A board can only supervise a chief executive when the board stands apart from that chief executive. Are this company's directors genuinely independent, or were the directors handpicked by and loyal to the same management the directors are meant to oversee?" },
+        { id: "ind.gov.leadership", text: "When one person both chairs the board and runs the company, that person ends up grading that person's own work. Does this company separate the chairman and chief-executive roles, or at least name a strong lead director who can hold the chief executive to account?" },
+        { id: "ind.gov.entrenchment", text: "Some corporate structures exist mainly to protect managers from consequences. Does this company use a staggered board, a poison pill, or dual-class shares that let insiders keep control even when outside shareholders want change?" },
+        { id: "ind.gov.committees", text: "An audit or compensation committee fails its purpose the moment the members carry conflicts. Are the directors on this company's audit and compensation committees free of business ties to management that would cloud the directors' judgment?" },
+        { id: "ind.gov.engagement", text: "Directors who juggle many boards or rarely show up cannot monitor a business closely. Do this company's directors bring the time, expertise, and attendance the job demands, or do the directors look like passive names on a roster?" },
+        { id: "ind.gov.voice", text: "The way a board answers its owners shows whether the board answers to anyone at all. How did this company's say-on-pay vote and shareholder proposals turn out, and did the board act on the outcome or brush the outcome aside?" },
+        { id: "ind.gov.succession", text: "Boards prove their worth during a crisis and a leadership handoff. Does this company have a credible plan to replace the chief executive, and do the directors own enough stock to feel losses alongside ordinary shareholders?" },
+      ],
+    },
+    {
+      title: "Earnings Quality",
+      questions: [
+        { id: "ind.eq.recurring", text: "A valuation should rest on earnings the company can repeat, not on a single unusual year. After you remove one-time gains and one-time charges, what is this company's sustainable operating earnings across a full business cycle?" },
+        { id: "ind.eq.leases", text: "Operating leases are a form of borrowing that older accounting kept off the balance sheet. Does treating this company's operating leases as debt change the company's leverage and returns enough to matter, as the change does for most retailers?" },
+        { id: "ind.eq.non_operating", text: "Interest and investment income can flatter a company that is weaker in its core operations. How much of this company's reported profit comes from investments rather than the operating business, and should that income come out before you value the operations?" },
+        { id: "ind.eq.serial", text: "A charge labeled non-recurring stops deserving the label once the charge returns year after year. Has this company booked restructuring or one-time charges in most of the past several years, which would make the charges an ordinary cost of doing business?" },
+        { id: "ind.eq.gaap", text: "Management picks which figures to feature, and the space between official and adjusted numbers is where optimism hides. Where do this company's non-GAAP earnings drift furthest from the GAAP earnings, and is each adjustment honest or self-serving?" },
+        { id: "ind.eq.capitalized", text: "Some companies lift reported profit by capitalizing costs that competitors expense outright. Does this company capitalize spending such as software, content, or customer acquisition, and does that choice inflate current earnings compared with peers?" },
+        { id: "ind.eq.true_capital", text: "Once the earnings are cleaned up, the capital behind the earnings has to be cleaned up to match. After all these adjustments, what invested capital and what normalized earning power should this company's valuation actually run on?" },
+      ],
+    },
+    {
+      title: "Catalyst & Value Trap",
+      questions: [
+        { id: "ind.cat.catalyst", text: "A cheap price stays cheap until something forces the market to see the value. What specific event could close the gap between this company's price and the company's worth, such as a spinoff, a restructuring, new management, a return of capital, or a recovery in margins, and roughly when might that event land?" },
+        { id: "ind.cat.trap_test", text: "The asset the market treats as worst is often the cheapest, and often cheap for a sound reason. If this company looks cheap, why is the company cheap, and what does the market see that a hopeful buyer might be arguing away?" },
+        { id: "ind.cat.decay", text: "A low multiple can hide a business that is quietly dying rather than one that is briefly unloved. Is this company's cheap price masking a permanent decline, such as shrinking volumes, a worsening industry, or assets that lose value every year?" },
+        { id: "ind.cat.asset_quality", text: "Buying a company below the worth of its assets works only when the assets are real and salable. If the case for this company rests on the company's assets, are those assets liquid, honestly valued, and worth what the balance sheet claims?" },
+        { id: "ind.cat.survival", text: "A thesis needs time to work, and heavy debt steals that time. Can this company survive a long downturn without a forced sale or dilution, and does the balance sheet leave the business enough room for the thesis to play out?" },
+        { id: "ind.cat.downside", text: "Marks argues that avoiding losses matters more than reaching for gains. What is the realistic downside if the case for this company proves wrong, and how much would a buyer lose in that outcome?" },
+        { id: "ind.cat.falsifier", text: "A disciplined investor names the disproving evidence in advance. What single fact about this company, if you uncovered the fact, would convince you that the situation is a value trap rather than a bargain?" },
+      ],
+    },
+  ],
+
+  // Final review — the exact self-assessment questions from the commentary on
+  // Chapter 20 of The Intelligent Investor (Graham/Zweig), grouped by Kahneman's
+  // two factors of a good decision. Verbatim; the wording is the author's.
+  final_review: [
+    {
+      title: "Well-calibrated confidence: what is the likelihood that my analysis is right?",
+      questions: [
+        { id: "final.conf.experience", text: "How much experience do I have? What is my track record with similar decisions in the past?" },
+        { id: "final.conf.others_record", text: "What is the typical track record of other people who have tried this in the past?" },
+        { id: "final.conf.buying", text: "If I am buying, someone else is selling. How likely is it that I know something that this other person (or company) does not know?" },
+        { id: "final.conf.selling", text: "If I am selling, someone else is buying. How likely is it that I know something that this other person (or company) does not know?" },
+        { id: "final.conf.breakeven", text: "Have I calculated how much this investment needs to go up for me to break even after my taxes and costs of trading?" },
+      ],
+    },
+    {
+      title: "Correctly-anticipated regret: do I fully understand the consequences if my analysis turns out to be wrong?",
+      questions: [
+        { id: "final.regret.loss", text: "If I'm right, I could make a lot of money. But what if I'm wrong? Based on the historical performance of similar investments, how much could I lose?" },
+        { id: "final.regret.offsets", text: "Do I have other investments that will tide me over if this decision turns out to be wrong? Do I already hold stocks, bonds, or funds with a proven record of going up when the kind of investment I'm considering goes down? Am I putting too much of my capital at risk with this new investment?" },
+        { id: "final.regret.tolerance", text: "When I tell myself, \"You have a high tolerance for risk,\" how do I know? Have I ever lost a lot of money on an investment? How did it feel? Did I buy more, or did I bail out?" },
+        { id: "final.regret.willpower", text: "Am I relying on my willpower alone to prevent me from panicking at the wrong time? Or have I controlled my own behavior in advance by diversifying, signing an investment contract, and dollar-cost averaging?" },
+      ],
+    },
+  ],
+};

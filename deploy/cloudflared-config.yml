@@ -1,0 +1,31 @@
+# Cloudflare Tunnel config for IntrinsicFinEd.
+# Routes two public hostnames to the local nginx (which then proxies to the
+# FastAPI backend and the RAG server). The frontend is served separately by
+# Cloudflare Pages and does NOT go through this tunnel.
+#
+# Setup (one-time, run on this PC):
+#   cloudflared tunnel login
+#   cloudflared tunnel create intrinsicfined
+#   # copy the generated <TUNNEL_ID>.json credentials path into this file
+#   cloudflared tunnel route dns intrinsicfined api.intrinsicfined.org
+#   cloudflared tunnel route dns intrinsicfined ai.intrinsicfined.org
+# Run:
+#   cloudflared tunnel --config deploy/cloudflared-config.yml run
+
+tunnel: 17d8ac00-70dc-442c-825b-4c7187d78b76
+credentials-file: C:\Users\Zaki_Mir\.cloudflared\17d8ac00-70dc-442c-825b-4c7187d78b76.json
+
+ingress:
+  - hostname: api.intrinsicfined.org
+    service: http://127.0.0.1:8080
+    originRequest:
+      httpHostHeader: api.intrinsicfined.org
+  - hostname: ai.intrinsicfined.org
+    service: http://127.0.0.1:8080
+    originRequest:
+      httpHostHeader: ai.intrinsicfined.org
+      # /ask can take minutes; keep the tunnel from cutting the connection.
+      connectTimeout: 30s
+      noHappyEyeballs: true
+  # Required catch-all.
+  - service: http_status:404

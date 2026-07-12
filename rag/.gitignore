@@ -1,0 +1,10 @@
+# Local API keys for the news/social tools — never commit.
+.env
+
+# Local embedding index — large (~0.5 GB) and machine-specific; rebuild via index_vault.py
+vault.db
+vault.db-journal
+vault.db-wal
+vault.db-shm
+__pycache__/
+*.pyc

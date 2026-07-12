@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+slowapi>=0.1.9       # per-IP rate limiting (production hardening)
+# Market data + analysis modules (used by api.py and backend/marketdata/):
+yfinance>=0.2.40
+pandas>=2.0
+xlrd>=2.0.1          # Shiller ie_data.xls, Damodaran histimpl.xls, GPR .xls
+openpyxl>=3.1        # xlsx safety net for spreadsheet parsing

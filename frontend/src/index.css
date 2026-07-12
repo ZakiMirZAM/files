@@ -1,43 +1,432 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --color-light: #ffffff;
-  --color-dark: #171717;
+  color-scheme: dark;
 }
 
-.accent-text {
-  @apply text-slate-600;
+html,
+body,
+#root {
+  background: #0a0f1e;
 }
 
 body {
-  font-family:
-    "Inter Variable",
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    "Noto Sans",
-    sans-serif,
-    "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    "Noto Color Emoji";
-  color: var(--color-dark);
-  background: var(--color-light);
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.86);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* only use this to update the style of the auth input fields. use a different class for all other input fields */
-.auth-input-field {
-  @apply w-full px-4 py-3 rounded-container bg-white border border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow shadow-sm hover:shadow;
+* {
+  border-color: rgba(201, 168, 76, 0.12);
 }
 
-/* only use this to update the style of the auth buttons. use the button class for all other buttons */
-.auth-button {
-  @apply w-full px-4 py-3 rounded bg-primary text-white font-semibold hover:bg-primary-hover transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed;
+::selection {
+  background: rgba(201, 168, 76, 0.35);
+  color: #fff;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.32);
+}
+
+/* Keyboard focus baseline — a branded gold ring on any interactive element that
+   doesn't define its own. Drawn INSET (negative outline-offset) so the many
+   `overflow-hidden` panels / segmented toggle groups can never clip it, and an
+   outline (not a box-shadow ring) for the same reason. Shows only for keyboard
+   users via :focus-visible. Components with their own ring (.btn-*, .field, the
+   scorecard cells) call `outline-none` from a later cascade layer and win, so
+   there is never doubled decoration. */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  summary:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid rgba(201, 168, 76, 0.6);
+    outline-offset: -2px;
+  }
+}
+
+@layer components {
+  .font-display {
+    font-family: "Playfair Display", Georgia, serif;
+  }
+
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  /* Panels & cards */
+  .panel {
+    @apply rounded-md bg-ink-700/60 border border-gold/20 shadow-panel backdrop-blur-sm;
+  }
+  .panel-soft {
+    @apply rounded-md bg-white/[0.02] border border-gold/10;
+  }
+
+  /* Skeleton loading shimmer — a gold band that sweeps across a faint base so a
+     wait reads as actively "loading", not a frozen bar. The @keyframes are hand-
+     authored in plain CSS below (NOT via Tailwind's theme), so they are always
+     emitted: a theme keyframe is dropped by purge unless its animate-* utility
+     is used in markup. Under prefers-reduced-motion the sweep is swapped for a
+     gentle opacity pulse — still animated, never frozen. */
+  .shimmer {
+    background-color: rgba(255, 255, 255, 0.06);
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(201, 168, 76, 0.10) 38%,
+      rgba(201, 168, 76, 0.30) 50%,
+      rgba(201, 168, 76, 0.10) 62%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    background-position: 200% 0;
+    animation: shimmer-sweep 1.5s linear infinite;
+    will-change: background-position;
+  }
+
+  /* Buttons */
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 bg-gold text-ink-800 font-semibold tracking-wide px-5 py-2.5 rounded-sm transition-all duration-200 hover:bg-gold-soft hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-size: 0.875rem;
+    letter-spacing: 0.04em;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 bg-transparent text-white/70 font-medium px-5 py-2.5 rounded-sm border border-white/15 transition-all duration-200 hover:border-gold/50 hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40;
+    font-size: 0.875rem;
+    letter-spacing: 0.03em;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 text-white/55 hover:text-white px-3 py-2 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/40;
+    font-size: 0.85rem;
+  }
+
+  /* Form fields */
+  .field {
+    @apply w-full bg-white/[0.04] border border-gold/15 text-white placeholder-white/30 px-4 py-3 rounded-sm transition-all focus:outline-none focus:border-gold/60 focus:bg-white/[0.06] focus:ring-2 focus:ring-gold/15;
+    font-size: 0.95rem;
+  }
+  .field-mono {
+    @apply font-mono tracking-wider;
+  }
+  .textarea {
+    @apply w-full bg-white/[0.03] border border-gold/10 text-white/90 placeholder-white/25 px-4 py-3 rounded-sm transition-all focus:outline-none focus:border-gold/50 focus:bg-white/[0.05] resize-y;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    min-height: 5rem;
+  }
+
+  /* Labels */
+  .eyebrow {
+    @apply text-[0.65rem] uppercase tracking-[0.16em] text-gold font-semibold;
+  }
+  .label {
+    @apply text-xs uppercase tracking-[0.12em] text-white/40 font-medium;
+  }
+
+  /* Legacy auth styles (kept for compat) */
+  .auth-input-field {
+    @apply field;
+  }
+  .auth-button {
+    @apply btn-gold w-full py-3;
+  }
+
+  /* Section headings */
+  .section-title {
+    @apply font-display text-3xl md:text-4xl font-semibold tracking-tight text-white;
+  }
+
+  /* Dividers */
+  .divider-gold {
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(201, 168, 76, 0.35),
+      transparent
+    );
+    height: 1px;
+  }
+
+  /* Number ticker style */
+  .stat-num {
+    @apply font-display text-3xl md:text-4xl font-semibold text-gold tracking-tight;
+    font-feature-settings: "tnum", "lnum";
+  }
+
+  /* Tiptap editor base */
+  .tiptap-editor {
+    @apply font-sans text-white/90;
+  }
+  .tiptap-editor h1 {
+    @apply font-display text-3xl font-semibold text-white mt-6 mb-3;
+  }
+  .tiptap-editor h2 {
+    @apply font-display text-2xl font-semibold text-white mt-5 mb-2;
+  }
+  .tiptap-editor h3 {
+    @apply font-display text-xl font-semibold text-gold mt-4 mb-2;
+  }
+  .tiptap-editor p {
+    @apply text-[0.96rem] leading-7 text-white/80 mb-3;
+  }
+  .tiptap-editor ul,
+  .tiptap-editor ol {
+    @apply pl-6 mb-3 space-y-1.5;
+  }
+  .tiptap-editor ul {
+    list-style: disc;
+  }
+  .tiptap-editor ol {
+    list-style: decimal;
+  }
+  .tiptap-editor li {
+    @apply text-white/80;
+  }
+  .tiptap-editor blockquote {
+    @apply border-l-2 border-gold/60 pl-4 italic text-white/70 my-4;
+  }
+  .tiptap-editor code {
+    @apply font-mono text-[0.85em] bg-white/5 px-1.5 py-0.5 rounded text-gold;
+  }
+  .tiptap-editor strong {
+    @apply text-white font-semibold;
+  }
+  .tiptap-editor em {
+    @apply italic;
+  }
+  .tiptap-editor a {
+    @apply text-gold underline underline-offset-2 decoration-gold/50;
+  }
+  .tiptap-editor[contenteditable="true"]:focus {
+    outline: none;
+  }
+  .tiptap-editor .is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.25);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+  .tiptap-editor ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+  }
+  .tiptap-editor ul[data-type="taskList"] li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .tiptap-editor ul[data-type="taskList"] input[type="checkbox"] {
+    margin-top: 0.4rem;
+    accent-color: #c9a84c;
+  }
+  .tiptap-editor img {
+    @apply max-w-full h-auto rounded-sm my-3 border border-gold/10;
+  }
+  .tiptap-editor img.ProseMirror-selectednode {
+    @apply outline outline-2 outline-gold/70;
+  }
+
+  /* Notebook panel — tighter type scale for the ~400px column */
+  .notebook-panel .tiptap-editor h1 {
+    @apply text-xl mt-4 mb-2;
+  }
+  .notebook-panel .tiptap-editor h2 {
+    @apply text-lg mt-3 mb-1.5;
+  }
+  .notebook-panel .tiptap-editor h3 {
+    @apply text-base mt-3 mb-1.5;
+  }
+  .notebook-panel .tiptap-editor p {
+    @apply text-[0.875rem] leading-6 mb-2.5;
+  }
+
+  /* Reduced motion respect — kill page entrance motion, but keep loading
+     skeletons animated with a non-positional opacity pulse so they never look
+     frozen (opacity fades are vestibular-safe). */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up,
+    .animate-shimmer {
+      animation: none !important;
+    }
+    .shimmer {
+      animation: skeleton-pulse 1.6s ease-in-out infinite !important;
+    }
+  }
+}
+
+/* Skeleton loading keyframes — plain CSS (not Tailwind theme) so they survive
+   purge regardless of which animate-* utilities are present in markup. */
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Recharts theme overrides */
+.recharts-cartesian-axis-tick text {
+  fill: rgba(255, 255, 255, 0.55) !important;
+  font-size: 13px !important;
+  font-family: "JetBrains Mono", monospace !important;
+  font-variant-numeric: tabular-nums;
+}
+/* Tabular figures on all in-chart text (value labels, custom labels) so dense
+   multi-series numbers don't shift horizontally. */
+.recharts-label,
+.recharts-text {
+  font-variant-numeric: tabular-nums;
+}
+.recharts-cartesian-grid line {
+  stroke: rgba(201, 168, 76, 0.08) !important;
+}
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+.recharts-default-tooltip {
+  background: #0a0f1e !important;
+  border: 1px solid rgba(201, 168, 76, 0.35) !important;
+  border-radius: 4px !important;
+  font-family: "DM Sans", sans-serif !important;
+  font-size: 0.92rem !important;
+  padding: 10px 14px !important;
+}
+.recharts-default-tooltip .recharts-tooltip-label {
+  color: #c9a84c !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+}
+.recharts-default-tooltip .recharts-tooltip-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* PDF export — light theme for the offscreen capture container.
+   Plain CSS (outside @layer) so it is always emitted; the container is built
+   in JS by exportNotePdf.ts at 794px width. Inline font-family/font-size spans
+   from the editor win over these rules, so user font choices survive. */
+.pdf-export-root {
+  font-family: "DM Sans", ui-sans-serif, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #1f2937;
+}
+.pdf-export-root .pdf-export-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: #0a0f1e;
+  margin: 0 0 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.pdf-export-root h1,
+.pdf-export-root h2,
+.pdf-export-root h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  color: #0a0f1e;
+  font-weight: 600;
+}
+.pdf-export-root h1 {
+  font-size: 24px;
+  margin: 24px 0 10px;
+}
+.pdf-export-root h2 {
+  font-size: 20px;
+  margin: 20px 0 8px;
+}
+.pdf-export-root h3 {
+  font-size: 16px;
+  margin: 16px 0 8px;
+  color: #8a6d2f;
+}
+.pdf-export-root p {
+  margin: 0 0 10px;
+}
+.pdf-export-root ul,
+.pdf-export-root ol {
+  margin: 0 0 10px;
+  padding-left: 24px;
+}
+.pdf-export-root ul {
+  list-style: disc;
+}
+.pdf-export-root ol {
+  list-style: decimal;
+}
+.pdf-export-root li {
+  margin-bottom: 4px;
+}
+.pdf-export-root blockquote {
+  border-left: 2px solid #c9a84c;
+  padding-left: 14px;
+  margin: 12px 0;
+  font-style: italic;
+  color: #4b5563;
+}
+.pdf-export-root code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85em;
+  background: #f3f4f6;
+  color: #8a6d2f;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.pdf-export-root strong {
+  color: #0a0f1e;
+}
+.pdf-export-root a {
+  color: #8a6d2f;
+  text-decoration: underline;
+}
+.pdf-export-root img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+  margin: 10px 0;
+}
+.pdf-export-root ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.pdf-export-root ul[data-type="taskList"] li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.pdf-export-root ul[data-type="taskList"] input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: #c9a84c;
 }

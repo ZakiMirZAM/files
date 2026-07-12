@@ -1,0 +1,10 @@
+# RAG server deps (app-owned; separate from backend/requirements.txt).
+# Auth is via the Claude Code login session — no `anthropic` API client here.
+sqlite-vec>=0.1.6
+claude-agent-sdk>=0.2.100
+aiohttp>=3.9
+requests>=2.31
+feedparser>=6.0          # RSS parsing for the news tools (Yahoo Finance / Google News)
+python-dotenv>=1.0       # optional: load rag/.env for news-source API keys
+# Plus: Ollama (https://ollama.com) running locally with `nomic-embed-text` pulled,
+# and the Claude Code CLI logged in via `claude login` (Max subscription).

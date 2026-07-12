@@ -8,12 +8,15 @@
  * @module
  */
 
+import type * as aiAnswers from "../aiAnswers.js";
 import type * as auth from "../auth.js";
-import type * as companies from "../companies.js";
 import type * as http from "../http.js";
-import type * as progress from "../progress.js";
+import type * as notes from "../notes.js";
+import type * as policy from "../policy.js";
+import type * as qualitative from "../qualitative.js";
+import type * as reports from "../reports.js";
 import type * as router from "../router.js";
-import type * as seedData from "../seedData.js";
+import type * as simulator from "../simulator.js";
 
 import type {
   ApiFromModules,
@@ -22,12 +25,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiAnswers: typeof aiAnswers;
   auth: typeof auth;
-  companies: typeof companies;
   http: typeof http;
-  progress: typeof progress;
+  notes: typeof notes;
+  policy: typeof policy;
+  qualitative: typeof qualitative;
+  reports: typeof reports;
   router: typeof router;
-  seedData: typeof seedData;
+  simulator: typeof simulator;
 }>;
 
 /**

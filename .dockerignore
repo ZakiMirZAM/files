@@ -1,0 +1,33 @@
+# Deploy-artifact exclusions — keep offline tooling, secrets, backups, and
+# large regenerable artifacts out of any published image or archive.
+
+# VCS + local tooling
+.git/
+.claude/
+.cursor/
+.mcp.json
+
+# Offline tooling that hardcodes API keys and is NOT imported by backend/api.py
+data/economicmetrics.py
+data/notegenerator.py
+
+# Secrets / local env (set these on the host instead)
+**/.env
+**/.env.local
+!**/.env.example
+
+# Large committed DB backups — the live financials.db is seeded separately
+financials.db.backup-*
+
+# Regenerable / scratch
+**/__pycache__/
+**/*.pyc
+tmp/
+frontend/node_modules/
+frontend/dist/
+backend/data_cache/
+backend/output/
+
+# Audit + scratch docs
+BACKEND_AUDIT_*.md
+LOADING_AUDIT_*.md

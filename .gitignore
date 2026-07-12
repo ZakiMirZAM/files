@@ -1,0 +1,31 @@
+# Data stores. These are large binary artifacts, not source. CLAUDE.md already
+# describes financials.db as git-ignored; this file is what actually makes that
+# true. Committing them would write several gigabytes into history permanently.
+financials.db
+financials.db.backup-*
+backend/financials.db
+backend/market_data.db
+rag/vault.db
+rag/glossary.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node / build output
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local env and secrets. .env.production is committed on purpose (it holds only
+# public URLs); .env.local carries the dev Convex deployment and stays local.
+.env
+.env.local
+
+# Logs and scratch
+*.log
+tmp/
+output/
+data_cache/

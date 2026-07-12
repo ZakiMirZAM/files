@@ -40,4 +40,36 @@ window.addEventListener('message', async (message) => {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the heaviest vendors into named chunks so the main bundle
+        // stays small and vendor code caches independently of app code.
+        manualChunks(id: string) {
+          const normalized = id.replace(/\\/g, "/");
+          if (!normalized.includes("node_modules/")) return undefined;
+          if (
+            normalized.includes("node_modules/recharts") ||
+            normalized.includes("node_modules/victory-vendor") ||
+            normalized.includes("node_modules/d3-")
+          ) {
+            return "vendor-recharts";
+          }
+          if (
+            normalized.includes("node_modules/@tiptap") ||
+            normalized.includes("node_modules/prosemirror-")
+          ) {
+            return "vendor-tiptap";
+          }
+          if (
+            normalized.includes("node_modules/convex") ||
+            normalized.includes("node_modules/@convex-dev")
+          ) {
+            return "vendor-convex";
+          }
+          return undefined;
+        },
+      },
+    },
+  },
 }));

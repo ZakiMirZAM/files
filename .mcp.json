@@ -1,0 +1,34 @@
+{
+  "_README": "Project-scoped MCP servers for ad-hoc company research in Claude Code (target B). These complement the in-process news/social tools wired into the RAG backend (rag/server.py). All are free-tier. Fill in the env values, then verify each launches with `/mcp` inside Claude Code. Package names are the current community/official servers; if one fails to start, check its repo for the exact npx/uvx identifier. No Playwright/WSJ here by design (ban risk on the subscription account).",
+  "mcpServers": {
+    "sec-edgar": {
+      "command": "uvx",
+      "args": ["sec-edgar-mcp"],
+      "env": {
+        "SEC_EDGAR_USER_AGENT": "Your Name your-email@example.com"
+      }
+    },
+    "finnhub": {
+      "command": "npx",
+      "args": ["-y", "mcp-finnhub"],
+      "env": {
+        "FINNHUB_API_KEY": ""
+      }
+    },
+    "youtube": {
+      "command": "npx",
+      "args": ["-y", "@kirbah/mcp-youtube"],
+      "env": {
+        "YOUTUBE_API_KEY": ""
+      }
+    },
+    "reddit": {
+      "command": "uvx",
+      "args": ["mcp-server-reddit"],
+      "env": {
+        "REDDIT_CLIENT_ID": "",
+        "REDDIT_CLIENT_SECRET": ""
+      }
+    }
+  }
+}

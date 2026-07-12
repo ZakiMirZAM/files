@@ -25,8 +25,10 @@ Usage:
 
 import sqlite3
 import os
+import time
 import warnings
 import pandas as pd
+import numpy as np
 import yfinance as yf
 from datetime import datetime, date
 from pathlib import Path
@@ -175,6 +177,210 @@ YF_CASHFLOW_MAP = {
 
 
 # ---------------------------------------------------------------------------
+# CAPM / discount-rate helpers
+# ---------------------------------------------------------------------------
+# Cost-of-equity model used by all three DCFs (individual, comparative,
+# industry/sector). When a ticker's beta is unknown we fall back to a flat
+# 10% WACC, which is the historical default and matches Rf + 1.0 * ERP under
+# the constants below.
+
+# Fallbacks only — the risk-free rate is fetched live per request from FRED
+# (10-year Treasury, DGS10). The ERP is a FIXED 4.5% interim anchor (see
+# api.get_live_wacc_params / FIXED_EQUITY_RISK_PREMIUM): a defensible mature-market
+# premium (historical US stock-over-Treasury excess return is 3–5%), pending a
+# true implied ERP from S&P 500 earnings. These constants are the fallbacks.
+RISK_FREE_RATE     = 0.045   # fallback ~10-year US Treasury
+EQUITY_RISK_PREMIUM = 0.045  # fixed interim ERP — keep in sync with FIXED_EQUITY_RISK_PREMIUM
+DEFAULT_WACC        = 0.10   # cost-of-equity fallback when beta is unavailable
+
+
+def capm_discount_rate(beta: float | None,
+                       rf: float | None = None,
+                       erp: float | None = None) -> float:
+    """CAPM cost of equity: Rf + beta * ERP.
+
+    Beta is NOT clamped (per the valuation spec — a real measured beta, however
+    extreme, is used as-is). Falls back to DEFAULT_WACC only when beta is truly
+    missing/uncomputable. ``rf``/``erp`` accept the live values; when None they
+    fall back to the module constants."""
+    rf = RISK_FREE_RATE if rf is None else rf
+    erp = EQUITY_RISK_PREMIUM if erp is None else erp
+    if beta is None:
+        return DEFAULT_WACC
+    try:
+        b = float(beta)
+    except (TypeError, ValueError):
+        return DEFAULT_WACC
+    return rf + b * erp
+
+
+# ── Regression beta (yfinance) ──────────────────────────────────────────────
+# Cached S&P 500 monthly-return series, reused across tickers within a process
+# so a 560-ticker comparative run downloads the market series only once.
+_MARKET_RETURNS_CACHE: dict[str, "pd.Series | None"] = {}
+
+
+def _yf_monthly_returns(ticker: str, period: str = "5y") -> "pd.Series | None":
+    """Monthly % returns for ``ticker`` over ``period`` (auto-adjusted closes)."""
+    try:
+        data = yf.download(ticker, period=period, interval="1mo",
+                           progress=False, auto_adjust=True)
+    except Exception:
+        return None
+    if data is None or len(data) == 0 or "Close" not in data:
+        return None
+    close = data["Close"]
+    if hasattr(close, "columns"):          # DataFrame / MultiIndex → first column
+        close = close.iloc[:, 0]
+    rets = close.pct_change().dropna()
+    return rets if len(rets) >= 24 else None
+
+
+def _market_monthly_returns(market: str = "^SP500TR") -> "pd.Series | None":
+    # Total-return S&P 500 by default (dividends included, matching Damodaran's
+    # return formula). Falls back to the price-only ^GSPC if it is unavailable.
+    if market not in _MARKET_RETURNS_CACHE:
+        s = _yf_monthly_returns(market)
+        if s is None and market != "^GSPC":
+            s = _yf_monthly_returns("^GSPC")
+        _MARKET_RETURNS_CACHE[market] = s
+    return _MARKET_RETURNS_CACHE[market]
+
+
+def compute_beta_yf(ticker: str, market: str = "^GSPC") -> float | None:
+    """Regression beta = Cov(stock, market) / Var(market) on ~5y of monthly
+    returns vs the S&P 500. Not clamped. Returns None if data is insufficient.
+    This is Damodaran's regression-beta method (slope of stock returns on the
+    market index)."""
+    stock = _yf_monthly_returns(ticker)
+    mkt = _market_monthly_returns(market)
+    if stock is None or mkt is None:
+        return None
+    df = pd.concat([stock, mkt], axis=1, join="inner").dropna()
+    if len(df) < 24:
+        return None
+    s = df.iloc[:, 0].to_numpy(dtype=float)
+    m = df.iloc[:, 1].to_numpy(dtype=float)
+    var = float(np.var(m, ddof=1))
+    if var == 0:
+        return None
+    beta = float(np.cov(s, m, ddof=1)[0, 1] / var)
+    return round(beta, 4) if np.isfinite(beta) else None
+
+
+def compute_peg_yf(ticker: str) -> float | None:
+    """Forward PEG from yfinance. financials.db has no PEG column, so it is pulled
+    (and persisted) here. Prefers ``trailingPegRatio`` (current yfinance field),
+    falling back to the legacy ``pegRatio``. Returns None on any failure or a
+    non-finite value. This is a point-in-time figure; daily_update can refresh it."""
+    try:
+        info = yf.Ticker(ticker).info
+    except Exception:
+        return None
+    if not info:
+        return None
+    for key in ("trailingPegRatio", "pegRatio"):
+        v = info.get(key)
+        try:
+            if v is not None:
+                f = float(v)
+                if f == f:  # NaN-safe (NaN != NaN), avoids a math import
+                    return round(f, 4)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+# Live price is a spot quote — NOT persisted to the DB (it changes daily). A short
+# in-memory TTL cache keeps the per-page burst (FCFF + RI + DDM + FCFE + legacy DCF
+# all ask for the same ticker's price) down to a single network call.
+_PRICE_CACHE: dict[str, tuple[float, float]] = {}   # ticker -> (price, fetched_at)
+_PRICE_TTL_SECONDS = 900  # 15 minutes
+
+# Live market cap is likewise a spot value (price × shares). Same short in-memory
+# TTL cache so the comparative scorecard's bounded set of tickers costs one quote
+# each, and a repeated render inside the window costs zero.
+_MARKETCAP_CACHE: dict[str, tuple[float, float]] = {}  # ticker -> (market_cap, fetched_at)
+_MARKETCAP_TTL_SECONDS = 900  # 15 minutes
+
+
+def fetch_latest_market_cap_yf(ticker: str) -> float | None:
+    """Most recent market cap for ``ticker`` from yfinance. Tries ``fast_info``
+    first (cheap), then falls back to the heavier ``.info`` payload. Cached
+    in-memory for 15 min. Returns None on any failure so callers fall back to the
+    stored financials.db Market Cap (the prior, filing-date value)."""
+    key = ticker.upper()
+    hit = _MARKETCAP_CACHE.get(key)
+    if hit is not None and (time.time() - hit[1]) < _MARKETCAP_TTL_SECONDS:
+        return hit[0]
+
+    cap: float | None = None
+    try:
+        fi = yf.Ticker(key).fast_info
+        for attr in ("market_cap", "marketCap"):
+            try:
+                v = fi[attr] if hasattr(fi, "__getitem__") else getattr(fi, attr, None)
+            except (KeyError, TypeError):
+                v = getattr(fi, attr, None)
+            if v is not None and float(v) > 0:
+                cap = float(v)
+                break
+    except Exception:  # noqa: BLE001 — never let a quote fetch break a scorecard
+        cap = None
+
+    if cap is None:
+        try:
+            v = yf.Ticker(key).info.get("marketCap")
+            if v is not None and float(v) > 0:
+                cap = float(v)
+        except Exception:  # noqa: BLE001
+            cap = None
+
+    if cap is not None:
+        _MARKETCAP_CACHE[key] = (cap, time.time())
+    return cap
+
+
+def fetch_latest_price_yf(ticker: str) -> float | None:
+    """Most recent market price for ``ticker`` from yfinance, for the intrinsic-
+    vs-price margin-of-safety comparison. Tries the intraday last price first
+    (``fast_info``), then the latest daily close. Cached in-memory for 15 min.
+    Returns None on any failure so callers fall back to Market Cap / shares."""
+    key = ticker.upper()
+    hit = _PRICE_CACHE.get(key)
+    if hit is not None and (time.time() - hit[1]) < _PRICE_TTL_SECONDS:
+        return hit[0]
+
+    price: float | None = None
+    try:
+        fi = yf.Ticker(key).fast_info
+        for attr in ("last_price", "lastPrice"):
+            try:
+                v = fi[attr] if hasattr(fi, "__getitem__") else getattr(fi, attr, None)
+            except (KeyError, TypeError):
+                v = getattr(fi, attr, None)
+            if v is not None and float(v) > 0:
+                price = float(v)
+                break
+    except Exception:  # noqa: BLE001 — never let a quote fetch break valuation
+        price = None
+
+    if price is None:
+        try:
+            hist = yf.Ticker(key).history(period="5d")
+            if hist is not None and len(hist) and "Close" in hist:
+                v = float(hist["Close"].iloc[-1])
+                if v > 0:
+                    price = v
+        except Exception:  # noqa: BLE001
+            price = None
+
+    if price is not None:
+        _PRICE_CACHE[key] = (price, time.time())
+    return price
+
+
+# ---------------------------------------------------------------------------
 # FinancialDB
 # ---------------------------------------------------------------------------
 
@@ -194,6 +400,240 @@ class FinancialDB:
 
     def _connect(self):
         return sqlite3.connect(self.db_path)
+
+    def get_beta(self, ticker: str) -> float | None:
+        """Return the cached beta for ``ticker`` (from the tickers table) or
+        None if the column is empty or the ticker is unknown. Used by the
+        DCF modules to derive a CAPM-based discount rate per ticker."""
+        with self._connect() as conn:
+            row = conn.execute(
+                'SELECT beta FROM tickers WHERE ticker = ?',
+                [ticker.upper()],
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return float(row[0]) if row[0] is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def set_beta(self, ticker: str, beta: float) -> None:
+        """Persist a (computed) beta back into the tickers table."""
+        with self._connect() as conn:
+            conn.execute('UPDATE tickers SET beta = ? WHERE ticker = ?',
+                         [float(beta), ticker.upper()])
+            conn.commit()
+
+    def get_or_compute_beta(self, ticker: str) -> float | None:
+        """Return the stored beta for ``ticker`` (from ``tickers.beta``), or None.
+
+        Betas are sourced from beta.csv via ``import_betas_from_csv`` — they are
+        NOT computed from yfinance anymore. Kept under this name so existing
+        callers (individual analysis, comparative snapshots) are unchanged; a
+        ticker with no stored beta returns None and the caller falls back to the
+        default-WACC beta."""
+        return self.get_beta(ticker)
+
+    def get_beta_history(self, ticker: str) -> dict[int, float]:
+        """Precomputed rolling beta by year (see data/compute_beta_history.py).
+        Empty dict if the table has not been built or the ticker is missing."""
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT year, beta FROM beta_history WHERE ticker = ? ORDER BY year",
+                    [ticker.upper()],
+                ).fetchall()
+        except sqlite3.OperationalError:
+            return {}
+        out: dict[int, float] = {}
+        for y, b in rows:
+            if b is not None:
+                out[int(y)] = float(b)
+        return out
+
+    def get_industry_beta_history(self, industry: str) -> dict[int, float]:
+        """Precomputed per-year UNLEVERED bottom-up industry beta (see
+        data/compute_industry_beta.py). Empty dict if the table is missing or the
+        industry has too few firms. Callers relever this at the firm's own D/E."""
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT year, unlevered_beta FROM industry_beta_history "
+                    "WHERE industry = ? ORDER BY year",
+                    [industry],
+                ).fetchall()
+        except sqlite3.OperationalError:
+            return {}
+        out: dict[int, float] = {}
+        for y, b in rows:
+            if b is not None:
+                out[int(y)] = float(b)
+        return out
+
+    def get_peg(self, ticker: str) -> float | None:
+        """Return the cached forward PEG for ``ticker`` (tickers table) or None."""
+        with self._connect() as conn:
+            try:
+                row = conn.execute(
+                    'SELECT peg FROM tickers WHERE ticker = ?', [ticker.upper()],
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return None  # column not yet migrated
+        if not row:
+            return None
+        try:
+            return float(row[0]) if row[0] is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def set_peg(self, ticker: str, peg: float) -> None:
+        """Persist a (fetched) PEG back into the tickers table."""
+        with self._connect() as conn:
+            conn.execute('UPDATE tickers SET peg = ? WHERE ticker = ?',
+                         [float(peg), ticker.upper()])
+            conn.commit()
+
+    def get_or_compute_peg(self, ticker: str) -> float | None:
+        """Return the DB PEG if present; otherwise fetch it from yfinance and
+        persist it, mirroring ``get_or_compute_beta``."""
+        cached = self.get_peg(ticker)
+        if cached is not None:
+            return cached
+        peg = compute_peg_yf(ticker)
+        if peg is not None:
+            try:
+                self.set_peg(ticker, peg)
+            except Exception:
+                pass
+        return peg
+
+    def get_latest_price(self, ticker: str) -> float | None:
+        """Most recent market price from yfinance, for the intrinsic-vs-price
+        margin-of-safety comparison. Unlike beta/PEG this is a spot quote and is
+        NOT persisted (it changes daily); it is cached in-memory for 15 min.
+        Returns None when offline so the valuation falls back to Market Cap /
+        shares (the prior, stale filing-date price)."""
+        return fetch_latest_price_yf(ticker)
+
+    def _latest_db_market_cap(self, ticker: str) -> float | None:
+        """The most recent non-null stored Market Cap for ``ticker`` — the
+        offline fallback for ``get_latest_market_cap``."""
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    'SELECT "Market Cap" FROM financials '
+                    'WHERE Ticker = ? AND "Market Cap" IS NOT NULL '
+                    'ORDER BY CAST("Calendar Year" AS INTEGER) DESC LIMIT 1',
+                    (ticker.upper(),),
+                ).fetchone()
+            return float(row[0]) if row and row[0] is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def get_latest_market_cap(self, ticker: str) -> float | None:
+        """Most recent market cap — yfinance FIRST (cached spot value), then the
+        stored financials.db Market Cap if yfinance has none. This is the
+        up-to-date weight for the bounded comparative scorecard; the DB fallback
+        keeps it working offline and for tickers yfinance cannot price."""
+        cap = fetch_latest_market_cap_yf(ticker)
+        if cap is not None:
+            return cap
+        return self._latest_db_market_cap(ticker)
+
+    def refresh_market_caps(
+        self, tickers: list[str] | None = None, verbose: bool = True
+    ) -> dict:
+        """yfinance-FIRST refresh of the stored Market Cap for the latest year of
+        each ticker, so the market-cap-weighted sector/industry scorecards (which
+        weight in bulk SQL over the whole universe) read up-to-date caps without a
+        per-request network fan-out. A ticker yfinance cannot price keeps its
+        existing (filing-date) value — the DB fallback. Intended to be driven by
+        the same scheduled refresh that runs ``update_all``."""
+        with self._connect() as conn:
+            if tickers is None:
+                tickers = [
+                    r[0] for r in conn.execute("SELECT DISTINCT Ticker FROM financials")
+                ]
+            updated = 0
+            skipped = 0
+            for tk in tickers:
+                cap = fetch_latest_market_cap_yf(tk)
+                if cap is None:
+                    skipped += 1
+                    continue
+                yr = conn.execute(
+                    'SELECT MAX(CAST("Calendar Year" AS INTEGER)) FROM financials '
+                    "WHERE Ticker = ? AND \"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'",
+                    (tk,),
+                ).fetchone()
+                if not yr or yr[0] is None:
+                    skipped += 1
+                    continue
+                conn.execute(
+                    'UPDATE financials SET "Market Cap" = ? '
+                    'WHERE Ticker = ? AND CAST("Calendar Year" AS INTEGER) = ?',
+                    (cap, tk, int(yr[0])),
+                )
+                updated += 1
+                if verbose and updated % 100 == 0:
+                    print(f"  [market-cap] {updated} refreshed…", flush=True)
+            conn.commit()
+        if verbose:
+            print(
+                f"  [market-cap] done — {updated} refreshed, {skipped} kept DB value",
+                flush=True,
+            )
+        return {"updated": updated, "skipped": skipped, "total": len(tickers)}
+
+    def import_betas_from_csv(self, csv_path: str, verbose: bool = True) -> dict:
+        """Import point-in-time betas from a CSV (header ``Ticker,beta``) into the
+        ``tickers.beta`` column, REPLACING any existing value. This CSV is the
+        source of truth for betas — the comparative leaderboard reads
+        ``tickers.beta`` straight from the DB. Rows whose ticker isn't in the DB
+        are ignored; rows with an unparseable beta are skipped."""
+        import csv as _csv  # local import: keep module load lightweight
+
+        updated = 0
+        skipped = 0
+        with self._connect() as conn:
+            # utf-8-sig strips a leading BOM so the "Ticker" header parses cleanly.
+            with open(csv_path, newline="", encoding="utf-8-sig") as fh:
+                reader = _csv.DictReader(fh)
+                fields = {(f or "").strip().lower(): f for f in (reader.fieldnames or [])}
+                tcol = fields.get("ticker")
+                bcol = fields.get("beta")
+                if tcol is None or bcol is None:
+                    raise ValueError(
+                        f"{csv_path}: expected 'Ticker' and 'beta' columns, got {reader.fieldnames}"
+                    )
+                for row in reader:
+                    ticker = (row.get(tcol) or "").strip().upper()
+                    raw = (row.get(bcol) or "").strip()
+                    if not ticker or not raw:
+                        skipped += 1
+                        continue
+                    try:
+                        beta = float(raw)
+                    except (TypeError, ValueError):
+                        skipped += 1
+                        continue
+                    cur = conn.execute(
+                        "UPDATE tickers SET beta = ? WHERE ticker = ?", (beta, ticker)
+                    )
+                    if cur.rowcount > 0:
+                        updated += 1
+                    else:
+                        skipped += 1  # ticker present in CSV but not in the DB
+                    if verbose and (updated + skipped) % 2000 == 0:
+                        print(f"  [beta-import] {updated + skipped} rows processed…", flush=True)
+            conn.commit()
+        if verbose:
+            print(
+                f"  [beta-import] done — {updated} betas replaced, "
+                f"{skipped} rows skipped/unmatched",
+                flush=True,
+            )
+        return {"updated": updated, "skipped": skipped}
 
     def _init_db(self):
         with self._connect() as conn:
@@ -223,7 +663,111 @@ class FinancialDB:
                   last_updated TEXT
                 )
             """)
+
+            # Market-level aggregates computed weekly (one row per run → an
+            # accumulating time series). Powers the earnings-yield vs Treasury
+            # ("Fed model") comparison on the economic page.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS market_aggregates (
+                  computed_date TEXT PRIMARY KEY,
+                  market_pe REAL,
+                  earnings_yield REAL,
+                  n_constituents INTEGER,
+                  method TEXT,
+                  computed_at TEXT
+                )
+            """)
+
+            # Currency → USD conversion rates, so market caps (and other absolute
+            # figures) reported in different currencies can be compared like-for-like
+            # — e.g. ranking a peer set by size. `usd_per_unit` is the USD value of
+            # one unit of `currency` (USD = 1.0). Populated by refresh_fx_rates().
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fx_rates (
+                  currency TEXT PRIMARY KEY,
+                  usd_per_unit REAL NOT NULL,
+                  asof TEXT NOT NULL
+                )
+            """)
+
+            # Defensive ALTERs for newer ticker-level columns. Idempotent —
+            # PRAGMA table_info skips columns that already exist. Lets daily
+            # yfinance updates populate Exchange/Country/Beta without needing
+            # a separate migration step.
+            existing_tickers = {
+                r[1] for r in conn.execute("PRAGMA table_info(tickers)")
+            }
+            for col in ("exchange", "country", "beta", "peg"):
+                if col not in existing_tickers:
+                    sql_type = "REAL" if col in ("beta", "peg") else "TEXT"
+                    conn.execute(f"ALTER TABLE tickers ADD COLUMN {col} {sql_type}")
+
             conn.commit()
+
+    # ------------------------------------------------------------------
+    # FX rates (currency → USD) for like-for-like size comparisons
+    # ------------------------------------------------------------------
+
+    def refresh_fx_rates(self, verbose: bool = True) -> int:
+        """Fetch a USD conversion rate for every reporting currency present in the
+        DB (via yfinance ``{CCY}USD=X``, falling back to the inverse ``USD{CCY}=X``)
+        and upsert them into ``fx_rates``. USD is always 1.0. Returns how many rates
+        were stored. Currencies that can't be resolved are skipped (left absent), so
+        callers can treat a missing rate as "not size-comparable"."""
+        with self._connect() as conn:
+            currencies = [
+                r[0] for r in conn.execute(
+                    'SELECT DISTINCT "Reported Currency" FROM financials '
+                    'WHERE "Reported Currency" IS NOT NULL '
+                    'AND "Reported Currency" NOT IN (\'Unavailable\', \'USD\')'
+                ).fetchall()
+            ]
+        asof = date.today().isoformat()
+        rates: dict[str, float] = {"USD": 1.0}
+        for ccy in currencies:
+            rate = self._fetch_fx_to_usd(ccy)
+            if rate is not None and rate > 0:
+                rates[ccy] = rate
+            elif verbose:
+                print(f"  [fx] no rate for {ccy} — skipped", flush=True)
+        with self._connect() as conn:
+            conn.executemany(
+                "INSERT INTO fx_rates(currency, usd_per_unit, asof) VALUES (?, ?, ?) "
+                "ON CONFLICT(currency) DO UPDATE SET "
+                "  usd_per_unit = excluded.usd_per_unit, asof = excluded.asof",
+                [(c, r, asof) for c, r in rates.items()],
+            )
+            conn.commit()
+        if verbose:
+            print(f"  [fx] stored {len(rates)} rates ({len(currencies)} non-USD currencies seen)", flush=True)
+        return len(rates)
+
+    @staticmethod
+    def _fetch_fx_to_usd(ccy: str) -> "float | None":
+        """USD value of one unit of ``ccy`` from yfinance, or None."""
+        for symbol, invert in ((f"{ccy}USD=X", False), (f"USD{ccy}=X", True)):
+            try:
+                hist = yf.Ticker(symbol).history(period="5d")
+                if hist is None or hist.empty:
+                    continue
+                close = hist["Close"].dropna()
+                if close.empty:
+                    continue
+                val = float(close.iloc[-1])
+                if val > 0:
+                    return (1.0 / val) if invert else val
+            except Exception:  # noqa: BLE001 — try the inverse / give up
+                continue
+        return None
+
+    def get_fx_rates(self) -> dict[str, float]:
+        """{currency: usd_per_unit} for converting local figures to USD."""
+        with self._connect() as conn:
+            try:
+                return {r[0]: r[1] for r in conn.execute(
+                    "SELECT currency, usd_per_unit FROM fx_rates")}
+            except sqlite3.OperationalError:
+                return {}
 
     # ------------------------------------------------------------------
     # Excel ingestion
@@ -347,14 +891,156 @@ class FinancialDB:
 
         return total
 
+    def ingest_csv(self, filepath: str, verbose: bool = True) -> int:
+        """
+        Load one CSV file in your format into the database.
+
+        Expected layout (mirrors ingest_excel):
+          Row 1 — metadata (e.g. year in A1). Ignored by the header scan.
+          Row 2 — column headers, matched case-insensitively against EXCEL_COLUMNS.
+          Row 3+ — data rows.
+
+        Headers not found in EXCEL_COLUMNS are silently dropped. Rows missing
+        a Ticker or Calendar Year are skipped. Each surviving row is UPSERTed
+        on (Ticker, "Calendar Year"), the same key ingest_excel uses.
+
+        Returns number of rows inserted/updated.
+        """
+        path = Path(filepath)
+        if not path.exists():
+            raise FileNotFoundError(filepath)
+
+        # Excel on Windows saves "CSV (Comma delimited)" as cp1252, not UTF-8,
+        # so we try a few encodings before giving up. latin-1 never raises
+        # UnicodeDecodeError, so it acts as a last-resort fallback that
+        # preserves all bytes (round-trippable even for unknown encodings).
+        raw = None
+        for enc in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                raw = pd.read_csv(filepath, header=None, dtype=str, encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if raw is None:
+            raise ValueError(f"Could not decode {filepath} with utf-8/cp1252/latin-1")
+
+        if raw.shape[0] < 3:
+            if verbose:
+                print(f"  {path.name}: fewer than 3 rows, nothing to ingest")
+            return 0
+
+        # Row 1 (index 1) has column headers
+        headers = raw.iloc[1].tolist()
+
+        # Normalize headers to match EXCEL_COLUMNS (case-insensitive strip)
+        header_map = {}
+        for i, h in enumerate(headers):
+            if pd.isna(h):
+                continue
+            for col in EXCEL_COLUMNS:
+                if str(h).strip().lower() == col.strip().lower():
+                    header_map[i] = col
+                    break
+
+        if not header_map:
+            if verbose:
+                print(f"  {path.name}: no recognised headers in row 2")
+            return 0
+
+        data_rows = raw.iloc[2:]  # Row index 2+ is data
+
+        inserted = 0
+        with self._connect() as conn:
+            for _, row in data_rows.iterrows():
+                record = {}
+                for idx, col_name in header_map.items():
+                    val = row.iloc[idx] if idx < len(row) else None
+                    if pd.isna(val) or str(val).strip() in ("", "nan", "None"):
+                        record[col_name] = None
+                    else:
+                        record[col_name] = str(val).strip()
+
+                ticker = record.get("Ticker")
+                cal_year = record.get("Calendar Year")
+
+                if not ticker or not cal_year:
+                    continue
+
+                # Convert numeric fields
+                for col in EXCEL_COLUMNS:
+                    if col in ("Ticker", "Name", "Sector", "Industry",
+                               "Date", "Reported Currency", "Period",
+                               "Cik", "Filling Date", "Accepted Date",
+                               "Calendar Year"):
+                        continue
+                    v = record.get(col)
+                    if v is not None:
+                        try:
+                            record[col] = float(v)
+                        except (ValueError, TypeError):
+                            record[col] = None
+
+                record["last_updated"] = datetime.now().isoformat()
+
+                cols = ["Ticker", "Calendar Year"] + [
+                    c for c in EXCEL_COLUMNS if c not in ("Ticker", "Calendar Year")
+                ] + ["last_updated"]
+
+                vals = [record.get(c) for c in cols]
+
+                placeholders = ", ".join(["?" for _ in cols])
+                col_sql = ", ".join([f'"{c}"' for c in cols])
+                update_sql = ", ".join([
+                    f'"{c}" = excluded."{c}"'
+                    for c in cols if c not in ("Ticker", "Calendar Year")
+                ])
+
+                conn.execute(f"""
+                    INSERT INTO financials ({col_sql})
+                    VALUES ({placeholders})
+                    ON CONFLICT(Ticker, "Calendar Year") DO UPDATE SET {update_sql}
+                """, vals)
+
+                # Update tickers table
+                conn.execute("""
+                    INSERT INTO tickers (ticker, name, sector, industry, last_updated)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(ticker) DO UPDATE SET
+                      name = excluded.name,
+                      sector = excluded.sector,
+                      industry = excluded.industry,
+                      last_updated = excluded.last_updated
+                """, [
+                    ticker,
+                    record.get("Name"),
+                    record.get("Sector"),
+                    record.get("Industry"),
+                    datetime.now().isoformat()
+                ])
+
+                inserted += 1
+
+            conn.commit()
+
+        if verbose:
+            print(f"  {path.name}: {inserted} rows upserted")
+
+        return inserted
+
     def ingest_directory(self, folder: str, verbose: bool = True) -> int:
-        """Load all .xlsx files in a folder."""
+        """Load all .xlsx and .csv files in a folder."""
         folder = Path(folder)
         total = 0
-        for f in sorted(folder.glob("*.xlsx")):
-            if verbose:
-                print(f"Ingesting {f.name}...")
-            total += self.ingest_excel(str(f), verbose=verbose)
+        for f in sorted(folder.iterdir()):
+            ext = f.suffix.lower()
+            if ext == ".xlsx":
+                if verbose:
+                    print(f"Ingesting {f.name}...")
+                total += self.ingest_excel(str(f), verbose=verbose)
+            elif ext == ".csv":
+                if verbose:
+                    print(f"Ingesting {f.name}...")
+                total += self.ingest_csv(str(f), verbose=verbose)
         return total
 
     # ------------------------------------------------------------------
@@ -415,6 +1101,9 @@ class FinancialDB:
                 "Name":          info.get("longName"),
                 "Sector":        info.get("sector"),
                 "Industry":      info.get("industry"),
+                "Exchange":      info.get("exchange"),
+                "Country":       info.get("country"),
+                "Beta":          info.get("beta"),
                 "last_updated":  datetime.now().isoformat(),
             }
 
@@ -480,10 +1169,15 @@ class FinancialDB:
                 print(f"  {ticker}: no new fiscal years found")
             return 0
 
-        # Insert each genuinely new year
+        # Insert each genuinely new year.
+        # Filter rec keys to those actually present as columns in the financials
+        # table so that ticker-level metadata (Exchange, Country) carried in rec
+        # for the tickers upsert below does not break this INSERT when the
+        # financials schema does not yet contain those columns.
+        fin_cols = set(EXCEL_COLUMNS) | {"last_updated"}
         with self._connect() as conn:
             for rec in new_records:
-                cols = list(rec.keys())
+                cols = [c for c in rec.keys() if c in fin_cols]
                 vals = [rec[c] for c in cols]
                 col_sql     = ", ".join([f'"{c}"' for c in cols])
                 placeholders = ", ".join(["?" for _ in cols])
@@ -501,18 +1195,28 @@ class FinancialDB:
             if yf_records:
                 latest = yf_records[-1]
                 conn.execute("""
-                    INSERT INTO tickers (ticker, name, sector, industry, last_updated)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO tickers (ticker, name, sector, industry,
+                                         exchange, country, beta, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(ticker) DO UPDATE SET
                       name         = excluded.name,
                       sector       = excluded.sector,
                       industry     = excluded.industry,
+                      exchange     = excluded.exchange,
+                      country      = excluded.country,
+                      -- Preserve the curated beta (from beta.csv / beta_history);
+                      -- only fall back to yfinance's beta when none is stored yet,
+                      -- so the daily update can't silently clobber the real beta.
+                      beta         = COALESCE(beta, excluded.beta),
                       last_updated = excluded.last_updated
                 """, [
                     ticker,
                     latest.get("Name"),
                     latest.get("Sector"),
                     latest.get("Industry"),
+                    latest.get("Exchange"),
+                    latest.get("Country"),
+                    latest.get("Beta"),
                     datetime.now().isoformat()
                 ])
 
@@ -551,6 +1255,24 @@ class FinancialDB:
             print(f"Update complete. {new_years_total} new year-rows added across "
                   f"{len(tickers)} tickers.")
 
+        # Refresh the most-recent stored Market Cap from yfinance. update_ticker
+        # only ADDS new fiscal years and never overwrites, so without this step
+        # the latest row keeps its stale filing-date cap and the market-cap-
+        # weighted sector/industry scorecards would weight on stale numbers.
+        try:
+            self.refresh_market_caps(tickers, verbose=verbose)
+        except Exception as e:  # noqa: BLE001 — never let the cap refresh break update_all
+            if verbose:
+                print(f"  market-cap refresh failed: {e}")
+
+        # Keep currency→USD rates current so cross-currency size comparisons stay
+        # accurate (rates drift slowly, so a daily refresh is plenty).
+        try:
+            self.refresh_fx_rates(verbose=verbose)
+        except Exception as e:  # noqa: BLE001 — never let the fx refresh break update_all
+            if verbose:
+                print(f"  fx-rate refresh failed: {e}")
+
         return results
 
     # ------------------------------------------------------------------
@@ -573,13 +1295,28 @@ class FinancialDB:
             raise RuntimeError(f"yfinance error for {ticker}: {e}")
 
         def ttm_sum(df, key):
-            """Sum last 4 quarters."""
+            """Sum the most recent 4 quarters. Returns None unless a genuine
+            trailing-twelve-months window is available: the 4 newest quarters must
+            exist and span at most ~13 months. A partial (2-3 quarter) sum or a
+            gap-spanning window would be a misleading 'TTM', so we refuse it."""
             if df is None or df.empty or key not in df.index:
                 return None
             row = df.loc[key].dropna()
-            if len(row) == 0:
+            if len(row) < 4:
                 return None
+            # yfinance columns are period-end dates; sort newest-first explicitly
+            # rather than trusting the provider's order.
+            try:
+                row = row.sort_index(ascending=False)
+            except Exception:  # noqa: BLE001 — non-datetime index: fall back to as-is
+                pass
             last4 = row.iloc[:4]
+            try:
+                span_days = (last4.index[0] - last4.index[-1]).days
+                if span_days > 400:  # a missing quarter would stretch 4 points past 13 months
+                    return None
+            except Exception:  # noqa: BLE001 — index not date-like; accept the 4 newest
+                pass
             return float(last4.sum())
 
         def latest(df, key):
@@ -620,7 +1357,9 @@ class FinancialDB:
             "Current Ratio":        "currentRatio",
             "Debt To Equity":       "debtToEquity",
             "ROE":                  "returnOnEquity",
-            "ROIC":                 "returnOnAssets",
+            # NOTE: yfinance .info has no reliable ROIC field; the old mapping to
+            # "returnOnAssets" populated ROIC with ROA (a different concept). ROIC
+            # is left to the computed NOPAT/IC path instead.
             "Operating Cash Flow":  "operatingCashflow",
             "Free Cash Flow":       "freeCashflow",
             "Revenue":              "totalRevenue",
@@ -636,6 +1375,12 @@ class FinancialDB:
                         result[our_col] = float(v)
                     except (ValueError, TypeError):
                         pass
+
+        # yfinance reports debtToEquity as a PERCENT (e.g. 152.3 = 1.52x), but the
+        # rest of the app stores Debt/Equity as a ratio. Normalise so the TTM row
+        # matches the annual rows instead of being ~100x larger.
+        if result.get("Debt To Equity") is not None:
+            result["Debt To Equity"] = result["Debt To Equity"] / 100.0
 
         # Derived ratios
         rev = result.get("Revenue")
