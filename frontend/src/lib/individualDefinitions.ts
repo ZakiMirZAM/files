@@ -55,7 +55,7 @@ export type IndividualSectionKey =
   // 600+NN, credit 700+NN, and both miss at 800), so the band is free.
   | "capitalAllocation"; // 800-849 -> UsesOfCashSection
 
-/** Inclusive number ranges per section — the ONE place ranges are defined. */
+/** Inclusive number ranges per section, the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
   ["valuation", 1, 25],
   ["perShare", 26, 35],
@@ -83,7 +83,7 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   // Education-first overhaul bands (500-599, previously empty). Files land here
   // as each section is wired; an empty band is harmless (no file, no def).
   ["valuationMechanics", 500, 518],
-  // Life-cycle-aware growth estimation (Damodaran Ch.11): fundamental growth,
+  // Life-cycle-aware growth estimation: fundamental growth,
   // the sales-to-capital reinvestment bridge, the stage classifier, the
   // growth-viability question deck, and the changing-ROIC efficiency term.
   // 197-200 is free but only four slots wide, and 201 is the comparative
@@ -157,7 +157,7 @@ export const INDIVIDUAL_METRIC_DEFS: IndividualMetricDef[] = Object.entries(LOAD
     if (!section) {
       if (import.meta.env.DEV) {
         console.warn(
-          `individualDefinitions: ${path} (#${number}) matches no SECTION_RANGES entry — ignored`,
+          `individualDefinitions: ${path} (#${number}) matches no SECTION_RANGES entry, ignored`,
         );
       }
       return [];
@@ -263,7 +263,7 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["EV/EBITDA exit cross-check / share", 510], ["EV/EBITDA exit cross-check", 510],
   ["P/FCF exit cross-check / share", 511], ["P/FCF exit cross-check", 511],
   ["β = 1 intrinsic / share", 512],
-  // Growth reconciliation + the growth-viability deck (Damodaran Ch.11). 519-523.
+  // Growth reconciliation + the growth-viability deck. 519-523.
   ["Fundamental growth", 519], ["Fundamental growth rate", 519],
   ["Growth reconciliation", 519], ["What its fundamentals fund", 519],
   ["Sales-to-capital", 520], ["Sales-to-capital ratio", 520],

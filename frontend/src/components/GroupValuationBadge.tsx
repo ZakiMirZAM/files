@@ -35,19 +35,19 @@ export function GroupValuationBadge({ valuation, groupLabel }: GroupValuationBad
         </div>
         <div className="flex flex-wrap items-stretch gap-3">
           <Stat label="CAPE" value={
-            valuation.cape !== null ? `${valuation.cape.toFixed(1)}x` : "—"
+            valuation.cape !== null ? `${valuation.cape.toFixed(1)}x` : "n/a"
           } />
           <Stat label="DCF / share" value={
-            valuation.dcfIntrinsic !== null ? `$${valuation.dcfIntrinsic.toFixed(2)}` : "—"
+            valuation.dcfIntrinsic !== null ? `$${valuation.dcfIntrinsic.toFixed(2)}` : "n/a"
           } />
           <Stat label="Margin of safety" value={
-            mosPct !== null ? `${mosPct >= 0 ? "+" : ""}${mosPct.toFixed(1)}%` : "—"
+            mosPct !== null ? `${mosPct >= 0 ? "+" : ""}${mosPct.toFixed(1)}%` : "n/a"
           } valueClass={mosColor} />
           <Stat label="FCF growth used" value={
-            valuation.fcfGrowthUsed !== null ? `${(valuation.fcfGrowthUsed * 100).toFixed(1)}%` : "—"
+            valuation.fcfGrowthUsed !== null ? `${(valuation.fcfGrowthUsed * 100).toFixed(1)}%` : "n/a"
           } />
           <Stat label="Value Score" value={
-            valuation.valueScore !== null ? `${valuation.valueScore.toFixed(1)}/100` : "—"
+            valuation.valueScore !== null ? `${valuation.valueScore.toFixed(1)}/100` : "n/a"
           } valueClass={scoreColor} prominent />
         </div>
       </div>

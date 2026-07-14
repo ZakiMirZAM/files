@@ -130,7 +130,7 @@ export function SectorRotation() {
       <SectionHeader
         eyebrow="Top-Down · Sector Rotation"
         title="Sector Rotation Matrix"
-        subtitle="Metrics down the side, sectors across the top. Set each metric to rising, stable, or falling from your read of the Economic page; the weighted column totals rank the sectors. Stable is not a non-vote — many metrics carry their own steady-state tilt (a flat curve is late-cycle, calm credit is risk-on)."
+        subtitle="Metrics down the side, sectors across the top. Set each metric to rising, stable, or falling from your read of the Economic page; the weighted column totals rank the sectors. Stable is not a non-vote, many metrics carry their own steady-state tilt (a flat curve is late-cycle, calm credit is risk-on)."
         actions={
           <>
             <PageTourButton tourId="rotation" />
@@ -225,9 +225,9 @@ export function SectorRotation() {
         )}
       </div>
 
-      {/* Ranked result strip — pinned so the score stays visible while scrolling */}
+      {/* Ranked result strip, pinned so the score stays visible while scrolling */}
       <div data-tour="rotation-ranked" className="sticky top-16 z-30 mb-5 rounded-md border border-gold/20 bg-ink-900/95 backdrop-blur-md p-4 shadow-lg shadow-black/20">
-        <p className="label mb-2">Ranked sectors {anySet ? "" : "— set metric directions below to compute"}</p>
+        <p className="label mb-2">Ranked sectors {anySet ? "" : ",  set metric directions below to compute"}</p>
         <div className="flex flex-wrap gap-3">
           {ranked.map((r, i) => (
             <Link
@@ -324,7 +324,6 @@ export function SectorRotation() {
                         ) : (
                           <span className="text-[0.82rem] text-white/80 leading-tight">{m.name}</span>
                         )}
-                        <span className="block text-[0.65rem] font-mono text-white/25 uppercase tracking-wide">{m.leadLag}</span>
                       </th>
                       <td className="sticky left-0 bg-ink-900 px-1 py-1.5 border-b border-white/[0.06] text-center">
                         {(() => {
@@ -428,7 +427,7 @@ export function SectorRotation() {
                 return (
                   <td key={c.sector} className="px-1.5 py-1.5 text-center">
                     <span className={cn("font-mono text-[0.72rem]", anySet && rank && rank <= 3 ? "text-gold" : "text-white/35")}>
-                      {anySet ? rank : "—"}
+                      {anySet ? rank : "n/a"}
                     </span>
                   </td>
                 );
@@ -438,16 +437,6 @@ export function SectorRotation() {
         </table>
       </div>
 
-      <p className="text-[0.72rem] text-white/40 mt-3 leading-relaxed">
-        Set a metric to rising (▲), stable (●), or falling (▼). The cells then show that reading&apos;s
-        effect on each sector (+ favors, − hurts), and the column total is the weighted sum across
-        every metric you have set. A stable reading carries its own tilt where one exists — a gold ●
-        marks the metrics whose steady state is itself a signal (flat curve, calm credit, benign
-        inflation); for the rest, stable contributes nothing. Unset rows show the rising reference
-        faintly. Weight is predictive power, 5 high to 1 context; click a Wt value to override it.
-        Click any metric name to open its definition and historical chart in the sidebar.
-        Educational tool, not financial advice.
-      </p>
       </div>
       <DefinitionPanel metricBlocks={econBlocks} recessionBands={econData?.recessionBands ?? []} />
     </div>

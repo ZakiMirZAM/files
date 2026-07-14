@@ -36,7 +36,7 @@ const pct = (v: number | null | undefined, d = 1): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
 /**
- * Where the industry sits in its life (Porter, Competitive Strategy Ch.8).
+ * Where the industry sits in its life.
  * The stage changes what a good company looks like here: young industries earn
  * a pass on thin margins while they land-grab, mature ones owe you cash.
  */

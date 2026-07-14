@@ -53,7 +53,7 @@ export function EVAValuationSection({ forecast: f, metricHistory }: EVAValuation
   const forms: { label: string; mva: number | null | undefined; ps: number | null }[] = [
     { label: "Perpetuity · EVA₁ / WACC", mva: eva.perpetuityMva, ps: perShareOf(eva.perpetuityMva) },
     { label: "Constant-growth · EVA₁ / (WACC − g)", mva: eva.constantGrowthMva, ps: perShareOf(eva.constantGrowthMva) },
-    { label: "2-stage (flat-EVA terminal) — headline", mva: eva.mva, ps: eva.intrinsicPerShare },
+    { label: "2-stage (flat-EVA terminal), headline", mva: eva.mva, ps: eva.intrinsicPerShare },
   ];
 
   const mos =

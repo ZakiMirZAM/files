@@ -1,4 +1,4 @@
-// Lightweight inline SVG sparkline — no axes, no library. Cheap enough to render
+// Lightweight inline SVG sparkline, no axes, no library. Cheap enough to render
 // dozens of times in a bento grid. Trend colour: green when the series ends above
 // where it started, red when below. "bar" variant renders mini columns from a
 // zero baseline (bars grow up for positive values, down for negative).
@@ -99,7 +99,7 @@ function BarSparkline({ values, width, height, color }: BarSparklineProps) {
             width={barW.toFixed(1)}
             height={h.toFixed(1)}
             fill={color}
-            opacity={i === n - 1 ? 1 : 0.7} // last bar emphasized — replaces the end dot
+            opacity={i === n - 1 ? 1 : 0.7} // last bar emphasized, replaces the end dot
           />
         );
       })}

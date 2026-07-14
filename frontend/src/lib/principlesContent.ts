@@ -6,7 +6,7 @@
 //   workspace.md     foundations + the top-down framework (shown on the dashboard)
 //   economic.md      reading the economy
 //   industry.md      judging an industry (industry surface)
-//   sector.md        judging a sector (sector surface — broader than an industry)
+//   sector.md        judging a sector (sector surface, broader than an industry)
 //   comparative.md   comparing companies head to head (comparative surface)
 //   individual.md    analyzing a single company
 

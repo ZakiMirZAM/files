@@ -93,10 +93,6 @@ export function EconomicPage() {
             <span className="text-gold font-mono text-sm">Metrics</span>
             <span className="flex-1 h-px bg-gold/15" />
           </h2>
-          <p className="text-sm text-white/40 mb-5">
-            {metricDefs.length + 1} metrics · click any metric to expand its chart and full
-            definition{data ? ` · ${withCharts} live charts` : " · loading charts…"}
-          </p>
 
           <div className="space-y-4">
             <div data-tour="econ-treasury">

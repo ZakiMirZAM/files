@@ -122,6 +122,29 @@ EXCEL_COLUMNS = [
     "SGA Expenses Growth"
 ]
 
+# ── Ingest validation (Phase 1 remediation) ──────────────────────────────────
+# The 2026-05-26 Wisesheets ingest wrote ~13k rows whose Calendar Year/Period
+# held error strings ('Unavailable', '2025 data not available yet.'). Every
+# ingest path must gate on this so junk never re-enters the warehouse.
+
+MIN_VALID_YEAR = 1990
+MAX_VALID_YEAR = 2035
+VALID_PERIODS = {"FY", "Q1", "Q2", "Q3", "Q4", "TTM"}
+
+
+def is_valid_year_period(year, period=None) -> bool:
+    """True when `year` parses to a plausible fiscal year (4 digits,
+    1990-2035) and `period`, if given, is a known tag (FY/Q1-Q4/TTM)."""
+    s = str(year).strip() if year is not None else ""
+    if len(s) != 4 or not s.isdigit():
+        return False
+    if not (MIN_VALID_YEAR <= int(s) <= MAX_VALID_YEAR):
+        return False
+    if period is not None and str(period).strip() not in VALID_PERIODS:
+        return False
+    return True
+
+
 # Metrics yfinance can supply for annual/TTM updates
 # Maps our column name -> yfinance key (income_stmt, balance_sheet, cashflow)
 YF_INCOME_MAP = {
@@ -174,6 +197,16 @@ YF_CASHFLOW_MAP = {
     "Net Cash Used For Investing Activities":    "Investing Cash Flow",
     "Net Cash Used Provided By Financing Activities": "Financing Cash Flow",
 }
+
+# Flow (period-cumulative) columns for Q4 derivation: a full-year value minus the
+# first three quarters. Balance-sheet columns are point-in-time snapshots and are
+# copied from the FY row instead (see derive_q4).
+FLOW_COLUMNS = (
+    "Revenue", "Cost Of Revenue", "Gross Profit", "Operating Income",
+    "Net Income", "Operating Cash Flow", "Capital Expenditure",
+    "Free Cash Flow", "Income Tax Expense", "Interest Expense",
+    "Research And Development Expenses",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +687,32 @@ class FinancialDB:
                   PRIMARY KEY (Ticker, "Calendar Year")
                 )
             """)
+
+            # Quarterly + TTM store. Same columns as `financials` but keyed by
+            # (Ticker, Calendar Year, Period) so Q1-Q4/TTM rows coexist with the
+            # annual (FY) warehouse without touching it. Period is a NOT NULL PK
+            # column here, so it is declared explicitly and excluded from the
+            # generated column list. Created on every init so existing DBs gain
+            # the table too.
+            q_cols_sql = ",\n  ".join(
+                f'"{c}" TEXT' if c in ("Name", "Sector", "Industry", "Date",
+                                        "Reported Currency", "Cik",
+                                        "Filling Date", "Accepted Date")
+                else f'"{c}" REAL'
+                for c in EXCEL_COLUMNS
+                if c not in ("Ticker", "Calendar Year", "Period")
+            )
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS financials_quarterly (
+                  Ticker TEXT NOT NULL,
+                  "Calendar Year" INTEGER NOT NULL,
+                  Period TEXT NOT NULL,
+                  {q_cols_sql},
+                  last_updated TEXT,
+                  PRIMARY KEY (Ticker, "Calendar Year", Period)
+                )
+            """)
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tickers (
                   ticker TEXT PRIMARY KEY,
@@ -687,6 +746,21 @@ class FinancialDB:
                   currency TEXT PRIMARY KEY,
                   usd_per_unit REAL NOT NULL,
                   asof TEXT NOT NULL
+                )
+            """)
+
+            # Per-YEAR FX, so a historical market cap converts at the rate that
+            # applied when it was measured (a 2016 JPY cap at the 2026 rate
+            # understates the filer by ~28%). Populated by
+            # remediation/fx_history.py. Created here so the weighted-average
+            # SQL, which JOINs it unconditionally, never hits a missing table.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fx_rates_hist (
+                  currency     TEXT    NOT NULL,
+                  year         INTEGER NOT NULL,
+                  usd_per_unit REAL    NOT NULL,
+                  asof         TEXT,
+                  PRIMARY KEY (currency, year)
                 )
             """)
 
@@ -813,6 +887,7 @@ class FinancialDB:
             data_rows = raw.iloc[2:]  # Row index 2+ is data
 
             inserted = 0
+            rejected = 0
             with self._connect() as conn:
                 for _, row in data_rows.iterrows():
                     record = {}
@@ -827,6 +902,10 @@ class FinancialDB:
                     cal_year = record.get("Calendar Year")
 
                     if not ticker or not cal_year:
+                        continue
+
+                    if not is_valid_year_period(cal_year, record.get("Period")):
+                        rejected += 1
                         continue
 
                     # Convert numeric fields
@@ -886,7 +965,10 @@ class FinancialDB:
                 conn.commit()
 
             if verbose:
-                print(f"  Sheet '{sheet_name}': {inserted} rows upserted")
+                msg = f"  Sheet '{sheet_name}': {inserted} rows upserted"
+                if rejected:
+                    msg += f"  ({rejected} rejected: invalid year/period)"
+                print(msg)
             total += inserted
 
         return total
@@ -950,6 +1032,7 @@ class FinancialDB:
         data_rows = raw.iloc[2:]  # Row index 2+ is data
 
         inserted = 0
+        rejected = 0
         with self._connect() as conn:
             for _, row in data_rows.iterrows():
                 record = {}
@@ -964,6 +1047,10 @@ class FinancialDB:
                 cal_year = record.get("Calendar Year")
 
                 if not ticker or not cal_year:
+                    continue
+
+                if not is_valid_year_period(cal_year, record.get("Period")):
+                    rejected += 1
                     continue
 
                 # Convert numeric fields
@@ -1023,7 +1110,10 @@ class FinancialDB:
             conn.commit()
 
         if verbose:
-            print(f"  {path.name}: {inserted} rows upserted")
+            msg = f"  {path.name}: {inserted} rows upserted"
+            if rejected:
+                msg += f"  ({rejected} rejected: invalid year/period)"
+            print(msg)
 
         return inserted
 
@@ -1138,11 +1228,17 @@ class FinancialDB:
 
         return records
 
-    def update_ticker(self, ticker: str, verbose: bool = True) -> int:
+    def update_ticker(self, ticker: str, verbose: bool = True,
+                      fill_gaps: bool = False) -> int:
         """
         Check yfinance for fiscal years not yet in the database and insert them.
         Never modifies rows that already exist -- only adds genuinely new years.
-        Returns the number of new year-rows inserted.
+
+        fill_gaps=True additionally completes NULL columns on EXISTING rows
+        from the yfinance data (COALESCE semantics: a stored non-NULL value is
+        never overwritten). Default keeps the strict additive-only contract.
+
+        Returns the number of new year-rows inserted (gap fills not counted).
         """
         ticker = ticker.upper()
 
@@ -1161,10 +1257,23 @@ class FinancialDB:
         if not yf_records:
             return 0
 
-        # Filter to only years that are not already stored
-        new_records = [r for r in yf_records if r["Calendar Year"] not in existing_years]
+        # Filter to only years that are not already stored, and gate out any
+        # record with an implausible year/period (Phase 1 ingest guard).
+        new_records = [
+            r for r in yf_records
+            if r["Calendar Year"] not in existing_years
+            and is_valid_year_period(r["Calendar Year"], r.get("Period"))
+        ]
 
-        if not new_records:
+        gap_records = []
+        if fill_gaps:
+            gap_records = [
+                r for r in yf_records
+                if r["Calendar Year"] in existing_years
+                and is_valid_year_period(r["Calendar Year"], r.get("Period"))
+            ]
+
+        if not new_records and not gap_records:
             if verbose:
                 print(f"  {ticker}: no new fiscal years found")
             return 0
@@ -1190,6 +1299,24 @@ class FinancialDB:
                 if verbose:
                     print(f"  {ticker}: added {rec['Calendar Year']} "
                           f"(fiscal year ending {rec.get('Date', 'unknown')})")
+
+            # Complete NULL columns on existing rows (COALESCE keeps every
+            # stored non-NULL value; identity/key columns are never touched).
+            for rec in gap_records:
+                cols = [c for c in rec.keys()
+                        if c in fin_cols
+                        and c not in ("Ticker", "Calendar Year", "last_updated")
+                        and rec[c] is not None]
+                if not cols:
+                    continue
+                set_sql = ", ".join(f'"{c}" = COALESCE("{c}", ?)' for c in cols)
+                conn.execute(
+                    f'UPDATE financials SET {set_sql}, last_updated = ? '
+                    f'WHERE Ticker = ? AND "Calendar Year" = ?',
+                    [rec[c] for c in cols]
+                    + [datetime.now().isoformat(), ticker, rec["Calendar Year"]])
+                if verbose:
+                    print(f"  {ticker}: gap-filled {rec['Calendar Year']}")
 
             # Update tickers table with latest info
             if yf_records:
@@ -1224,10 +1351,11 @@ class FinancialDB:
 
         return len(new_records)
 
-    def update_all(self, verbose: bool = True) -> dict:
+    def update_all(self, verbose: bool = True, fill_gaps: bool = False) -> dict:
         """
         Run update_ticker for every ticker in the database.
-        Only adds new fiscal years -- never overwrites existing data.
+        Only adds new fiscal years -- never overwrites existing data
+        (fill_gaps=True additionally completes NULL columns on existing rows).
         Returns a dict of ticker -> number of new years added.
         """
         with self._connect() as conn:
@@ -1243,7 +1371,7 @@ class FinancialDB:
         results = {}
         for t in tickers:
             try:
-                n = self.update_ticker(t, verbose=verbose)
+                n = self.update_ticker(t, verbose=verbose, fill_gaps=fill_gaps)
                 results[t] = n
             except Exception as e:
                 if verbose:
@@ -1411,6 +1539,240 @@ class FinancialDB:
             result["EV To Operating Cash Flow"] = ev / ocf
 
         return result
+
+    # ------------------------------------------------------------------
+    # Quarterly + TTM store (financials_quarterly) -- additive, never touches
+    # the annual financials warehouse.
+    # ------------------------------------------------------------------
+
+    def _fetch_yf_quarterly(self, ticker: str) -> dict:
+        """Fetch quarterly income/balance/cashflow statements from yfinance.
+
+        Returned as {'inc': df, 'bal': df, 'cf': df, 'info': dict}. Isolated in
+        its own method so tests can monkeypatch it with synthetic frames
+        (network-free)."""
+        t = yf.Ticker(ticker)
+        return {
+            "inc":  t.quarterly_income_stmt,
+            "bal":  t.quarterly_balance_sheet,
+            "cf":   t.quarterly_cashflow,
+            "info": t.info,
+        }
+
+    def save_quarters(self, ticker: str, verbose: bool = True) -> int:
+        """Store one row per fiscal quarter in financials_quarterly.
+
+        Period is 'Q1'..'Q4' assigned by end-date order WITHIN each calendar
+        year; Calendar Year is the calendar year of the quarter-end date. Rows
+        are additive (INSERT OR IGNORE) and gated by is_valid_year_period.
+        Returns the number of rows actually inserted."""
+        ticker = ticker.upper()
+        try:
+            data = self._fetch_yf_quarterly(ticker)
+        except Exception as e:  # noqa: BLE001 -- isolate per-ticker fetch failures
+            if verbose:
+                print(f"  {ticker}: quarterly fetch failed: {e}")
+            return 0
+
+        inc, bal, cf = data.get("inc"), data.get("bal"), data.get("cf")
+
+        # Every distinct quarter-end date across the three statements.
+        q_dates = set()
+        for df in (inc, bal, cf):
+            if df is not None and not df.empty:
+                for col in df.columns:
+                    try:
+                        q_dates.add(pd.to_datetime(col))
+                    except Exception:  # noqa: BLE001 -- skip non-date columns
+                        pass
+        if not q_dates:
+            return 0
+
+        # Assign Period by end-date order within each calendar year.
+        ordered = sorted(q_dates)
+        counter: dict[int, int] = {}
+        period_by_date: dict = {}
+        for dt in ordered:
+            counter[dt.year] = counter.get(dt.year, 0) + 1
+            period_by_date[dt] = f"Q{min(counter[dt.year], 4)}"
+
+        def val(df, key, target_dt):
+            if df is None or df.empty or key not in df.index:
+                return None
+            for col in df.columns:
+                try:
+                    if pd.to_datetime(col) == target_dt:
+                        v = df.loc[key, col]
+                        return float(v) if pd.notna(v) else None
+                except Exception:  # noqa: BLE001 -- skip unparseable columns
+                    pass
+            return None
+
+        records = []
+        for dt in ordered:
+            period = period_by_date[dt]
+            if not is_valid_year_period(dt.year, period):
+                continue
+            rec = {
+                "Ticker":        ticker,
+                "Calendar Year": dt.year,
+                "Period":        period,
+                "Date":          dt.date().isoformat(),
+                "last_updated":  datetime.now().isoformat(),
+            }
+            for our_col, yf_key in YF_INCOME_MAP.items():
+                rec[our_col] = val(inc, yf_key, dt)
+            for our_col, yf_key in YF_BALANCE_MAP.items():
+                rec[our_col] = val(bal, yf_key, dt)
+            for our_col, yf_key in YF_CASHFLOW_MAP.items():
+                if rec.get(our_col) is None:
+                    rec[our_col] = val(cf, yf_key, dt)
+            records.append(rec)
+
+        if not records:
+            return 0
+
+        q_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        inserted = 0
+        with self._connect() as conn:
+            for rec in records:
+                cols = [c for c in rec.keys() if c in q_cols]
+                vals = [rec[c] for c in cols]
+                col_sql = ", ".join(f'"{c}"' for c in cols)
+                ph = ", ".join("?" for _ in cols)
+                cur = conn.execute(
+                    f"INSERT OR IGNORE INTO financials_quarterly ({col_sql}) "
+                    f"VALUES ({ph})", vals)
+                inserted += cur.rowcount
+            conn.commit()
+
+        if verbose:
+            print(f"  {ticker}: stored {inserted} quarter rows")
+        return inserted
+
+    def save_ttm(self, ticker: str, verbose: bool = True) -> bool:
+        """Compute the live TTM snapshot (get_ttm) and upsert it into
+        financials_quarterly with Period='TTM'. Calendar Year is the year of the
+        TTM Date. The TTM row is a rolling snapshot, so ON CONFLICT restates it.
+        Only columns in EXCEL_COLUMNS are stored. Returns True on write."""
+        ticker = ticker.upper()
+        try:
+            ttm = self.get_ttm(ticker)
+        except Exception as e:  # noqa: BLE001 -- isolate per-ticker fetch failures
+            if verbose:
+                print(f"  {ticker}: TTM fetch failed: {e}")
+            return False
+        if not ttm:
+            return False
+
+        ttm_date = ttm.get("Date") or date.today().isoformat()
+        try:
+            cal_year = int(str(ttm_date)[:4])
+        except (TypeError, ValueError):
+            cal_year = date.today().year
+        if not is_valid_year_period(cal_year, "TTM"):
+            return False
+
+        rec = {k: v for k, v in ttm.items() if k in EXCEL_COLUMNS}
+        rec["Ticker"] = ticker
+        rec["Calendar Year"] = cal_year
+        rec["Period"] = "TTM"
+        rec["last_updated"] = datetime.now().isoformat()
+
+        q_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        cols = [c for c in rec.keys() if c in q_cols]
+        col_sql = ", ".join(f'"{c}"' for c in cols)
+        ph = ", ".join("?" for _ in cols)
+        update_cols = [c for c in cols
+                       if c not in ("Ticker", "Calendar Year", "Period")]
+        set_sql = ", ".join(f'"{c}" = excluded."{c}"' for c in update_cols)
+        with self._connect() as conn:
+            conn.execute(
+                f'INSERT INTO financials_quarterly ({col_sql}) VALUES ({ph}) '
+                f'ON CONFLICT(Ticker, "Calendar Year", Period) '
+                f'DO UPDATE SET {set_sql}',
+                [rec[c] for c in cols])
+            conn.commit()
+
+        if verbose:
+            print(f"  {ticker}: TTM snapshot saved ({cal_year})")
+        return True
+
+    def derive_q4(self, ticker: str, verbose: bool = True) -> int:
+        """Back-fill the missing Q4 row for each fiscal year that has Q1-Q3 in
+        financials_quarterly but no Q4. Flow columns = FY - (Q1+Q2+Q3);
+        balance-sheet columns copy the FY row. INSERT OR IGNORE. Returns the
+        number of Q4 rows created."""
+        ticker = ticker.upper()
+        flow_cols = list(FLOW_COLUMNS)
+        bal_cols = list(YF_BALANCE_MAP.keys())
+        q_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        created = 0
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            fy_rows = conn.execute(
+                'SELECT * FROM financials WHERE Ticker = ?', (ticker,)
+            ).fetchall()
+            for fy in fy_rows:
+                try:
+                    cal_year = int(fy["Calendar Year"])
+                except (TypeError, ValueError, KeyError):
+                    continue
+                # Quarters are keyed by CALENDAR year of the quarter end while
+                # the FY row is a FISCAL year: for a non-December fiscal filer
+                # (AAPL Sep, WMT Jan) the two label different periods and
+                # FY-(Q1+Q2+Q3) would mix them. Derive Q4 only for December
+                # fiscal-year-ends, where calendar and fiscal align.
+                fy_date = fy["Date"] if "Date" in fy.keys() else None
+                if not fy_date or str(fy_date)[5:7] != "12":
+                    continue
+                q_rows = conn.execute(
+                    'SELECT Period, ' +
+                    ", ".join(f'"{c}"' for c in flow_cols) +
+                    ' FROM financials_quarterly '
+                    'WHERE Ticker = ? AND "Calendar Year" = ? '
+                    "AND Period IN ('Q1','Q2','Q3','Q4')",
+                    (ticker, cal_year)).fetchall()
+                periods = {r["Period"] for r in q_rows}
+                if not {"Q1", "Q2", "Q3"}.issubset(periods) or "Q4" in periods:
+                    continue
+                q123 = {r["Period"]: r for r in q_rows}
+                rec = {
+                    "Ticker":        ticker,
+                    "Calendar Year": cal_year,
+                    "Period":        "Q4",
+                    "Date":          fy["Date"] if "Date" in fy.keys() else None,
+                    "last_updated":  datetime.now().isoformat(),
+                }
+                for col in flow_cols:
+                    fy_val = fy[col] if col in fy.keys() else None
+                    if fy_val is None:
+                        rec[col] = None
+                        continue
+                    partial = 0.0
+                    ok = True
+                    for p in ("Q1", "Q2", "Q3"):
+                        v = q123[p][col]
+                        if v is None:
+                            ok = False
+                            break
+                        partial += float(v)
+                    rec[col] = (float(fy_val) - partial) if ok else None
+                for col in bal_cols:
+                    rec[col] = fy[col] if col in fy.keys() else None
+
+                cols = [c for c in rec.keys() if c in q_cols]
+                col_sql = ", ".join(f'"{c}"' for c in cols)
+                ph = ", ".join("?" for _ in cols)
+                cur = conn.execute(
+                    f"INSERT OR IGNORE INTO financials_quarterly ({col_sql}) "
+                    f"VALUES ({ph})", [rec[c] for c in cols])
+                created += cur.rowcount
+            conn.commit()
+
+        if verbose:
+            print(f"  {ticker}: derived {created} Q4 rows")
+        return created
 
     # ------------------------------------------------------------------
     # Query API (mirrors yfinance style)

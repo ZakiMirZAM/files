@@ -74,7 +74,7 @@ export function DashboardPage() {
         subtitle="Five stages of analysis, all wired into financials.db and FRED. Everything you write is saved to your account."
         actions={
           <div className="flex items-center gap-3">
-            {/* Admin-only data ingestion — dev builds only. On the public site
+            {/* Admin-only data ingestion, dev builds only. On the public site
                 the backend admin routes are token-gated (403), so this is hidden
                 rather than shown as a button that always errors. */}
             {import.meta.env.DEV && (
@@ -83,17 +83,6 @@ export function DashboardPage() {
                 <HelpBadge topic="refreshData" />
               </div>
             )}
-            <div className="flex items-center gap-1">
-              <Link to="/app/report" className="btn-outline" data-tour="dash-final-review">
-                <Notebook className="w-4 h-4" />
-                Final Review
-              </Link>
-              <HelpBadge topic="finalReport" />
-            </div>
-            <Link to="/app/simulator" className="btn-gold" data-tour="dash-simulator">
-              <TrendingUp className="w-4 h-4" />
-              Practice
-            </Link>
           </div>
         }
       />
@@ -265,7 +254,7 @@ function DailyUpdateButton() {
   const handle = async () => {
     const res = await triggerDailyUpdate();
     if (!res) {
-      toast.error("Couldn't reach API — is the FastAPI server running on :8000?");
+      toast.error("Couldn't reach API, is the FastAPI server running on :8000?");
       return;
     }
     setPolling(true);

@@ -28,7 +28,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
  * full-screen <AuthLoading> blue screen whenever isLoading was true, so every
  * token refresh tore down the authenticated app and parked the user on a blank
  * blue loader. Here we remember that the user was authenticated and keep
- * showing the app through transient refreshes — the loader only appears on the
+ * showing the app through transient refreshes, the loader only appears on the
  * very first load, before we have ever been authenticated.
  */
 function useStickyAuth(): { showApp: boolean; showFirstLoad: boolean; showAuth: boolean } {

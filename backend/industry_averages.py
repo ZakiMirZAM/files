@@ -23,6 +23,7 @@ import sys
 import os
 import sqlite3
 import argparse
+from datetime import date
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "data"))
@@ -189,31 +190,64 @@ def _is_bank_like(lev: float | None) -> bool:
 
 # ── CORE COMPUTE FUNCTIONS ────────────────────────────────────────────────────
 
-def _avg_exprs(target_metrics: list[str]) -> str:
-    """Build market-cap-weighted average SQL expressions for stored and derived metrics.
+# FX-normalised size weight (see _avg_exprs). Converts each filer's Market Cap to
+# USD before weighting so a ¥/₩ cap is not summed against a $ cap at face value.
+# The rate is the one that applied at the ROW'S OWN fiscal year end: converting a
+# 2016 cap at today's rate understates a JPY filer by ~28% and a KRW filer by ~19%
+# while inflating EUR/GBP by ~8%. The most recent year is the exception — its cap
+# is refreshed to spot weekly, so it pairs with the spot rate.
+# USD / NULL currency -> 1.0 per unit; an unknown currency -> NULL, so that row
+# drops from both numerator and denominator.
+# Any query using this MUST carry _FX_JOIN_SQL.
+_FX_SPOT_FROM_YEAR = date.today().year - 1
 
-    Formula: SUM(value * MarketCap) / SUM(MarketCap)  — only over rows where
-    both the metric and Market Cap are non-NULL.
+_FX_JOIN_SQL = (
+    ' LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"'
+    ' LEFT JOIN fx_rates_hist xh ON xh.currency = f."Reported Currency"'
+    ' AND xh.year = CAST(f."Calendar Year" AS INTEGER)'
+)
 
-    Denominator trick: `(expr) * 0 + f."Market Cap"` evaluates to NULL whenever
-    expr is NULL (so that ticker is excluded from both numerator and denominator),
-    and equals Market Cap when expr is valid. This avoids double-counting the
-    weight of tickers that are missing a given metric.
+_FX_WEIGHT_SQL = (
+    'f."Market Cap" * COALESCE('
+    f'CASE WHEN CAST(f."Calendar Year" AS INTEGER) < {_FX_SPOT_FROM_YEAR} '
+    'THEN xh.usd_per_unit END, '
+    'x.usd_per_unit, '
+    "CASE WHEN f.\"Reported Currency\" = 'USD' "
+    "OR f.\"Reported Currency\" IS NULL THEN 1.0 ELSE NULL END)"
+)
+
+
+def _avg_exprs(target_metrics: list[str], weight: str = _FX_WEIGHT_SQL) -> str:
+    """Build size-weighted average SQL expressions for stored and derived metrics.
+
+    Formula: SUM(value * weight) / SUM(weight)  — only over rows where both the
+    metric and the weight are non-NULL.
+
+    `weight` defaults to `_FX_WEIGHT_SQL`, an FX-normalised USD market cap: a
+    company's Market Cap converted to USD so a ¥/₩ cap is not summed against a $
+    cap at face value. It resolves to NULL for unknown currencies, so those rows
+    drop from both numerator and denominator. Callers MUST include the two joins
+    in `_FX_JOIN_SQL` (spot `x` + per-year `xh`).
+    Metric VALUES are never FX-converted — ratios stay currency-neutral.
+
+    Denominator trick: `(expr) * 0 + weight` evaluates to NULL whenever expr is
+    NULL (so that ticker is excluded from both numerator and denominator), and
+    equals the weight when expr is valid. This avoids double-counting the weight
+    of tickers that are missing a given metric.
     """
-    mc    = 'f."Market Cap"'
     parts = []
     for m in target_metrics:
         if m in DERIVED_METRICS:
             expr = DERIVED_METRICS[m]
             parts.append(
-                f'SUM(({expr}) * {mc}) /\n'
-                f'    NULLIF(SUM(({expr}) * 0 + {mc}), 0) AS "{m}"'
+                f'SUM(({expr}) * ({weight})) /\n'
+                f'    NULLIF(SUM(({expr}) * 0 + ({weight})), 0) AS "{m}"'
             )
         else:
             col = f'f."{m}"'
             parts.append(
-                f'SUM({col} * {mc}) /\n'
-                f'    NULLIF(SUM({col} * 0 + {mc}), 0) AS "{m}"'
+                f'SUM({col} * ({weight})) /\n'
+                f'    NULLIF(SUM({col} * 0 + ({weight})), 0) AS "{m}"'
             )
     return ",\n    ".join(parts)
 
@@ -236,7 +270,10 @@ def _compute_averages(
             {_avg_exprs(target)}
         FROM financials f
         JOIN tickers t ON t.ticker = f.Ticker
+        {_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
+          AND f."Market Cap" > 0
+          AND {_FX_WEIGHT_SQL} < 1e14
         GROUP BY t.{group_col}
         HAVING ticker_count >= {min_tickers}
         ORDER BY t.{group_col}
@@ -278,8 +315,11 @@ def _compute_averages_by_year(
             {_avg_exprs(target)}
         FROM financials f
         JOIN tickers t ON t.ticker = f.Ticker
+        {_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
           AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
+          AND f."Market Cap" > 0
+          AND {_FX_WEIGHT_SQL} < 1e14
         GROUP BY t.{group_col}, yr
         HAVING ticker_count >= {min_tickers}
         ORDER BY yr, t.{group_col}
@@ -345,8 +385,14 @@ def compute_cape(db: FinancialDB, group_col: str) -> dict[str, float | None]:
         latest_price AS (
             SELECT f.Ticker,
                    f."Market Cap" / NULLIF(f."Weighted Average Shs Out Dil", 0) AS implied_price,
-                   f."Market Cap" AS mktcap
+                   -- implied_price stays LOCAL (currency-neutral vs local EPS);
+                   -- the WEIGHT converts to USD so a JPY/KRW cap is not summed
+                   -- against a USD cap at face value (unknown ccy -> NULL ->
+                   -- dropped from both sides of the weighted mean).
+                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < 1e14
+                        THEN ({_FX_WEIGHT_SQL}) END AS mktcap
             FROM financials f
+            {_FX_JOIN_SQL}
             INNER JOIN (
                 SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) AS max_yr
                 FROM financials
@@ -410,8 +456,12 @@ def compute_dcf(
                    f."Free Cash Flow Per Share"          AS fcf_ps,
                    f."Free Cash Flow Growth"             AS fcf_growth,
                    f."Market Cap" / NULLIF(f."Weighted Average Shs Out Dil", 0) AS implied_price,
-                   f."Market Cap"                        AS mktcap
+                   -- weight in USD (see compute_cape note); per-share figures
+                   -- stay local so the DCF ratio math is currency-neutral.
+                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < 1e14
+                        THEN ({_FX_WEIGHT_SQL}) END      AS mktcap
             FROM financials f
+            {_FX_JOIN_SQL}
             INNER JOIN (
                 SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) AS max_yr
                 FROM financials

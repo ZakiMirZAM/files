@@ -46,7 +46,7 @@ function periodToDays(period: string): number {
 }
 
 /**
- * Transform a level series into "percent change from a year ago" — the same units
+ * Transform a level series into "percent change from a year ago", the same units
  * transform FRED offers via Edit Graph → Units. For each point it finds the
  * observation closest to exactly one year earlier (within `toleranceDays`) and
  * computes ((now − yearAgo) / |yearAgo|) × 100. Mirrors the backend
@@ -75,7 +75,7 @@ export function toYoYSeries<T extends { period: string; value: number }>(
         hi = mid - 1;
       }
     }
-    // Nearest neighbour is pos or pos + 1 — pick whichever is closer to the target.
+    // Nearest neighbour is pos or pos + 1, pick whichever is closer to the target.
     let bestIdx = -1;
     let bestDiff = Infinity;
     for (const j of [pos, pos + 1]) {

@@ -13,7 +13,7 @@ interface NotebookPanelProps {
 
 // Right-side notebook. Mobile/tablet: fixed overlay sliding in from the right.
 // Desktop (lg+): in-flow sticky flex column that pushes content, animating
-// width 0 ↔ 400px — mirrors the left sidebar's collapse pattern. Kept mounted
+// width 0 ↔ 400px, mirrors the left sidebar's collapse pattern. Kept mounted
 // while closed (inert) so editor state and pending autosaves survive toggling.
 export function NotebookPanel({ open, onClose }: NotebookPanelProps) {
   const [activeNoteId, setActiveNoteId] = useState<Id<"notes"> | null>(

@@ -25,7 +25,7 @@ function formatValue(v: number, unit: Metric["unit"]): string {
   return formatNumber(v);
 }
 
-/** Change since the first point — % for $/x metrics, percentage-points for % metrics. */
+/** Change since the first point, % for $/x metrics, percentage-points for % metrics. */
 function deltaSinceStart(m: Metric): { text: string; positive: boolean } | null {
   if (m.trend.length < 2) return null;
   const first = m.trend[0].value;
@@ -41,7 +41,7 @@ function deltaSinceStart(m: Metric): { text: string; positive: boolean } | null 
 
 /**
  * Compact historical view of the company's financials. Renders the same metrics
- * the page used to show as full-size charts — but as a dense sparkline bento grid,
+ * the page used to show as full-size charts, but as a dense sparkline bento grid,
  * each appearing exactly once. Clicking a tile reveals its full chart + commentary,
  * so nothing is lost and the page stops being an endless scroll.
  */

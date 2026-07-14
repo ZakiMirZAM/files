@@ -22,7 +22,6 @@ interface SectorMetricsTableProps {
   resolveDef?: (label: string) => number | undefined;
 }
 
-const UNIT_TAG: Record<string, string> = { $: "USD", "%": "percent", x: "ratio", d: "days", yrs: "years" };
 
 export function SectorMetricsTable({
   data,
@@ -76,7 +75,7 @@ export function SectorMetricsTable({
                       {/* Single-company columns (the comparative matrix) show just the year. */}
                       {col?.["_companies"] === 1
                         ? `FY ${col?.["_year"] ?? ""}`
-                        : `${col?.["_companies"] ?? "—"} cos · ${col?.["_year"] ?? ""}`}
+                        : `${col?.["_companies"] ?? "n/a"} cos · ${col?.["_year"] ?? ""}`}
                     </span>
                   </th>
                 );
@@ -109,9 +108,6 @@ export function SectorMetricsTable({
                         resolve={resolveDef}
                         className="text-[0.85rem] text-white/80 leading-snug"
                       />
-                      <span className="block text-[0.65rem] font-mono text-white/25 uppercase tracking-wide">
-                        {UNIT_TAG[met.unit]}
-                      </span>
                     </th>
                     {data.sectors.map((s) => {
                       const col = data.data[s];
@@ -123,7 +119,7 @@ export function SectorMetricsTable({
                           key={s}
                           role="button"
                           tabIndex={0}
-                          title={hasHistory ? `${s} · ${met.label} — click for history` : met.definition}
+                          title={hasHistory ? `${s} · ${met.label}, click for history` : met.definition}
                           onClick={() => openMetricHistory(s, met, col, resolveDef)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
@@ -151,15 +147,8 @@ export function SectorMetricsTable({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-t border-gold/10 text-[0.68rem] text-white/35">
-        <span>{data.universe}</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "rgba(127,184,124,0.45)" }} /> better
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "rgba(200,118,114,0.45)" }} /> worse
-        </span>
-        <span className="ml-auto font-mono">as of {data.asOf}</span>
+      <div className="flex items-center justify-end px-4 py-3 border-t border-gold/10 text-[0.68rem] text-white/35">
+        <span className="font-mono">as of {data.asOf}</span>
       </div>
     </div>
   );

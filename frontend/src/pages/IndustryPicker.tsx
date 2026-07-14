@@ -127,8 +127,8 @@ export function IndustryPicker({ basePath, eyebrow, title, subtitle, kind }: Pic
             className="field pl-10"
             placeholder={
               kind === "sector"
-                ? "Type to filter — e.g. Technology, Healthcare, Financials"
-                : "Type to filter — e.g. Semiconductors, Insurance, Pharmaceuticals"
+                ? "Type to filter, e.g. Technology, Healthcare, Financials"
+                : "Type to filter, e.g. Semiconductors, Insurance, Pharmaceuticals"
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}

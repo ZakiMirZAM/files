@@ -194,7 +194,7 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
                       )}
                       style={{ backgroundColor: tint(cell, ref) }}
                     >
-                      {cell == null ? "—" : `$${cell.toFixed(0)}`}
+                      {cell == null ? "n/a" : `$${cell.toFixed(0)}`}
                     </td>
                   ))}
                 </tr>

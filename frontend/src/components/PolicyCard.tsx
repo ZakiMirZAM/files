@@ -129,7 +129,7 @@ export function PolicyCard() {
               >
                 {RISK_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value} className="bg-[#10131f]">
-                    {o.label} — {o.hint}
+                    {o.label}, {o.hint}
                   </option>
                 ))}
               </select>

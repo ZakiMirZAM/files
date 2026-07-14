@@ -1,4 +1,4 @@
-# Sector Analysis Definitions — Catalog & Checklist
+# Sector Analysis Definitions, Catalog & Checklist
 
 Definitions for the sector surface (`/app/sector/:sector`), which judges ONE whole sector
 (a group of related industries) as a market-cap-weighted aggregate. Each row is one file

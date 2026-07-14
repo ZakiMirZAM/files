@@ -27,7 +27,7 @@ export function ValuationCard({ analysis }: ValuationCardProps) {
           <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">
             {analysis.ticker}{" "}
             <span className="text-white/45 font-normal">
-              — <MetricTerm metric="Quality Score" scope="valuation">Quality Score</MetricTerm>
+             , <MetricTerm metric="Quality Score" scope="valuation">Quality Score</MetricTerm>
             </span>
           </h2>
         </div>
@@ -243,9 +243,9 @@ function CashRow({ rows }: { rows: IndividualAnalysis["cashGeneration"] }) {
             {recent.map((r) => (
               <tr key={r.year} className="border-t border-gold/5">
                 <td className="py-1.5 font-mono text-white/70">{r.year}</td>
-                <td className="py-1.5 text-right font-mono text-white/80">{r.nopat !== null ? formatCurrency(r.nopat, { compact: true }) : "—"}</td>
-                <td className="py-1.5 text-right font-mono text-white/80">{r.ocf !== null ? formatCurrency(r.ocf, { compact: true }) : "—"}</td>
-                <td className="py-1.5 text-right font-mono text-gold">{r.fcf !== null ? formatCurrency(r.fcf, { compact: true }) : "—"}</td>
+                <td className="py-1.5 text-right font-mono text-white/80">{r.nopat !== null ? formatCurrency(r.nopat, { compact: true }) : "n/a"}</td>
+                <td className="py-1.5 text-right font-mono text-white/80">{r.ocf !== null ? formatCurrency(r.ocf, { compact: true }) : "n/a"}</td>
+                <td className="py-1.5 text-right font-mono text-gold">{r.fcf !== null ? formatCurrency(r.fcf, { compact: true }) : "n/a"}</td>
               </tr>
             ))}
           </tbody>

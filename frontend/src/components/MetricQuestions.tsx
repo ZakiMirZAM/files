@@ -87,7 +87,7 @@ export function MetricQuestions({ metricNumber, questions, dataContext, metric, 
             key={HIST_QID}
             questionId={`${scopeKey}-${HIST_QID}`}
             question={`${questions.length + 1}. ${historicalTrendQuestion(metric!.name)}`}
-            hint="Historical trend analysis — Explain using AI reads the chart's actual trajectory against the investing texts."
+            hint="Historical trend analysis. Explain using AI reads the chart's actual trajectory against the investing texts."
             section={section}
             scopeKey={scopeKey}
             dataContext={histDataContext}

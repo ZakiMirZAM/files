@@ -49,7 +49,7 @@ export function SectorMetricsPanel({
           <h2 className="font-display text-2xl md:text-3xl font-semibold text-white mt-1">{title}</h2>
         </div>
         <p className="text-xs font-mono text-white/30 text-right">
-          {col["_companies"] ?? "—"} companies · FY{col["_year"] ?? ""}
+          {col["_companies"] ?? "n/a"} companies · FY{col["_year"] ?? ""}
         </p>
       </div>
 
@@ -64,8 +64,8 @@ export function SectorMetricsPanel({
             <p className="label">ROIC − WACC spread</p>
             <p className="text-xs text-white/45 mt-0.5 max-w-md">
               {spread >= 0
-                ? "Capital employed earns above its cost — growth creates value."
-                : "Returns sit below the cost of capital — growth destroys value."}
+                ? "Capital employed earns above its cost, growth creates value."
+                : "Returns sit below the cost of capital, growth destroys value."}
             </p>
           </div>
           <p
@@ -102,7 +102,7 @@ export function SectorMetricsPanel({
                   </MetricTerm>
                   <button
                     type="button"
-                    title={hasHistory ? `${sector} · ${m.label} — click for history` : m.definition}
+                    title={hasHistory ? `${sector} · ${m.label}, click for history` : m.definition}
                     onClick={() => openMetricHistory(sector, m, col, resolveDef)}
                     className={cn(
                       "font-mono text-sm text-gold whitespace-nowrap shrink-0 rounded-sm px-1 -mx-1",

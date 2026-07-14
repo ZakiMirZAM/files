@@ -37,7 +37,7 @@ export function AuthPage() {
       />
 
       <div className="relative min-h-screen flex flex-col lg:flex-row">
-        {/* Left — quote panel */}
+        {/* Left, quote panel */}
         <div className="hidden lg:flex flex-col justify-between p-12 xl:p-16 lg:w-1/2 border-r border-gold/10">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-gold flex items-center justify-center rounded-sm">
@@ -57,7 +57,7 @@ export function AuthPage() {
                 {quote.text}
                 <span className="text-gold/70">&rdquo;</span>
               </blockquote>
-              <p className="text-white/55 mt-5 text-sm font-medium">— {quote.author}</p>
+              <p className="text-white/55 mt-5 text-sm font-medium">,  {quote.author}</p>
               {quote.source && (
                 <p className="text-white/30 mt-1 text-xs italic">{quote.source}</p>
               )}
@@ -98,7 +98,7 @@ export function AuthPage() {
           </p>
         </div>
 
-        {/* Right — auth */}
+        {/* Right, auth */}
         <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
           <SignInForm onBack={() => navigate("/")} />
         </div>

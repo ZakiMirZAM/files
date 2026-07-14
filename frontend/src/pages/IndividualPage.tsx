@@ -245,7 +245,7 @@ export function IndividualPage() {
 
   // ──────────────────────── Detail view ────────────────────────
 
-  // Ticker not in financials.db — show error panel and offer way back
+  // Ticker not in financials.db, show error panel and offer way back
   if (result?.status === "not_found") {
     return (
       <div>
@@ -374,7 +374,7 @@ export function IndividualPage() {
 
         {data?.analysis?.forecast && <ForecastSection forecast={data.analysis.forecast} />}
 
-        {/* Where the growth in the model above actually comes from (Damodaran Ch.11). */}
+        {/* Where the growth in the model above actually comes from. */}
         {data?.analysis?.forecast?.growthReconciliation && (
           <GrowthReconciliationSection
             data={data.analysis.forecast.growthReconciliation}
@@ -517,7 +517,7 @@ export function IndividualPage() {
               "Catalyst & Value Trap",
               // Rendered inside UsesOfCashSection. Without this it would also render
               // here, in the page-bottom bank, and the deck would appear twice.
-              "Capital Allocation — Giroux (Capital Allocation) + Thorndike (The Outsiders) + Damodaran (Applied Corporate Finance)",
+              "Capital Allocation",
             ]}
             dataContext={aiDataContext}
           />

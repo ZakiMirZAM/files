@@ -27,7 +27,7 @@ const STAGE_TINT: Record<string, string> = {
 };
 
 /**
- * Growth reconciliation (Damodaran, Investment Valuation Ch.11 and Figure 11.6).
+ * Growth reconciliation.
  * The forward model needs one growth rate. There are two honest ways to read it:
  * the trend through the company's own revenue history, and the rate its
  * reinvestment and returns can actually fund. This section shows both, says which

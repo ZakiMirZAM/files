@@ -10,7 +10,7 @@ interface CatalystTrapSectionProps {
 
 /**
  * The two questions the value canon insists on before buying anything cheap
- * (Marks, The Most Important Thing; Greenblatt, You Can Be a Stock Market Genius):
+ *:
  * is there a catalyst that will close the gap between price and value, and is the
  * discount actually a value trap, a fatal defect wearing a bargain's clothes? The
  * user argues both sides in the deck; the page's own figures ground the AI helper.

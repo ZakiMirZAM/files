@@ -26,7 +26,7 @@ export const QUOTES: Quote[] = [
     source: "The Intelligent Investor",
   },
   {
-    text: "The investor's chief problem—and even his worst enemy—is likely to be himself.",
+    text: "The investor's chief problem, and even his worst enemy, is likely to be himself.",
     author: "Benjamin Graham",
     source: "The Intelligent Investor",
   },
@@ -76,7 +76,7 @@ export const QUOTES: Quote[] = [
     source: "Investment Valuation",
   },
   {
-    text: "The value of any firm is determined by four factors—its capacity to generate cash flows from assets in place, the expected growth rate of these cash flows, the length of time it will take for the firm to reach stable growth, and the cost of capital.",
+    text: "The value of any firm is determined by four factors, its capacity to generate cash flows from assets in place, the expected growth rate of these cash flows, the length of time it will take for the firm to reach stable growth, and the cost of capital.",
     author: "Aswath Damodaran",
     source: "Applied Corporate Finance",
   },
@@ -162,7 +162,7 @@ function hashDay(key: string): number {
 }
 
 /**
- * Deterministic "quote of the day" — every visit on the same calendar day
+ * Deterministic "quote of the day", every visit on the same calendar day
  * returns the same quote, and it rotates through the whole library across days.
  */
 export function getQuoteOfTheDay(date: Date = new Date()): Quote {

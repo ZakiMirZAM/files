@@ -124,7 +124,7 @@ function metric(
 }
 
 const MOCK_BANNER =
-  "⚠ MOCK DATA — FastAPI server is offline. Run `uvicorn backend.api:app --reload --port 8000` to see real FRED + financials.db data.";
+  "⚠ MOCK DATA, FastAPI server is offline. Run `uvicorn backend.api:app --reload --port 8000` to see real FRED + financials.db data.";
 
 // COVID recession band (the only NBER recession since 2012)
 const RECESSION_BANDS = [
@@ -202,7 +202,7 @@ export const ECONOMIC_DATA: SectionData = {
         recessionShock: { date: "2020-03-23", magnitude: 400 },
       }),
       "S&P 500 daily close (FRED: SP500).",
-      "The reference benchmark. Compare slope vs M2 growth — if SP500 outpaces M2, multiple expansion is doing the heavy lifting.",
+      "The reference benchmark. Compare slope vs M2 growth, if SP500 outpaces M2, multiple expansion is doing the heavy lifting.",
       [],
       { frequency: "daily", displayType: "line" }),
     metric(9, "M2 Money Supply ($B)", "$",
@@ -210,7 +210,7 @@ export const ECONOMIC_DATA: SectionData = {
         base: 10500, drift: 850, noiseAmp: 150, cycleYears: 4,
       }),
       "M2 money supply level in billions (M2SL, monthly). Toggle to Real for the inflation-adjusted series (M2REAL).",
-      "Rapid expansions historically precede asset-price inflation; rare contractions coincide with risk-off moves. The Real view strips out inflation — when Real M2 contracts, money is losing ground to prices even if nominal M2 is flat.",
+      "Rapid expansions historically precede asset-price inflation; rare contractions coincide with risk-off moves. The Real view strips out inflation, when Real M2 contracts, money is losing ground to prices even if nominal M2 is flat.",
       [],
       {
         frequency: "monthly", displayType: "line",
@@ -263,7 +263,7 @@ export function makeIndustryData(industry: string): SectionData {
   return {
     section: "industry",
     scopeKey: industry,
-    title: `${industry} — Industry Analysis`,
+    title: `${industry}, Industry Analysis`,
     subtitle: MOCK_BANNER,
     metrics: makeGroupMetrics(industry, "industry"),
   };
@@ -273,7 +273,7 @@ export function makeSectorData(sector: string): SectionData {
   return {
     section: "sector",
     scopeKey: sector,
-    title: `${sector} — Sector Analysis`,
+    title: `${sector}, Sector Analysis`,
     subtitle: MOCK_BANNER,
     metrics: makeGroupMetrics(sector, "sector"),
   };
@@ -284,10 +284,10 @@ export function makeComparativeData(industry: string): SectionData {
   return {
     section: "comparative",
     scopeKey: industry,
-    title: `${industry} — Comparative Stock Analysis`,
+    title: `${industry}, Comparative Stock Analysis`,
     subtitle: MOCK_BANNER,
     metrics: [
-      metric(1, "Top 5 — Revenue CAGR (5yr)", "%",
+      metric(1, "Top 5, Revenue CAGR (5yr)", "%",
         buildSeries(ANNUAL_PERIODS, {
           base: 5 + j * 18, drift: 0.3, noiseAmp: 2, jitter: j,
           recessionShock: { date: "2020-12-31", magnitude: 6 },
@@ -296,14 +296,14 @@ export function makeComparativeData(industry: string): SectionData {
         "Spread between leader and laggard signals winner-take-most dynamics.",
         [{ label: "Leader vs avg", value: +(j * 8).toFixed(1), unit: "%" }],
         { isRateOfChange: true }),
-      metric(2, "Top 5 — Gross Margin", "%",
+      metric(2, "Top 5, Gross Margin", "%",
         buildSeries(ANNUAL_PERIODS, {
           base: 30 + j * 45, drift: 0.25, noiseAmp: 1.1, jitter: j + 0.3,
         }),
         "Gross margin across the top five public companies.",
         "Margin dispersion is predictive of future stock performance.",
         []),
-      metric(3, "Top 5 — FCF Margin", "%",
+      metric(3, "Top 5, FCF Margin", "%",
         buildSeries(ANNUAL_PERIODS, {
           base: 8 + j * 25, drift: 0.4, noiseAmp: 1.3, jitter: j + 0.7,
         }),
@@ -317,11 +317,11 @@ export function makeComparativeData(industry: string): SectionData {
 export function makeIndividualData(ticker: string): SectionData {
   const t = ticker.toUpperCase();
   const j = hash01(t, "ticker");
-  const scale = 1 + j * 9; // 1x to 10x — different company sizes
+  const scale = 1 + j * 9; // 1x to 10x, different company sizes
   return {
     section: "individual",
     scopeKey: t,
-    title: `${t} — Individual Stock Analysis`,
+    title: `${t}, Individual Stock Analysis`,
     subtitle: MOCK_BANNER,
     metrics: [
       metric(1, "Revenue", "$",

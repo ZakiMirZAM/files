@@ -16,7 +16,7 @@ export function saveNotebookOpen(open: boolean): void {
   try {
     localStorage.setItem(OPEN_KEY, open ? "1" : "0");
   } catch {
-    // unavailable — state just won't persist
+    // unavailable, state just won't persist
   }
 }
 
@@ -36,6 +36,6 @@ export function saveActiveNoteId(id: string | null): void {
       localStorage.setItem(ACTIVE_NOTE_KEY, id);
     }
   } catch {
-    // unavailable — state just won't persist
+    // unavailable, state just won't persist
   }
 }

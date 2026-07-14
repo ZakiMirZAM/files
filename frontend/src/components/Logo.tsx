@@ -1,13 +1,13 @@
 /* ─────────────────────────────────────────────────────────────────────────
    IntrinsicFinEd brand mark.
 
-   Concept — the serifed "I" is a *column of intrinsic worth* (a plumb line /
+   Concept, the serifed "I" is a *column of intrinsic worth* (a plumb line /
    measure), and an ascending value curve rises out of its base to a live node.
    Together they read as both the letter I and a valuation chart: the brand's
    whole thesis (price discovers, value compounds) compressed into one mark.
 
    Pure inline SVG so it ships at zero extra weight and stays razor-sharp at
-   every size — from a 16px favicon to a hero watermark. Themeable: pass the
+   every size, from a 16px favicon to a hero watermark. Themeable: pass the
    surface (`bg`) and ink (`fg`) so it works gold-on-ink and ink-on-gold.
    ───────────────────────────────────────────────────────────────────────── */
 
@@ -26,7 +26,7 @@ export interface LogoMarkProps {
   className?: string;
 }
 
-/** The square monogram on its own — usable as icon, favicon, or watermark. */
+/** The square monogram on its own, usable as icon, favicon, or watermark. */
 export function LogoMark({ size = 32, theme = "gold", idSuffix = "m", className }: LogoMarkProps) {
   const tile = theme === "gold" ? `url(#lg-tile-${idSuffix})` : INK;
   const glyph = theme === "gold" ? INK : GOLD;
@@ -49,13 +49,13 @@ export function LogoMark({ size = 32, theme = "gold", idSuffix = "m", className 
         </linearGradient>
       </defs>
 
-      {/* Seal — the rounded tile */}
+      {/* Seal, the rounded tile */}
       <rect x="0.5" y="0.5" width="47" height="47" rx="11" fill={tile} />
       {theme === "ink" && (
         <rect x="1" y="1" width="46" height="46" rx="10.5" fill="none" stroke={GOLD} strokeOpacity="0.28" strokeWidth="1" />
       )}
 
-      {/* Serif "I" — the column of intrinsic worth */}
+      {/* Serif "I", the column of intrinsic worth */}
       <g fill={glyph}>
         <rect x="16" y="13" width="16" height="3.4" rx="1.2" />
         <rect x="22.1" y="13" width="3.8" height="22" rx="0.6" />

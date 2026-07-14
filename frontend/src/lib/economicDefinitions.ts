@@ -3,7 +3,7 @@
 // panels, which render their own UI and surface their definition through the sidebar).
 //
 // The verbatim markdown for each metric is bundled straight from the source
-// files under src/content/economic/ via Vite's `?raw` import — nothing is
+// files under src/content/economic/ via Vite's `?raw` import, nothing is
 // retyped or paraphrased. Each entry maps to a backend/mock metric by its exact
 // `name` (chartMetricName) so the live chart attaches inside the dropdown; when
 // no series is available (not on FRED), the chart area shows a "data source
@@ -64,7 +64,7 @@ const CHART_METRIC_NAME: Record<number, string | undefined> = {
   11: "Real Avg Hourly Earnings YoY %",
   12: "Consumer Sentiment (UMich)",
   13: "10-Year Treasury Yield",
-  14: undefined, // ISM Manufacturing PMI — not on FRED
+  14: undefined, // ISM Manufacturing PMI, not on FRED
   15: "Heavy Truck Sales (SAAR)",
   16: "Copper Price",
   17: "WTI Crude Oil",
@@ -73,7 +73,7 @@ const CHART_METRIC_NAME: Record<number, string | undefined> = {
   20: "Industrial Production Index",
   21: "GDP Output Gap",
   22: "5-Year Breakeven Inflation",
-  23: "S&P 500 Earnings Yield", // Inverse PE vs interest-rate yields (Damodaran EPS ÷ index)
+  23: "S&P 500 Earnings Yield", // Inverse PE vs interest-rate yields
   24: "U-6 Unemployment Rate",
   25: "Labor Force Participation Rate",
   26: "Retail Sales YoY %",
@@ -86,18 +86,18 @@ const CHART_METRIC_NAME: Record<number, string | undefined> = {
   33: "Fed Balance Sheet ($M)",
   34: "SOFR-OIS Spread (proxy)", // SOFR − EFFR proxy (true OIS not on FRED)
   35: "Treasury General Account ($M)",
-  36: undefined, // AAII Bull-Bear spread — not on FRED
+  36: undefined, // AAII Bull-Bear spread, not on FRED
   37: "VIX",
-  38: undefined, // BofA Global Fund Manager Survey — not on FRED
+  38: undefined, // BofA Global Fund Manager Survey, not on FRED
   39: "Copper/Gold Ratio",
   40: "AUD/JPY Exchange Rate",
   41: "Gold/Silver Ratio",
-  42: "Equity Risk Premium (implied)", // implied two-stage ERP (Damodaran method)
-  43: undefined, // Sovereign Credit Rating — not on FRED
-  44: undefined, // Bank Net Interest Margin — FRED series discontinued (2020)
+  42: "Equity Risk Premium (implied)", // implied two-stage ERP
+  43: undefined, // Sovereign Credit Rating, not on FRED
+  44: undefined, // Bank Net Interest Margin, FRED series discontinued (2020)
   45: "30-Year Mortgage Rate",
-  46: undefined, // US Crude Oil Inventory — not on FRED
-  47: undefined, // China Monthly Steel Production — not on FRED
+  46: undefined, // US Crude Oil Inventory, not on FRED
+  47: undefined, // China Monthly Steel Production, not on FRED
   48: "Iron Ore Price Index",
   49: "US Population YoY %",
   50: "Unemployment Rate",

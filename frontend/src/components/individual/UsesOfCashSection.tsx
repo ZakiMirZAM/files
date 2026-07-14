@@ -171,7 +171,7 @@ export function UsesOfCashSection({ analysis, ticker, companyName }: UsesOfCashS
       section="individual"
       scopeKey={ticker}
       onlyTitles={[
-        "Capital Allocation — Giroux (Capital Allocation) + Thorndike (The Outsiders) + Damodaran (Applied Corporate Finance)",
+        "Capital Allocation",
       ]}
       storageSuffix="capalloc"
       dataContext={dataContext}

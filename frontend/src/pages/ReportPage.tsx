@@ -9,7 +9,7 @@ import { ScrollText } from "lucide-react";
 /**
  * Final Review Questions. Replaces the old free-form final report with the exact
  * self-assessment questions from the commentary on Chapter 20 of The Intelligent
- * Investor (Graham, with Jason Zweig): Kahneman's two factors of a good decision,
+ * Investor: Kahneman's two factors of a good decision,
  * well-calibrated confidence and correctly-anticipated regret. Answers auto-save
  * to the account via the shared qualitative store (section "final_review").
  *
@@ -24,7 +24,7 @@ export function ReportPage() {
       <SectionHeader
         eyebrow="Final Review"
         title="Final Review Questions"
-        subtitle="Before you commit, turn the analysis on yourself. Risk resides not in what kinds of investments you have, but in what kind of investor you are. These questions are drawn from the commentary on Chapter 20 of The Intelligent Investor (Graham, with Jason Zweig)."
+        subtitle="Before you commit, turn the analysis on yourself. Risk resides not in what kinds of investments you have, but in what kind of investor you are. These questions are drawn from the commentary on Chapter 20 of The Intelligent Investor."
         actions={<PageTourButton tourId="report" />}
       />
 

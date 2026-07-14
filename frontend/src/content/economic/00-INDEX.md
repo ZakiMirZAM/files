@@ -2,12 +2,12 @@
 
 A reference library of 51 economic and macro metrics for finding the best sectors to invest in. Each entry follows the identical six-part template:
 
-1. **Definition** — what the metric measures, units, frequency, and how it is constructed (including why each component is included)
-2. **Why this metric matters in finding the best sectors** — a full paragraph on the analytical reason the metric is used
-3. **What it tells you** — a table classifying all eleven GICS sectors (Favored, Not Favored, Not Affected) for each reading
-4. **Finding the best sectors to invest in** — a table of the sector-by-sector mechanical earnings link
-5. **Metrics to analyze alongside it** — a table of paired metrics and how combining them sharpens the sector call
-6. **Ten precise qualitative questions** — structural questions that probe what creates the reading
+1. **Definition**, what the metric measures, units, frequency, and how it is constructed (including why each component is included)
+2. **Why this metric matters in finding the best sectors**, a full paragraph on the analytical reason the metric is used
+3. **What it tells you**, a table classifying all eleven GICS sectors (Favored, Not Favored, Not Affected) for each reading
+4. **Finding the best sectors to invest in**, a table of the sector-by-sector mechanical earnings link
+5. **Metrics to analyze alongside it**, a table of paired metrics and how combining them sharpens the sector call
+6. **Ten precise qualitative questions**, structural questions that probe what creates the reading
 
 ## Core Macro
 

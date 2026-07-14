@@ -33,7 +33,7 @@ export function useImageUpload(): ImageUploadHandlers {
         return;
       }
       if (file.size > MAX_BYTES) {
-        toast.error("Image is larger than 5MB — resize it and try again");
+        toast.error("Image is larger than 5MB, resize it and try again");
         return;
       }
 
@@ -70,7 +70,7 @@ export function useImageUpload(): ImageUploadHandlers {
         .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
         .map((item) => item.getAsFile())
         .filter((f): f is File => f !== null);
-      if (files.length === 0) return false; // normal paste — let Tiptap handle it
+      if (files.length === 0) return false; // normal paste, let Tiptap handle it
       event.preventDefault();
       files.forEach((f) => void uploadAndInsert(f));
       return true;
@@ -82,7 +82,7 @@ export function useImageUpload(): ImageUploadHandlers {
       _slice: unknown,
       moved: boolean,
     ): boolean => {
-      if (moved) return false; // internal node drag — let Tiptap handle it
+      if (moved) return false; // internal node drag, let Tiptap handle it
       const files = Array.from(event.dataTransfer?.files ?? []).filter((f) =>
         f.type.startsWith("image/"),
       );

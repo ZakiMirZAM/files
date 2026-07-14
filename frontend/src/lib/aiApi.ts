@@ -58,7 +58,7 @@ export async function askQuestion(params: AskParams): Promise<AiResult> {
   // 300s: the heartbeat proxy keeps the connection alive past Cloudflare's 100s
   // edge limit, so a long Sonnet answer (web searches, many turns) can complete.
   const data = (await postAi("/ask", body, 300_000)) as { answer?: string; sources?: string[] };
-  // A 200 with no answer is still a failure — throw so the panel's retry UI engages.
+  // A 200 with no answer is still a failure, throw so the panel's retry UI engages.
   if (!data.answer?.trim()) {
     throw new Error("The AI server returned an empty answer. Retry, or check the rag server (port 3001).");
   }
@@ -74,7 +74,7 @@ export async function explainSelection(params: ExplainParams): Promise<AiResult>
     data: params.dataContext, // server reads the subject's figures from `data`
   };
   const data = (await postAi("/explain", body, 240_000)) as { explanation?: string; sources?: string[] };
-  // A 200 with no explanation is still a failure — throw so the panel's retry UI engages.
+  // A 200 with no explanation is still a failure, throw so the panel's retry UI engages.
   if (!data.explanation?.trim()) {
     throw new Error("The AI server returned an empty explanation. Retry, or check the rag server (port 3001).");
   }

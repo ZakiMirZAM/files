@@ -20,7 +20,10 @@ import { PrinciplesBlock } from "../components/PrinciplesBlock";
 import { GroupScorePanel } from "../components/GroupScorePanel";
 import { SectorMetricsPanel } from "../components/SectorMetricsPanel";
 import { LifecyclePanel } from "../components/industry/LifecyclePanel";
-import { StrategicGroupsSection } from "../components/industry/StrategicGroupsSection";
+import {
+  StrategicGroupsSection,
+  STRATEGIC_GROUPS_DECK_TITLE,
+} from "../components/industry/StrategicGroupsSection";
 import { CompanyScorecardTable } from "../components/CompanyScorecardTable";
 import { ScorecardSkeleton, MatrixSkeleton } from "../components/Skeletons";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
@@ -34,7 +37,7 @@ interface IndustryDetailProps {
   mode: "industry" | "comparative";
 }
 
-// Company scorecard paging — backend caps at 20 companies per request.
+// Company scorecard paging, backend caps at 20 companies per request.
 const SCORECARD_INITIAL = 8;
 const SCORECARD_STEP = 8;
 const SCORECARD_MAX = 20;
@@ -61,7 +64,7 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
   const [minMcap, setMinMcap] = useState<number | null>(null);
 
   // Route mode → section key. Must be declared before the effects below that
-  // read it — one lists `section` in its dependency array, which React evaluates
+  // read it, one lists `section` in its dependency array, which React evaluates
   // during render, so a later `const` would hit the temporal dead zone.
   const section: SectionKey = mode === "industry" ? "industry" : "comparative";
 
@@ -110,18 +113,31 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
   }, [industry, mode, industryScorecardRetry]);
 
   // Industry view: Porter strategic-group map over the industry's largest names.
+  // The count is user-controlled: the quadrant medians are computed over whichever
+  // peers are on the map, so remapping the industry at a different width is part of
+  // the analysis rather than a display preference.
   const [strategicGroups, setStrategicGroups] = useState<StrategicGroups | null>(null);
+  const [sgLimit, setSgLimit] = useState(20);
+  const [sgLoading, setSgLoading] = useState(false);
   useEffect(() => {
     if (mode !== "industry") return;
-    setStrategicGroups(null);
     let active = true;
-    fetchStrategicGroups(industry).then((d) => {
-      if (active) setStrategicGroups(d);
+    setSgLoading(true);
+    fetchStrategicGroups(industry, sgLimit).then((d) => {
+      if (!active) return;
+      setStrategicGroups(d);
+      setSgLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [industry, mode]);
+  }, [industry, mode, sgLimit]);
+
+  // Reset the width when the industry changes, so a wide map does not carry over.
+  useEffect(() => {
+    setSgLimit(20);
+    setStrategicGroups(null);
+  }, [industry]);
 
   useEffect(() => {
     if (mode !== "comparative") return;
@@ -149,7 +165,7 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
   }, [minMcapInput]);
 
   // The per-ticker value ranking (shaped like the scorecard). Re-fetches when the
-  // industry or either filter changes — re-ranking on a filter change is intended,
+  // industry or either filter changes, re-ranking on a filter change is intended,
   // since the score is a percentile within the filtered set.
   useEffect(() => {
     if (mode !== "comparative") return;
@@ -240,7 +256,13 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
         {mode === "industry" && data?.lifecycle && <LifecyclePanel lifecycle={data.lifecycle} />}
 
         {mode === "industry" && strategicGroups && (
-          <StrategicGroupsSection data={strategicGroups} industry={industry} />
+          <StrategicGroupsSection
+            data={strategicGroups}
+            industry={industry}
+            limit={sgLimit}
+            onLimitChange={setSgLimit}
+            loading={sgLoading}
+          />
         )}
 
         {mode === "comparative" && (
@@ -371,6 +393,10 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
           <QualitativeBlock
             section={section}
             scopeKey={industry}
+            // The strategic-group deck is rendered inside its own section, above.
+            // Without this it would render a second time here, in the page-bottom
+            // bank, which shows every group that is not excluded.
+            excludeTitles={mode === "industry" ? [STRATEGIC_GROUPS_DECK_TITLE] : undefined}
             dataContext={buildDataContext(section, data, isLiveData(data))}
           />
         </div>

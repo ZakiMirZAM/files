@@ -1,0 +1,28 @@
+IntrinsicFinEd - data freshness report
+generated: 2026-07-13T17:54:55
+db: financials.db
+
+  [OK   ] fundamentals frozen: 4437/30678 tickers newest year < 2025 (14.5%)
+  max Calendar Year distribution (year: tickers):
+      2026: 50
+      2025: 26191
+      2024: 4116
+      2023: 85
+      2022: 42
+      2021: 25
+      2020: 18
+      2019: 23
+  [WARN ] fx rates: 45 rates, oldest asof 2026-06-28 (15d old)
+  [OK   ] ttm rows: count=3, median age=0d
+  [OK   ] job runs: 5 jobs tracked
+  last run per job:
+      [OK   ] phase3_complete_rows: 2026-07-13 22:09:50 (0d ago)
+      [OK   ] phase3b_ingest: 2026-07-13 21:54:06 (0d ago)
+      [OK   ] phase6_damodaran_benchmark: 2026-07-13T17:05:48 (0d ago)
+      [OK   ] phase7_delisted_repair: 2026-07-13 22:39:22 (0d ago)
+      [OK   ] universe_sync: 2026-07-13 22:53:46 (0d ago)
+  [WARN ] checkpoints: phase3 / phase3b resume state
+  checkpoint failure counts:
+      [WARN ] phase3 backfill failed: 52
+      [OK   ] phase3b delisted failed: 0
+      [WARN ] phase3b unresolved: 164

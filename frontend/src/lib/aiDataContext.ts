@@ -125,7 +125,7 @@ export function buildDataContext(
   const sc = data.scorecard;
   if (sc && sc.valueScore != null) {
     const rank = sc.rank != null && sc.peers != null ? ` (rank ${sc.rank} of ${sc.peers})` : "";
-    lines.push(`Scorecard value score: ${num(sc.valueScore, 1)}/100${rank} — economic-profit-weighted (ROIC−WACC spread heaviest, EVA margin, WACC, cash conversion, EBIT margin, P/B vs justified, growth)`);
+    lines.push(`Scorecard value score: ${num(sc.valueScore, 1)}/100${rank}, economic-profit-weighted (ROIC−WACC spread heaviest, EVA margin, WACC, cash conversion, EBIT margin, P/B vs justified, growth)`);
     if (sc.integrity?.length) {
       const flags = sc.integrity.slice(0, 6).map(
         (c) => `${c.id} [${c.severity}]: ${c.detail ?? c.question}`,

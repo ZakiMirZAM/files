@@ -11,7 +11,7 @@ interface VerticalAnalysisSectionProps {
 }
 
 function pct(v: number | undefined): string {
-  if (v === undefined || v === null || !Number.isFinite(v)) return "—";
+  if (v === undefined || v === null || !Number.isFinite(v)) return "n/a";
   return `${(v * 100).toFixed(1)}%`;
 }
 

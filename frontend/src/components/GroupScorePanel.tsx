@@ -46,7 +46,6 @@ export function GroupScorePanel({ data, group, section, subject }: GroupScorePan
     Object.values(data.data).filter((c) => c?.["valueScore"] != null).length;
   const variant = section === "industry" ? "industry" : "sector";
   const peerNoun = section === "sector" ? "sectors" : "industries";
-  const flagged = checks.filter((c) => c.severity === "high" || c.severity === "medium").length;
   const deck = buildIntegrityDeck(checks, group, getPageAiContext().dataContext);
   const defNum = SCORE_DEF[section];
 
@@ -95,25 +94,14 @@ export function GroupScorePanel({ data, group, section, subject }: GroupScorePan
 
       {/* Integrity checks as a standing, answerable question deck. */}
       <div>
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
           <div>
             <p className="eyebrow">Integrity Questions</p>
             <h4 className="font-display text-lg font-semibold text-white mt-0.5">
               Do the numbers hold up?
             </h4>
           </div>
-          {flagged > 0 && (
-            <span className="text-[0.7rem] font-mono uppercase tracking-wider text-gold">
-              {flagged} flagged
-            </span>
-          )}
         </div>
-        <p className="text-xs text-white/45 mt-1.5 mb-3 max-w-2xl">
-          Each question checks one way a scorecard number can mislead, such as a one-time gain, a
-          return lifted by borrowing, or an average dominated by a few large companies. A colored
-          dot marks the checks that flagged something for this {section}. Write your own read, and
-          use Explain using AI when you want help.
-        </p>
         <QualitativeBlock
           section={section}
           scopeKey={group}

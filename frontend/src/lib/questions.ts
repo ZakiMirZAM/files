@@ -8,26 +8,26 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "econ.fomo", text: "Is a fear-of-missing-out mentality present in the broader market right now?" },
         { id: "econ.amateur_sentiment", text: "How would you describe amateur investor sentiment?" },
         { id: "econ.new_era", text: "Is there a 'new era economy' mentality at play, and what's driving it?" },
-        { id: "econ.psych_spectrum", text: "Overconfidence, pessimism, optimism, new-era mindset — which dominates and where?" },
+        { id: "econ.psych_spectrum", text: "Overconfidence, pessimism, optimism, new-era mindset, which dominates and where?" },
         { id: "econ.risk_perception", text: "How does the general public perceive risk today?" },
         { id: "econ.news_psych", text: "Is news reporting psychology skewing positive or negative? Where?" },
-        { id: "econ.recovery_euphoria", text: "Is today's optimism rooted in a long recovery from war, a past recession, or a prior crash, and is that history being read as proof the good times will keep going? (Dalio, Mastering the Market Cycle)" },
-        { id: "econ.visible_winners", text: "Are a handful of highly visible winners (star stocks, sectors, or founders) held up as proof the whole market will keep rising? (Shiller, Irrational Exuberance)" },
-        { id: "econ.permanent_prosperity", text: "Is there a belief in permanent prosperity, that recessions and bear markets are a thing of the past? (Shiller, Irrational Exuberance)" },
-        { id: "econ.herd", text: "How strong is herd behavior right now, with buyers piling in mainly because everyone else is buying? (Shiller; Nofsinger)" },
-        { id: "econ.valuation_vs_fundamentals", text: "Are prices being set by story and momentum rather than fundamentals like earnings, cash flow, and reasonable valuations? (Nofsinger, The Psychology of Investing)" },
-        { id: "econ.greed_to_fear", text: "If a first real market decline hit, how fast could the mood flip from greed to fear, and what would signal that the turn has begun? (Dalio, Mastering the Market Cycle)" },
+        { id: "econ.recovery_euphoria", text: "Is today's optimism rooted in a long recovery from war, a past recession, or a prior crash, and is that history being read as proof the good times will keep going?" },
+        { id: "econ.visible_winners", text: "Are a handful of highly visible winners (star stocks, sectors, or founders) held up as proof the whole market will keep rising?" },
+        { id: "econ.permanent_prosperity", text: "Is there a belief in permanent prosperity, that recessions and bear markets are a thing of the past?" },
+        { id: "econ.herd", text: "How strong is herd behavior right now, with buyers piling in mainly because everyone else is buying?" },
+        { id: "econ.valuation_vs_fundamentals", text: "Are prices being set by story and momentum rather than fundamentals like earnings, cash flow, and reasonable valuations?" },
+        { id: "econ.greed_to_fear", text: "If a first real market decline hit, how fast could the mood flip from greed to fear, and what would signal that the turn has begun?" },
       ],
     },
     {
       title: "Credit & Debt",
       questions: [
         { id: "econ.debt_quality", text: "What's the quality of debt currently being financed?" },
-        { id: "econ.leverage_personal", text: "Overall leverage — Personal credit: how stretched is the consumer?" },
-        { id: "econ.leverage_private", text: "Overall leverage — Private credit: where are the bubbles?" },
-        { id: "econ.leverage_government", text: "Overall leverage — Government credit: which sovereigns are at risk?" },
-        { id: "econ.leverage_corporate", text: "Overall leverage — Company / industrial credit: who's over-levered?" },
-        { id: "econ.tightening_into_debt", text: "Is the central bank raising interest rates into an economy already carrying heavy debt across companies (especially the bubble's hot names), households, and bank loans written (often at record highs or rising quickly), partly to fight inflation that the boom itself helped create? (Dalio, Mastering the Market Cycle)" },
+        { id: "econ.leverage_personal", text: "Overall leverage, Personal credit: how stretched is the consumer?" },
+        { id: "econ.leverage_private", text: "Overall leverage, Private credit: where are the bubbles?" },
+        { id: "econ.leverage_government", text: "Overall leverage, Government credit: which sovereigns are at risk?" },
+        { id: "econ.leverage_corporate", text: "Overall leverage, Company / industrial credit: who's over-levered?" },
+        { id: "econ.tightening_into_debt", text: "Is the central bank raising interest rates into an economy already carrying heavy debt across companies (especially the bubble's hot names), households, and bank loans written (often at record highs or rising quickly), partly to fight inflation that the boom itself helped create?" },
         { id: "econ.bank_loans_health", text: "If bank loans are high or increasing quickly, are the loans being written healthy (sound credit standards, solid borrowers and collateral) or is weak credit being extended on easy terms? Weigh the evidence, staying skeptical without assuming the worst." },
       ],
     },
@@ -75,10 +75,10 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       ],
     },
     {
-      title: "Productive vs unproductive credit — Dalio, Big Debt Crises, Part 1",
+      title: "Productive vs unproductive credit",
       questions: [
-        { id: "econ.dalio_credit.1_1", text: "Of the credit currently being extended in this economy or sector, what proportion is financing assets that will themselves generate enough future income to repay the loan, versus assets that produce no income stream and can only be repaid by selling the asset or borrowing again? This is Dalio's central test, and it matters because credit financing income-producing capacity allocates resources well and benefits both lender and borrower, while credit financing non-income-producing assets means repayment depends entirely on rising asset prices or fresh borrowing, which is the structural setup for a bust." },
-        { id: "econ.dalio_credit.1_2", text: "When you trace the specific use of the borrowed money, is it funding something whose lifetime economic benefit exceeds its full cost even if part of the loan is eventually written down, or is it funding consumption and speculation with no durable return? Ask this because, as Dalio's subway case shows, a project can have its debt written down 50% and still be a good use of credit if the asset delivers utility worth more than the loss spread over its life. The structural question is not \"will every loan be repaid\" but \"does the underlying asset create real economic value per dollar of cost.\"" },
+        { id: "econ.dalio_credit.1_1", text: "Of the credit currently being extended in this economy or sector, what proportion is financing assets that will themselves generate enough future income to repay the loan, versus assets that produce no income stream and can only be repaid by selling the asset or borrowing again? This is the central test, and it matters because credit financing income-producing capacity allocates resources well and benefits both lender and borrower, while credit financing non-income-producing assets means repayment depends entirely on rising asset prices or fresh borrowing, which is the structural setup for a bust." },
+        { id: "econ.dalio_credit.1_2", text: "When you trace the specific use of the borrowed money, is it funding something whose lifetime economic benefit exceeds its full cost even if part of the loan is eventually written down, or is it funding consumption and speculation with no durable return? Ask this because a project can have its debt written down 50% and still be a good use of credit if the asset delivers utility worth more than the loss spread over its life. The structural question is not \"will every loan be repaid\" but \"does the underlying asset create real economic value per dollar of cost.\"" },
         { id: "econ.dalio_credit.1_3", text: "Is total debt growing faster than the income available to service it, meaning borrowing is lifting spending and incomes above the economy's consistent productivity growth rate? This matters because the gap between debt-fueled spending and underlying productivity growth is the mechanism that eventually forces income below the cost of the loans. The structural cause to identify is whether the current level of activity is self-funded by earned income or is being borrowed forward from the future." },
         { id: "econ.dalio_credit.1_4", text: "How tight or loose are current lending standards: do lenders require near-certainty of repayment, or are they extending credit on the assumption that above-trend growth continues indefinitely? Ask this because tight standards produce too little development while loose standards produce development plus future debt problems that erase the benefits, and because policymakers and lenders systematically drift loose late in the cycle when near-term growth seems to justify it. Lending standards are the leading structural cause of whether credit stays productive." },
         { id: "econ.dalio_credit.1_5", text: "What share of the economy's or sector's growth is being driven by debt-financed building of fixed investment, real estate, and infrastructure, as opposed to recurring demand? This matters because the rate of building long-lived assets is not sustainable: when the office building or housing stock is finished, the spending and the jobs attached to it fall toward zero, and growth then depends on other demand. The structural vulnerability is a sector whose apparent productivity is really a one-time construction surge pulling demand forward." },
@@ -86,7 +86,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       ],
     },
     {
-      title: "Credit analysis of the economy — Pragmatist's Guide (Ch. 6, 10, 25) + Dalio overlay",
+      title: "Credit analysis of the economy",
       questions: [
         { id: "econ.credit_analysis.2_1", text: "(Macro context) Before analyzing any individual credit, what is the broad macro and market backdrop: which financing themes are currently in vogue (for example a business type suddenly favored for leveraged buyouts), and what is the supply-and-demand technical picture of how much uninvested cash sits with portfolio managers versus how many new financings are coming to market? Establish this first so you are reading each credit against the cycle rather than trying to be a global economist and a credit analyst at once, because the same credit metrics mean different things depending on liquidity conditions and issuance volume." },
         { id: "econ.credit_analysis.2_2", text: "(The borrower) What business lines is the entity in, where is it in its life cycle, which industry dynamics (price cutting, acquisition activity) are most influencing it, and what operating trends and ownership or management issues are present? Answer this because the qualitative position of the borrower determines how to interpret the financial metrics that follow, and because life-cycle stage and industry dynamics are structural causes of whether current cash flows are durable or about to turn." },
@@ -96,23 +96,23 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "econ.credit_analysis.2_6", text: "(Structure and ranking) Which entities actually issued the debt and hold the assets, where does your instrument rank (secured, unsecured, subordinated), and do covenants permit materially more debt to be placed senior to your position? This matters because two claims on the same enterprise can have very different recovery, and the structural subordination and covenant package is what determines your real position regardless of how strong the headline credit looks." },
         { id: "econ.credit_analysis.2_7", text: "(Event analysis) What upcoming events could change the credit (refinancing, maintenance covenant violation, sale, acquisition, IPO, dividend, or buyback), and for each, what is its probability, its likely impact on the security, who else would be involved, and the time frame? Lay these out as a decision tree because credit prices move on discrete events, and identifying the structural triggers in advance is what lets you react to breaking news rather than be surprised by it." },
         { id: "econ.credit_analysis.2_8", text: "(Relative value and decision) How do this credit's financial and operating metrics, pricing, and yield compare to relevant comparables and benchmarks, do the potential returns look attractive relative to the risks, and what would trigger a review of the decision (for example a 15% or greater move in the underlying or peer equity, or the passing of a thesis event)? Keep the credit-quality judgment and the relative-value judgment separate, because the central trap is letting a high yield or a low price substitute for the conclusion that the credit can fundamentally survive." },
-        { id: "econ.credit_analysis.2_9", text: "(Dalio overlay) Given everything above, which phase of the long-term debt cycle is the whole system in (early cycle, bubble, top, depression, beautiful deleveraging, pushing on a string, or normalization), is the aggregate debt in a currency policymakers control, and can losses be spread? Answer this last because the cycle phase is the structural context that tells you whether identical credit metrics are benign or dangerous, and because currency denomination and policy flexibility determine how a system-wide deleveraging actually resolves." },
+        { id: "econ.credit_analysis.2_9", text: " Given everything above, which phase of the long-term debt cycle is the whole system in (early cycle, bubble, top, depression, beautiful deleveraging, pushing on a string, or normalization), is the aggregate debt in a currency policymakers control, and can losses be spread? Answer this last because the cycle phase is the structural context that tells you whether identical credit metrics are benign or dangerous, and because currency denomination and policy flexibility determine how a system-wide deleveraging actually resolves." },
       ],
     },
     {
-      title: "Sector-wide qualitative analysis — Porter (Investment Analysis Ch. 9) + Giroux (Capital Allocation) + Thorndike (The Outsiders)",
+      title: "Sector-wide qualitative analysis",
       questions: [
         { id: "econ.sector_qual.3_1", text: "(Industry structure first) Under the five competitive forces (rivalry, threat of entry, supplier power, buyer power, substitutes), how much profit does this industry's structure actually permit, and where specifically are the forces concentrated? Determine the competitive structure of the industry before looking at any single firm, because the forces set the profit ceiling for the entire sector: high entry barriers with weak buyer and supplier power allow returns above the cost of capital, while low barriers and strong buyer power compete returns away even when demand is growing." },
         { id: "econ.sector_qual.3_2", text: "(Strategy identification) What specific competitive strategy is each major firm employing, is it defensive (positioning to deflect the forces, for example investing in assets to lower cost or building a brand) or offensive (using strengths to reshape the forces, as Walmart used buying power on suppliers), and is that strategy reasonable for this industry? Ask this because the same industry rewards different strategies, and the structural question is whether each firm's chosen posture is matched to the competitive environment it actually faces." },
         { id: "econ.sector_qual.3_3", text: "(Generic strategy and its durability) Is the firm pursuing low-cost leadership or differentiation, and for a differentiator, is the differentiating factor truly unique, is it sustainable, what does it cost, and does the price premium it commands exceed that cost so the firm earns above-average returns? This matters because differentiation only creates value when the premium beats the extra cost of being unique, and the structural cause of durable sector returns is whether the advantage can be defended rather than merely claimed." },
         { id: "econ.sector_qual.3_4", text: "(Life-cycle fit) Does each firm's strategy fit the industry's current life-cycle stage, given that differentiation tends to work during early growth while cost leadership tends to win as the industry matures and firms shift to lowering cost? Evaluate the strategy over time rather than at a single point, because a differentiator in a maturing, cost-driven sector is structurally exposed, and the mismatch between strategy and life-cycle stage is a leading cause of deteriorating returns." },
-        { id: "econ.sector_qual.3_5", text: "(Capital allocation discipline) Across the firms in this sector, how does management deploy excess capital, and does the pattern match the sub-optimal average (buying back stock at the highs and stopping at the lows, raising capital expenditure in the mid-to-late expansion right before demand declines, and pursuing acquisitions that return below the cost of capital)? Ask this because, as Giroux's compounders show, organic growth rarely exceeds nominal GDP for long, so capital deployment becomes the dominant driver of long-run shareholder returns, and the structural separator within a sector is the disciplined allocator versus the serial value destroyer that repeats the same process mistakes." },
+        { id: "econ.sector_qual.3_5", text: "(Capital allocation discipline) Across the firms in this sector, how does management deploy excess capital, and does the pattern match the sub-optimal average (buying back stock at the highs and stopping at the lows, raising capital expenditure in the mid-to-late expansion right before demand declines, and pursuing acquisitions that return below the cost of capital)? Ask this because organic growth rarely exceeds nominal GDP for long, so capital deployment becomes the dominant driver of long-run shareholder returns, and the structural separator within a sector is the disciplined allocator versus the serial value destroyer that repeats the same process mistakes." },
         { id: "econ.sector_qual.3_6", text: "(Cash-return policy matched to cyclicality) Is each firm's mix of buybacks and dividends matched to the cyclicality of its cash flows: are secularly challenged or heavily cyclical firms avoiding buybacks in favor of special dividends, and is the ordinary dividend set at a level that will not need to be cut in the next downturn? This matters because a payout that looks fine at the top of a cycle becomes a forced cut when volatile cash flow falls, and the structural test is whether the capital-return policy survives a full cycle rather than only the good years." },
         { id: "econ.sector_qual.3_7", text: "(Hurdle rate) Does the firm apply a clear hurdle rate, set by the CEO and exceeding the blended cost of equity and debt, against which every use of cash (organic reinvestment, acquisitions, buybacks, dividends, debt paydown) must compete, and is the projected return high enough to compensate for the uncertainty of the estimates and the cost of raising the capital? Ask this because the hurdle rate is the structural mechanism that forces capital toward its highest-return use, and its presence or absence is what distinguishes value-creating allocation from cash sprayed into empire-building." },
       ],
     },
     {
-      title: "Conflicts, trade imbalances, economic geography — Erickson, Global Investing (Parts II, III, Conclusion)",
+      title: "Conflicts, trade imbalances, economic geography, Erickson, Global Investing (Parts II, III, Conclusion)",
       questions: [
         { id: "econ.geo_conflict.4_1", text: "(Sovereign quality screen) Does the country in which a business is domiciled clear a strict minimum sovereign credit rating set as a hard investment criterion, and does it carry high levels of sovereign or consumer debt or high or rapidly rising inflation? Use the sovereign rating as the single cleanest proxy for accumulated geopolitical, fiscal, and trade-imbalance risk, because a country's external and fiscal fragility shows up first in its sovereign debt and inflation profile, which is the structural cause of the currency and funding shocks that damage even good companies." },
         { id: "econ.geo_conflict.4_2", text: "(Concentration and conflict exposure) Is any business overly exposed to or reliant on a single region or country whose economy is at risk of war or other geopolitical events, and is the portfolio diversified enough that no one such event is decisive? Ask this because the book's response to conflict risk is portfolio construction rather than forecasting, given that no one predicts these events reliably, so the structural defense is removing single-point dependence rather than trying to time the shock." },
@@ -125,14 +125,14 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Valuation Inputs, Liquidity & Reflexivity",
       questions: [
-        { id: "econ.implied_erp", text: "Is the forward (implied) equity risk premium above or below its long-run history, and does that make equities cheap or expensive versus bonds right now? (Damodaran, Investment Valuation Ch.7)" },
-        { id: "econ.terminal_ceiling", text: "What is nominal GDP growth this cycle, and therefore the hard ceiling on any company's perpetual-growth assumption? (Damodaran Ch.15)" },
+        { id: "econ.implied_erp", text: "Is the forward (implied) equity risk premium above or below its long-run history, and does that make equities cheap or expensive versus bonds right now?" },
+        { id: "econ.terminal_ceiling", text: "What is nominal GDP growth this cycle, and therefore the hard ceiling on any company's perpetual-growth assumption?" },
         { id: "econ.real_rates", text: "Are real (inflation-adjusted) yields positive or negative, and what does that do to long-duration equity valuations?" },
         { id: "econ.cb_liquidity", text: "Is the central bank expanding or draining liquidity (QE/QT, reserves, RRP, TGA), and how close are funding markets to stress?" },
         { id: "econ.fiscal_dominance", text: "Is monetary policy becoming subordinate to financing government deficits (fiscal dominance), and what does that imply for inflation and the currency?" },
         { id: "econ.reflexivity", text: "Where are price trends actively changing the fundamentals they reflect (credit-fuelled asset booms, momentum financing), setting up a self-reinforcing loop that later reverses? (Soros, Alchemy of Finance)" },
-        { id: "econ.big_market_macro", text: "Which 'everyone wins' themes (AI, EV, GLP-1) are attracting aggregate capital that cannot collectively earn its cost of capital? (Damodaran, Narrative and Numbers: the big-market delusion)" },
-        { id: "econ.anchoring_macro", text: "Is the market anchored to a recent index level or narrative such that incremental news is being misframed? (Nofsinger, Psychology of Investing)" },
+        { id: "econ.big_market_macro", text: "Which 'everyone wins' themes (AI, EV, GLP-1) are attracting aggregate capital that cannot collectively earn its cost of capital?" },
+        { id: "econ.anchoring_macro", text: "Is the market anchored to a recent index level or narrative such that incremental news is being misframed?" },
       ],
     },
     {
@@ -237,19 +237,19 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "The Credit Cycle & Condition",
       questions: [
-        { id: "credit.cycle_stage", text: "Where in the credit cycle are we: early expansion (standards easing, spreads narrowing), late boom (record loan growth, thin spreads, lax underwriting), turn (standards tightening, spreads widening), or crunch (credit contracting, defaults rising)? Ziegel: easy credit late in a boom funds the very assets that later default." },
+        { id: "credit.cycle_stage", text: "Where in the credit cycle are we: early expansion (standards easing, spreads narrowing), late boom (record loan growth, thin spreads, lax underwriting), turn (standards tightening, spreads widening), or crunch (credit contracting, defaults rising)? Easy credit late in a boom funds the very assets that later default." },
         { id: "credit.underwriting_quality", text: "Is loan growth being driven by healthy demand and sound underwriting, or by loosening credit standards? A record or fast-rising loan level is not proof of trouble by itself; the quality and the rate of change matter more than the level. Stay skeptical without assuming the worst." },
-        { id: "credit.standards_direction", text: "What is the Senior Loan Officer survey saying about the direction of lending standards, and does that lead the loan-growth and delinquency data by the several quarters Ziegel expects?" },
-        { id: "credit.condition_for_obligors", text: "Given the macro 'Condition' (the third of Ziegel's five C's), how does the current credit environment expand or constrain the debt capacity of the average corporate obligor you might analyze?" },
+        { id: "credit.standards_direction", text: "What is the Senior Loan Officer survey saying about the direction of lending standards, and does that lead the loan-growth and delinquency data by the several quarters the credit cycle implies?" },
+        { id: "credit.condition_for_obligors", text: "Given the macro 'Condition' (the third of the five C's), how does the current credit environment expand or constrain the debt capacity of the average corporate obligor you might analyze?" },
       ],
     },
     {
       title: "Spreads, Default Risk & Confidence",
       questions: [
-        { id: "credit.spread_signal", text: "What are high-yield and investment-grade spreads pricing in: complacency (very tight), normal compensation, or fear (blowing out)? Ziegel treats the spread as the market's real-time risk rating; where is it in its historical range?" },
-        { id: "credit.spread_migration", text: "Is stress confined to high-yield, or is it migrating up the quality ladder toward investment grade and the BBB-/Baa3 borderline that marks Ziegel's investment-grade cutoff?" },
+        { id: "credit.spread_signal", text: "What are high-yield and investment-grade spreads pricing in: complacency (very tight), normal compensation, or fear (blowing out)? The spread is the market's real-time risk rating; where is it in its historical range?" },
+        { id: "credit.spread_migration", text: "Is stress confined to high-yield, or is it migrating up the quality ladder toward investment grade and the BBB-/Baa3 borderline that marks the investment-grade cutoff?" },
         { id: "credit.spread_vs_realised", text: "Do market-priced risk (spreads) and realised deterioration (delinquencies, charge-offs) agree, or is one leading the other, and which do you trust more right now?" },
-        { id: "credit.confidence_liquidity", text: "Is there any sign of the confidence/liquidity channel Ziegel calls the dominant bank risk (deposit outflows, funding-market stress, a rising financial-stress index) that could turn a solvency worry into a run?" },
+        { id: "credit.confidence_liquidity", text: "Is there any sign of the confidence/liquidity channel that is the dominant bank risk (deposit outflows, funding-market stress, a rising financial-stress index) that could turn a solvency worry into a run?" },
       ],
     },
     {
@@ -257,7 +257,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       questions: [
         { id: "credit.asset_quality", text: "Are delinquencies and net charge-offs still low, or beginning to rise even while loan totals keep growing? Rising losses beneath a still-growing book is an early warning that the cycle is about to turn down." },
         { id: "credit.capital_adequacy", text: "Is bank capital (equity-to-assets, Tier-1) adequate for the risk in the book? Reserves cover expected loss; capital covers unexpected loss (the Basel distinction); is the cushion sized for a downturn?" },
-        { id: "credit.concentration", text: "Where is concentration building: a single sector (CRE, as in the 1990s failures), geography, or borrower type? Ziegel calls concentration 'perhaps the single most significant issue in credit-risk management.'" },
+        { id: "credit.concentration", text: "Where is concentration building: a single sector (CRE, as in the 1990s failures), geography, or borrower type? Concentration is 'perhaps the single most significant issue in credit-risk management.'" },
         { id: "credit.margin_and_funding", text: "Is the net interest margin healthy enough to absorb loan losses and fund the equity return, and is the deposit funding base stable rather than flighty?" },
         { id: "credit.shadow_and_nonbank", text: "Is credit migrating from banks to non-bank lenders (private credit, securitization/'originate-and-distribute'), so the bank data understates true system leverage, the shadow-banking blind spot behind 2008?" },
       ],
@@ -270,7 +270,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       questions: [
         { id: "sec.capital_flow", text: "Where is capital flowing into / out of this sector right now, and why?" },
         { id: "sec.share_of_sp500", text: "What share of the S&P 500 (or relevant benchmark) does the sector represent, and is that share rising or falling?" },
-        { id: "sec.fund_positioning", text: "How are large institutional funds positioned in this sector — overweight, underweight, or neutral?" },
+        { id: "sec.fund_positioning", text: "How are large institutional funds positioned in this sector, overweight, underweight, or neutral?" },
       ],
     },
     {
@@ -295,7 +295,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       title: "Profitability & Quality",
       questions: [
         { id: "sec.aggregate_roic", text: "Does the sector earn its cost of capital in aggregate? Which industries inside the sector drag the average?" },
-        { id: "sec.margin_trend", text: "Are aggregate margins expanding, compressing, or holding flat — and what's driving the trend?" },
+        { id: "sec.margin_trend", text: "Are aggregate margins expanding, compressing, or holding flat, and what's driving the trend?" },
         { id: "sec.dispersion", text: "How wide is the dispersion between best and worst performers within the sector?" },
       ],
     },
@@ -304,7 +304,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       questions: [
         { id: "sec.sentiment", text: "How does sell-side and retail sentiment toward the sector compare to the fundamentals?" },
         { id: "sec.short_interest", text: "What does short interest look like across the sector?" },
-        { id: "sec.contrarian", text: "Is there a contrarian opportunity here — sector hated, but fundamentals improving?" },
+        { id: "sec.contrarian", text: "Is there a contrarian opportunity here, sector hated, but fundamentals improving?" },
       ],
     },
     {
@@ -321,25 +321,76 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
   ],
 
   industry: [
+    // Sits under the strategic-group map. Drawn from how Porter actually
+    // interrogates a map in Competitive Strategy Ch.7 and Ch.2: the axes are a
+    // hypothesis, mobility barriers are the engine, empty space is not automatically
+    // an opportunity, and a profit gap between groups means something different from
+    // a profit gap inside one. Each question is multi-part on purpose. A question you
+    // can close with yes or no teaches nothing.
+    {
+      title: "Strategic Groups",
+      questions: [
+        {
+          id: "ind.sg_axes",
+          text: "The map splits this industry on operating margin and company size, because those two are available for every listed company. Are they the right two here? The test is whether the axes reflect the barriers that actually stop a company moving between positions. In soft drinks those barriers are brand and distribution. In banking they are regulatory capital and the deposit franchise. Name the two dimensions you think this industry really competes on, say whether margin and size are standing in for them or missing them, and describe what the map would look like if you could redraw it on the dimensions you named.",
+        },
+        {
+          id: "ind.sg_barriers",
+          text: "Pick the most profitable group on the map and answer the only question that matters about it: what exactly stops a company in a weaker group from moving into it? Be specific rather than saying the barriers are high. State what it would cost, how many years it would take, and whether the companies already inside could retaliate faster than a newcomer could earn back the cost of the move. Then say whether the barrier is built from assets, which can be bought, or from capability, which can only be accumulated. The second kind lasts.",
+        },
+        {
+          id: "ind.sg_between_vs_within",
+          text: "Compare the profit gap BETWEEN groups with the profit gaps INSIDE a single group. They mean different things. A gap between groups that persists for years is structural, and it tells you the barriers are real. A gap between two companies in the SAME group is usually scale, entry timing, or simply better management. Work out which one you are looking at here, and explain why it matters: a structural advantage survives, and an execution advantage can be copied or lost when the person responsible leaves.",
+        },
+        {
+          id: "ind.sg_empty_space",
+          text: "Find an empty region of the map, a combination of margin and scale that no company in this industry occupies. Now resist the obvious conclusion. Empty space is a hypothesis, not an opportunity. Ask three things. Has anyone tried this position and failed, which would make it a graveyard rather than a gap? Is the combination internally contradictory, for example demanding the lowest cost base and the highest service level at once? Or is it empty only because the technology or the customer that would make it viable does not exist yet, which would make it a leading indicator rather than a dead end?",
+        },
+        {
+          id: "ind.sg_rivalry",
+          text: "Which groups on this map are actually fighting each other, and which are simply coexisting? The test is not how close they sit on the chart, it is whether they sell to the same customer. Two groups aimed at different buyers can look adjacent and barely compete. Two groups aimed at the same buyer while competing in very different ways are the most dangerous pairing there is, because each side misreads the other's moves and the response escalates. Identify where the real fight is in this industry, and say which company is standing closest to it.",
+        },
+        {
+          id: "ind.sg_movement",
+          text: "A snapshot cannot show drift, so reconstruct it. Where were these companies five years ago, and which direction are they moving? A company slowly raising its service level, broadening distribution and investing in brand is climbing toward a better protected group and will usually pay for that with a temporary dip in profitability. A company cutting service and competing harder on price is sliding the other way. Name a company here that is moving, say which group it is moving toward, and judge whether it can actually reach the destination or is simply leaving the position it had.",
+        },
+        {
+          id: "ind.sg_stuck",
+          text: "Look for a company with no coherent position: moderate margin, moderate scale, moderate everything, sitting in the middle of the map rather than at an edge. The diagnosis is blunt, that a company failing to commit to either cost leadership or genuine differentiation is stuck in the middle and close to guaranteed poor returns, because it cannot take the price-driven customer from the cost leader and cannot take the premium customer from the differentiator. Ask the deciding question: is there any customer this company serves better than anyone else? If the honest answer is that it serves everyone adequately, you have found the trap.",
+        },
+        {
+          id: "ind.sg_convergence",
+          text: "Are the groups in this industry pulling apart or collapsing into each other? Convergence is the dangerous case. When formerly distinct groups start chasing the same customer with increasingly similar strategies, rivalry intensifies and margins compress across the whole industry. It showed up in the airlines years before it showed up in the earnings, as low-cost carriers added networks and full-service carriers stripped out everything they could. Decide which way this industry is heading, name the evidence you are using, and say what it should do to the terminal growth and terminal margin you would be willing to assume in a valuation.",
+        },
+        {
+          id: "ind.sg_valuation",
+          text: "Turn the map into two numbers. A discounted cash flow needs to know how far a company's returns sit above its cost of capital, and how long they stay there. Barrier height sets the duration, and position inside the group sets the size of the spread. So for the company you care about most in this industry: how many years of excess return does its group membership actually justify, and what happens to that number if the barrier you identified earlier turns out to be weaker than you think? A company you cannot defend on this question does not deserve a long competitive advantage period, whatever its current margin looks like.",
+        },
+        {
+          id: "ind.sg_remap",
+          text: "Change the company count on the map and watch what moves. The medians that split the quadrants are computed over whichever companies are being shown, so widening the set can push a company from one group into another. Map the same industry more than one way before trusting any of it. Do that here, and report what survived: which companies stayed in the same group no matter how you drew it, and which ones jumped. The ones that stayed put are the real structure. The ones that jumped were an artifact of where you drew the line.",
+        },
+      ],
+    },
     {
       title: "Investor Psychology",
       questions: [
         { id: "ind.investor_psych", text: "Describe the psychology of investors who invest within this industry." },
-        { id: "ind.reputability", text: "How reputable and likable is the industry — does it project clear core values?" },
+        { id: "ind.reputability", text: "How reputable and likable is the industry, does it project clear core values?" },
         { id: "ind.management_mindsets", text: "What's the mindset of management at the highest market-cap companies in the industry?" },
       ],
     },
     {
       title: "ESG & Sustainability",
       questions: [
-        { id: "ind.esg", text: "ESG analysis (especially relevant for oil & gas, tech) — strengths and risks?" },
+        { id: "ind.esg", text: "ESG analysis (especially relevant for oil & gas, tech), strengths and risks?" },
       ],
     },
     {
       title: "Strategic Position",
       questions: [
         { id: "ind.swot", text: "SWOT analysis of the industry: strengths, weaknesses, opportunities, threats." },
-        { id: "ind.why_growth", text: "Who, what, where, when, why, how, and what significance — for why this industry could be the fastest-growing consistently in the future?" },
+        { id: "ind.why_growth", text: "Who, what, where, when, why, how, and what significance, for why this industry could be the fastest-growing consistently in the future?" },
         { id: "ind.innovations", text: "What innovations could affect the industry?" },
         { id: "ind.cross_industry", text: "How do other industries affect this one? Which industry has the most impact on it?" },
       ],
@@ -355,7 +406,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Money Flow",
       questions: [
-        { id: "ind.growth_leader", text: "Which industry has the highest growth currently — and in the future? What could stop that growth?" },
+        { id: "ind.growth_leader", text: "Which industry has the highest growth currently, and in the future? What could stop that growth?" },
         { id: "ind.capital_concentration", text: "Which industry has the most money currently, and which will have the most money in the future?" },
       ],
     },
@@ -363,7 +414,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       title: "Industry Mechanics & KPIs",
       questions: [
         { id: "ind.kpi", text: "What single industry-specific operating metric best predicts returns here (same-store sales, ARPU and churn, book-to-bill, RevPAR, FFO, load factor, net interest margin), and what is it doing?" },
-        { id: "ind.moat_mechanism", text: "Is the industry protected by scale economies, customer captivity (habit, switching, search costs), or proprietary technology, or merely by incumbency? (Greenwald)" },
+        { id: "ind.moat_mechanism", text: "Is the industry protected by scale economies, customer captivity (habit, switching, search costs), or proprietary technology, or merely by incumbency?" },
         { id: "ind.lifecycle_stage", text: "What life-cycle stage is the industry in (emerging, growth, shakeout, mature, decline), and what does that imply for sustainable margins and terminal growth?" },
         { id: "ind.cyclicality", text: "How cyclical is demand, what is current capacity utilization, and are current earnings above or below mid-cycle?" },
         { id: "ind.value_capture", text: "Which segment of the industry captures the most economic profit, and why?" },
@@ -390,8 +441,8 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Relative Valuation Discipline",
       questions: [
-        { id: "comp2.companion_var", text: "After adjusting each multiple for its companion variable (P/E for growth, P/B for ROE, EV/EBITDA for ROIC and reinvestment, P/S for margin), is this name actually cheaper than peers or just lower quality? (Damodaran, Investment Valuation Ch.17-20)" },
-        { id: "comp2.relative_vs_absolute", text: "Is the whole peer set rich or cheap versus its own history, so that 'cheapest in the group' might still be overvalued? (Damodaran Ch.17)" },
+        { id: "comp2.companion_var", text: "After adjusting each multiple for its companion variable (P/E for growth, P/B for ROE, EV/EBITDA for ROIC and reinvestment, P/S for margin), is this name actually cheaper than peers or just lower quality?" },
+        { id: "comp2.relative_vs_absolute", text: "Is the whole peer set rich or cheap versus its own history, so that 'cheapest in the group' might still be overvalued?" },
         { id: "comp2.comp_validity", text: "Are these truly comparable in risk, growth, and margin, or just the same industry code? Would size and geography tiering change the set? (Rosenbaum & Pearl)" },
         { id: "comp2.forward_basis", text: "On forward (not just trailing) estimates, does the ranking change?" },
         { id: "comp2.discount_reason", text: "Why does the market assign this name a discount or premium versus peers: fundamentals, or neglect and sentiment? (Tilson & Heins, The Art of Value Investing)" },
@@ -401,9 +452,9 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Relative Quality, Moat & Resilience",
       questions: [
-        { id: "comp2.low_cost", text: "Which company is the low-cost producer, and how durable is that cost gap? (Greenwald)" },
+        { id: "comp2.low_cost", text: "Which company is the low-cost producer, and how durable is that cost gap?" },
         { id: "comp2.relative_moat", text: "Which competitor has the widest moat, and is it widening or narrowing relative to the others?" },
-        { id: "comp2.relative_capital", text: "Which management team has the best incremental-ROIC and buyback-at-a-discount record among the peers? (Thorndike, The Outsiders)" },
+        { id: "comp2.relative_capital", text: "Which management team has the best incremental-ROIC and buyback-at-a-discount record among the peers?" },
         { id: "comp2.relative_eq", text: "Whose earnings are the highest quality among the peers (operating cash flow versus net income, accruals)?" },
         { id: "comp2.relative_balance", text: "Who survives a downturn best (net debt to EBITDA, covenant headroom, maturity wall) among the peers?" },
         { id: "comp2.share_shift", text: "Who is gaining versus losing market share within the peer set, and is the shift accelerating?" },
@@ -470,7 +521,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "ind.fast_change", text: "Is it in a fast-changing industry? (If so, the moat is harder to defend.)" },
         { id: "ind.copyable", text: "Can competitors easily replicate the company's improvements?" },
         { id: "ind.entry_obstacles", text: "Are there obstacles that make it tough for new companies to enter?" },
-        { id: "ind.unique_asset", text: "Does the business have something no one else has — or can copy, take away, or get in the future? Can these advantages be translated into business value?" },
+        { id: "ind.unique_asset", text: "Does the business have something no one else has, or can copy, take away, or get in the future? Can these advantages be translated into business value?" },
       ],
     },
     {
@@ -489,11 +540,11 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     // multi-part, because a question that can be closed with yes or no teaches
     // nothing. The chart answers "what did they do". These ask "what does it mean".
     {
-      title: "Capital Allocation — Giroux (Capital Allocation) + Thorndike (The Outsiders) + Damodaran (Applied Corporate Finance)",
+      title: "Capital Allocation",
       questions: [
         {
           id: "ind.capalloc_drift",
-          text: "Read the drift, not the level. Over the years shown, which use of cash grew as a share of operating cash flow and which shrank? Now put that next to the return on invested capital over the same period. Giroux's finding is that companies raising capital spending faster than their peers tend to deliver weaker earnings growth and weaker stock returns, so rising investment does not justify itself. State what this company earned on the capital it deployed, and say whether the trend in that return supports or contradicts the trend in the spending.",
+          text: "Read the drift, not the level. Over the years shown, which use of cash grew as a share of operating cash flow and which shrank? Now put that next to the return on invested capital over the same period. The finding is that companies raising capital spending faster than their peers tend to deliver weaker earnings growth and weaker stock returns, so rising investment does not justify itself. State what this company earned on the capital it deployed, and say whether the trend in that return supports or contradicts the trend in the spending.",
         },
         {
           id: "ind.capalloc_lifecycle",
@@ -509,7 +560,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         },
         {
           id: "ind.capalloc_buyback_net",
-          text: "Separate gross buybacks from net buybacks. Subtract the stock issued to employees as compensation, then ask the only question that matters: did the share count actually fall, and by how much? Giroux is blunt that the net figure is the honest one. A company repurchasing three billion while issuing two and a half billion in stock compensation has returned almost nothing to long term holders, however aggressive the buyback headline looks. What is the true net repurchase here, and does management's own language acknowledge the difference?",
+          text: "Separate gross buybacks from net buybacks. Subtract the stock issued to employees as compensation, then ask the only question that matters: did the share count actually fall, and by how much? The net figure is the honest one. A company repurchasing three billion while issuing two and a half billion in stock compensation has returned almost nothing to long term holders, however aggressive the buyback headline looks. What is the true net repurchase here, and does management's own language acknowledge the difference?",
         },
         {
           id: "ind.capalloc_buyback_timing",
@@ -533,17 +584,17 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         },
         {
           id: "ind.capalloc_retained",
-          text: "Apply Buffett's test to the whole record. Over the period shown, has the company created at least one dollar of market value for every dollar of earnings it retained rather than paid out? Work it through rather than guess. If the answer is no, then the retained earnings would have been worth more in the hands of shareholders than in the hands of management, and that is the single most damning verdict available in capital allocation. If the answer is yes, say which use of cash did the work.",
+          text: "Apply the one-dollar test to the whole record. Over the period shown, has the company created at least one dollar of market value for every dollar of earnings it retained rather than paid out? Work it through rather than guess. If the answer is no, then the retained earnings would have been worth more in the hands of shareholders than in the hands of management, and that is the single most damning verdict available in capital allocation. If the answer is yes, say which use of cash did the work.",
         },
       ],
     },
     {
       title: "Management Quality",
       questions: [
-        { id: "ind.mgmt_traits", text: "Is management proven — with integrity, talent, passion, hard work, brains, respect, and personal commitment?" },
+        { id: "ind.mgmt_traits", text: "Is management proven, with integrity, talent, passion, hard work, brains, respect, and personal commitment?" },
         { id: "ind.skill_allocation", text: "Is the company allocating workers and leaders based on skill? (Counter-example: Microsoft + Xbox.)" },
         { id: "ind.reinvestment", text: "How is the company reinvesting earnings? Evaluate 'what will they do with the money?' against 'what do we have now?'" },
-        { id: "ind.layoffs", text: "Is the company laying off workers — especially engineers and builders — without proven reasons?" },
+        { id: "ind.layoffs", text: "Is the company laying off workers, especially engineers and builders, without proven reasons?" },
       ],
     },
     {
@@ -565,7 +616,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       title: "Earnings Quality",
       questions: [
         { id: "ind.earning_power", text: "Can this company maintain above average levels of earning power and profitability within its respective industry. How?" },
-        { id: "ind.earnings_source", text: "Who, what, where, when, why, how, and what significance — how did earnings actually increase?" },
+        { id: "ind.earnings_source", text: "Who, what, where, when, why, how, and what significance, how did earnings actually increase?" },
       ],
     },
     {
@@ -591,7 +642,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "indiv.rev_practices", text: "Any related-party deals, bill-and-hold sales, or sell-in (to distributors) versus sell-through (to end users) revenue? (Schilit)" },
         { id: "indiv.auditor", text: "Has the auditor changed, has there been a restatement, or are internal-control weaknesses disclosed? (Fridson)" },
         { id: "indiv.smoothness", text: "Does it beat estimates by a penny every quarter (suspiciously smooth earnings), and what discretion enables that? (Fridson)" },
-        { id: "indiv.fcf_props", text: "Is reported free cash flow propped up by deferring maintenance capex, stretching payables, or factoring receivables? (Damodaran)" },
+        { id: "indiv.fcf_props", text: "Is reported free cash flow propped up by deferring maintenance capex, stretching payables, or factoring receivables?" },
       ],
     },
     {
@@ -605,10 +656,10 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Narrative & Expectations",
       questions: [
-        { id: "indiv.story_test", text: "Is the growth story possible (does it exceed its addressable market or beat GDP forever), plausible (consistent with margins, reinvestment, competition), and probable? (Damodaran, Narrative and Numbers)" },
+        { id: "indiv.story_test", text: "Is the growth story possible (does it exceed its addressable market or beat GDP forever), plausible (consistent with margins, reinvestment, competition), and probable?" },
         { id: "indiv.reverse_dcf", text: "What growth and margin does today's price imply (reverse DCF), and is that more or less optimistic than my own forecast? (Mauboussin & Rappaport, Expectations Investing)" },
-        { id: "indiv.narrative_break", text: "What single event or data point would break the narrative, and am I watching for it? (Damodaran)" },
-        { id: "indiv.big_market", text: "Does the story rely on a big market that many competitors are chasing, so the winners cannot all earn their cost of capital? (Damodaran)" },
+        { id: "indiv.narrative_break", text: "What single event or data point would break the narrative, and am I watching for it?" },
+        { id: "indiv.big_market", text: "Does the story rely on a big market that many competitors are chasing, so the winners cannot all earn their cost of capital?" },
       ],
     },
     {
@@ -616,7 +667,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       questions: [
         { id: "indiv.cust_concentration", text: "What share of revenue and profit is the top customer, and the top five, and what happens if one leaves? (Munger)" },
         { id: "indiv.supplier_dependence", text: "How dependent is the company on a single supplier, input, or contested supply-chain chokepoint? (Munger)" },
-        { id: "indiv.maint_capex", text: "Is this a low-reinvestment cash compounder (See's Candies) or a high-return but capital-hungry business (FlightSafety)? What is maintenance capex versus growth capex? (Buffett)" },
+        { id: "indiv.maint_capex", text: "Is this a low-reinvestment cash compounder (See's Candies) or a high-return but capital-hungry business (FlightSafety)? What is maintenance capex versus growth capex?" },
         { id: "indiv.refi_wall", text: "What is the debt-maturity wall and covenant headroom, and can the company self-fund through a downturn without dilution?" },
         { id: "indiv.downturn_coverage", text: "In a recession scenario, how far can EBIT fall before interest coverage breaks?" },
       ],
@@ -624,18 +675,18 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: "Process / Edge / Behavioral",
       questions: [
-        { id: "indiv.circle", text: "Is this within my circle of competence, or am I leaning on management's claims because I do not understand the business? (Buffett; Tilson & Heins)" },
+        { id: "indiv.circle", text: "Is this within my circle of competence, or am I leaning on management's claims because I do not understand the business?" },
         { id: "indiv.inefficiency", text: "What specific inefficiency am I exploiting (neglect, forced selling, complexity, time-horizon arbitrage), and why does it persist? (Tilson & Heins)" },
         { id: "indiv.premortem", text: "What would have to be true for this to be worth half the price, and double, and which is more likely?" },
         { id: "indiv.falsification", text: "What evidence would prove the thesis wrong, and have I pre-committed to act on it? (Munger)" },
-        { id: "indiv.anchoring", text: "Am I anchoring on the purchase price, a 52-week high, or a prior valuation instead of on intrinsic value? (Nofsinger)" },
-        { id: "indiv.biases", text: "Where might confirmation bias, overconfidence, or recency bias be distorting my read of this company? (Nofsinger; Munger)" },
+        { id: "indiv.anchoring", text: "Am I anchoring on the purchase price, a 52-week high, or a prior valuation instead of on intrinsic value?" },
+        { id: "indiv.biases", text: "Where might confirmation bias, overconfidence, or recency bias be distorting my read of this company?" },
         { id: "indiv.lollapalooza", text: "Is there a lollapalooza of reinforcing advantages (scale, captivity, brand, switching costs), or of reinforcing risks? (Munger)" },
         { id: "indiv.sell_discipline", text: "What is my predefined sell discipline and time horizon, and can I hold through multi-year underperformance? (Tilson & Heins)" },
-        { id: "indiv.bubble_overvalued", text: "Explain why this equity is overvalued based on investor behavior and statement trends (price and valuation climbing faster than revenue, earnings, and cash flow). Which of the bubble patterns below are at work? (Shiller; Dalio; Nofsinger)" },
-        { id: "indiv.bubble_narrative", text: "Is a 'new era' story driving the price: a belief in permanent prosperity, recovery euphoria after war or past recessions, and a few highly visible winners taken as proof the boom will last? (Shiller, Irrational Exuberance; Dalio)" },
-        { id: "indiv.bubble_psychology", text: "Are buyers acting on overconfidence, herd mentality, and fear of missing out (FOMO) so the price is set by the crowd rather than by fundamentals like earnings and cash flow? (Nofsinger, The Psychology of Investing; Shiller)" },
-        { id: "indiv.bubble_turn", text: "What could end the bubble: rising interest rates while companies and households already carry heavy debt, and a first market decline that flips the mood from greed to fear? (Dalio, Mastering the Market Cycle)" },
+        { id: "indiv.bubble_overvalued", text: "Explain why this equity is overvalued based on investor behavior and statement trends (price and valuation climbing faster than revenue, earnings, and cash flow). Which of the bubble patterns below are at work?" },
+        { id: "indiv.bubble_narrative", text: "Is a 'new era' story driving the price: a belief in permanent prosperity, recovery euphoria after war or past recessions, and a few highly visible winners taken as proof the boom will last?" },
+        { id: "indiv.bubble_psychology", text: "Are buyers acting on overconfidence, herd mentality, and fear of missing out (FOMO) so the price is set by the crowd rather than by fundamentals like earnings and cash flow?" },
+        { id: "indiv.bubble_turn", text: "What could end the bubble: rising interest rates while companies and households already carry heavy debt, and a first market decline that flips the mood from greed to fear?" },
       ],
     },
     {
@@ -726,14 +777,14 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "ind.cat.decay", text: "A low multiple can hide a business that is quietly dying rather than one that is briefly unloved. Is this company's cheap price masking a permanent decline, such as shrinking volumes, a worsening industry, or assets that lose value every year?" },
         { id: "ind.cat.asset_quality", text: "Buying a company below the worth of its assets works only when the assets are real and salable. If the case for this company rests on the company's assets, are those assets liquid, honestly valued, and worth what the balance sheet claims?" },
         { id: "ind.cat.survival", text: "A thesis needs time to work, and heavy debt steals that time. Can this company survive a long downturn without a forced sale or dilution, and does the balance sheet leave the business enough room for the thesis to play out?" },
-        { id: "ind.cat.downside", text: "Marks argues that avoiding losses matters more than reaching for gains. What is the realistic downside if the case for this company proves wrong, and how much would a buyer lose in that outcome?" },
+        { id: "ind.cat.downside", text: "Avoiding losses matters more than reaching for gains. What is the realistic downside if the case for this company proves wrong, and how much would a buyer lose in that outcome?" },
         { id: "ind.cat.falsifier", text: "A disciplined investor names the disproving evidence in advance. What single fact about this company, if you uncovered the fact, would convince you that the situation is a value trap rather than a bargain?" },
       ],
     },
   ],
 
-  // Final review — the exact self-assessment questions from the commentary on
-  // Chapter 20 of The Intelligent Investor (Graham/Zweig), grouped by Kahneman's
+  // Final review, the exact self-assessment questions from the commentary on
+  // Chapter 20 of The Intelligent Investor, grouped by Kahneman's
   // two factors of a good decision. Verbatim; the wording is the author's.
   final_review: [
     {

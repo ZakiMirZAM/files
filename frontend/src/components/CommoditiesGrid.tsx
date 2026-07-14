@@ -100,7 +100,7 @@ function CommodityCard({ commodity }: { commodity: Commodity }) {
           </p>
         </div>
         <div className="text-right">
-          <p className="font-mono text-sm text-gold">{latest ? fmt(latest.value) : "—"}</p>
+          <p className="font-mono text-sm text-gold">{latest ? fmt(latest.value) : "n/a"}</p>
           <p className={cn(
             "text-[0.65rem] font-mono",
             change >= 0 ? "text-gain" : "text-loss",

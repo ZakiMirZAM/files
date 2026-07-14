@@ -2,7 +2,7 @@
 const PAGE_W_PT = 595.28;
 const PAGE_H_PT = 841.89;
 const MARGIN_PT = 36;
-// Offscreen render width (~A4 at 96dpi) — .pdf-export-root CSS is tuned to it.
+// Offscreen render width (~A4 at 96dpi), .pdf-export-root CSS is tuned to it.
 const RENDER_WIDTH_PX = 794;
 
 export interface ExportPdfOptions {
@@ -20,7 +20,7 @@ export async function exportNoteToPdf(
   html: string,
   options: ExportPdfOptions = {},
 ): Promise<void> {
-  // Heavy libs load on demand — export is a rare action, keep them out of the main chunk.
+  // Heavy libs load on demand, export is a rare action, keep them out of the main chunk.
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"),
     import("html2canvas"),
@@ -53,7 +53,7 @@ export async function exportNoteToPdf(
     const pxPerPt = canvas.width / contentW;
     const pageHeightPx = Math.floor(contentH * pxPerPt);
 
-    // Fixed-height slicing — can cut a text line at a page boundary (accepted
+    // Fixed-height slicing, can cut a text line at a page boundary (accepted
     // v1 tradeoff; a whitespace-scan for safe break rows is a future upgrade).
     let renderedPx = 0;
     let page = 0;
@@ -95,7 +95,7 @@ async function inlineImages(
       try {
         img.src = await resolveImage(storageId);
       } catch {
-        // keep the original src — useCORS may still capture it
+        // keep the original src, useCORS may still capture it
       }
     }),
   );

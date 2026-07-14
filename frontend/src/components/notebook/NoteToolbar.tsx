@@ -20,7 +20,7 @@ interface NoteToolbarProps {
 }
 
 // Compact toolbar sized for the ~400px panel. Active states come from
-// useEditorState — @tiptap/react v3 no longer re-renders on every transaction,
+// useEditorState, @tiptap/react v3 no longer re-renders on every transaction,
 // so render-time editor.isActive() goes stale on selection-only changes.
 export function NoteToolbar({ editor }: NoteToolbarProps) {
   const s = useEditorState({

@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the stock simulator: currency conversion, portfolio
- * valuation, cost-basis math, and display formatting. No React, no network —
+ * valuation, cost-basis math, and display formatting. No React, no network , 
  * everything here is a deterministic function of its inputs so the core money
  * logic stays easy to reason about and test.
  */
@@ -161,32 +161,32 @@ const usdCompactFmt = new Intl.NumberFormat("en-US", {
 });
 
 export function formatUsd(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   return usdFmt.format(value);
 }
 
 export function formatUsdCompact(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   return usdCompactFmt.format(value);
 }
 
 /** Signed percent with a leading + on gains, e.g. "+6.21%" / "-1.10%". */
 export function formatSignedPct(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
 }
 
 /** Signed USD with a leading + on gains. */
 export function formatSignedUsd(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
   return `${sign}${usdFmt.format(value)}`;
 }
 
 /** Local-currency price (kept distinct from USD so non-USD names read honestly). */
 export function formatLocalPrice(value: number | null | undefined, currency: string): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -194,7 +194,7 @@ export function formatLocalPrice(value: number | null | undefined, currency: str
       maximumFractionDigits: 2,
     }).format(value);
   } catch {
-    // Unknown/invalid ISO currency code — fall back to a plain number + code.
+    // Unknown/invalid ISO currency code, fall back to a plain number + code.
     return `${value.toFixed(2)} ${currency}`;
   }
 }

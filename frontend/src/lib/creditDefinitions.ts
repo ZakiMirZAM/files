@@ -1,7 +1,7 @@
 // Credit & Banking definition library (metrics 1-17), grounded in Arnold
 // Ziegel's "Fundamentals of Credit and Credit Analysis". Mirrors
 // economicDefinitions.ts: the verbatim markdown for each metric is bundled from
-// src/content/credit/ via Vite's `?raw` import — nothing is retyped or
+// src/content/credit/ via Vite's `?raw` import, nothing is retyped or
 // paraphrased. Each entry maps to a backend metric by its exact `name`
 // (chartMetricName) so the live chart attaches inside the dropdown; when no
 // series is available the chart area shows a "data source pending" note and the

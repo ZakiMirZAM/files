@@ -40,7 +40,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T | null>
     }
     return (await res.json()) as T;
   } catch (err) {
-    console.warn(`[api] ${path} failed — falling back to mock data:`, err);
+    console.warn(`[api] ${path} failed, falling back to mock data:`, err);
     return null;
   }
 }
@@ -98,7 +98,7 @@ const CREDIT_BANKS_MOCK: SectionData = {
   section: "credit",
   scopeKey: "global",
   title: "Credit & Banking",
-  subtitle: "Simulated placeholder — live credit-cycle and banking data unavailable.",
+  subtitle: "Simulated placeholder, live credit-cycle and banking data unavailable.",
   metrics: [],
   recessionBands: [],
 };
@@ -119,7 +119,7 @@ export async function fetchSectors(): Promise<IndustryEntry[]> {
 
 /** Discriminated result for the scorecard/ranking panels: "empty" means the
  *  backend answered but has nothing for this scope (404), "error" means the
- *  request itself failed — so panels can offer a retry instead of vanishing. */
+ *  request itself failed, so panels can offer a retry instead of vanishing. */
 export type MetricsResult =
   | { status: "ok"; data: SectorMetricsData }
   | { status: "empty" }
@@ -162,7 +162,7 @@ export async function fetchSectorIndustryMetrics(sector: string): Promise<Metric
 }
 
 /** The scorecard at company level: the industry's top companies as columns,
- *  base scorecard metrics + the parent sector's lens as rows — each value is
+ *  base scorecard metrics + the parent sector's lens as rows, each value is
  *  that company's own number. Ticker symbols ride in the `sectors` field. */
 export async function fetchComparativeCompanyMetrics(
   industry: string,
@@ -203,9 +203,14 @@ export async function fetchIndustry(industry: string): Promise<SectionResult> {
 
 /** Porter strategic-group map for an industry (peer-median quadrants + badges).
  *  Returns null when the API is down or the industry lacks enough peers. */
-export async function fetchStrategicGroups(industry: string): Promise<StrategicGroups | null> {
+export async function fetchStrategicGroups(
+  industry: string,
+  limit = 20,
+): Promise<StrategicGroups | null> {
   const enc = encodeURIComponent(industry);
-  return await fetchJson<StrategicGroups>(`/api/industry/${enc}/strategic-groups`);
+  return await fetchJson<StrategicGroups>(
+    `/api/industry/${enc}/strategic-groups?limit=${limit}`,
+  );
 }
 
 export async function fetchSector(sector: string): Promise<SectionResult> {
@@ -243,13 +248,13 @@ export async function fetchIndividual(ticker: string): Promise<IndividualResult>
       return { status: "not_found", ticker: t };
     }
     if (!res.ok) {
-      console.warn(`[api] /api/individual/${t} returned ${res.status} — using mock`);
+      console.warn(`[api] /api/individual/${t} returned ${res.status}, using mock`);
       return { status: "api_down", mock: makeIndividualData(t) };
     }
     const data = (await res.json()) as SectionData;
     return { status: "ok", data };
   } catch (err) {
-    console.warn(`[api] /api/individual/${t} fetch failed — using mock`, err);
+    console.warn(`[api] /api/individual/${t} fetch failed, using mock`, err);
     return { status: "api_down", mock: makeIndividualData(t) };
   }
 }

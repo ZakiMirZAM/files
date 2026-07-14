@@ -25,7 +25,7 @@ const usd = (v: number): string =>
 
 /**
  * Collapsible price graph of the sector's SPDR index fund (XLK, XLF, ...). Closed
- * by default — the price line is supporting context, not the focus of the page —
+ * by default, the price line is supporting context, not the focus of the page , 
  * and styled to match the rest of the app's charts. Data comes from
  * /api/sector-etf/{sector}, server-cached for 15 minutes.
  */

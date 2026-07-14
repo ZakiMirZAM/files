@@ -9,13 +9,12 @@ import type { DefinitionSeries } from "../lib/individualSeries";
 
 interface CompanyScorecardTableProps {
   data: SectorMetricsData;
-  /** When set, the company (row) name becomes a link — e.g. to its detail page. */
+  /** When set, the company (row) name becomes a link, e.g. to its detail page. */
   getRowHref?: (ticker: string) => string;
   /** Surface-scoped resolver so metric headers open their definitions. */
   resolveDef?: (label: string) => number | undefined;
 }
 
-const UNIT_TAG: Record<string, string> = { $: "USD", "%": "percent", x: "ratio", d: "days", yrs: "years", b: "beta", n: "score", "#": "rank" };
 
 /** A cell's year-by-year history, if the API attached one (comparative only). */
 function cellHistory(col: SectorColumn | undefined, key: string): SectorCellPoint[] | undefined {
@@ -100,7 +99,7 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                 </th>
               ))}
             </tr>
-            {/* Metric header row — pinned just below the group row */}
+            {/* Metric header row, pinned just below the group row */}
             <tr>
               {data.metrics.map((met, i) => (
                 <th
@@ -123,9 +122,6 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                       {met.label}
                     </span>
                   )}
-                  <span className="block text-[0.65rem] font-mono text-white/25 uppercase tracking-wide mt-0.5">
-                    {UNIT_TAG[met.unit]}
-                  </span>
                 </th>
               ))}
             </tr>
@@ -162,7 +158,7 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                         key={met.key}
                         role="button"
                         tabIndex={0}
-                        title={hasHistory ? `${ticker} · ${met.label} — click for history` : met.definition}
+                        title={hasHistory ? `${ticker} · ${met.label}, click for history` : met.definition}
                         onClick={() => openCell(ticker, met, row)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -189,15 +185,8 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-t border-gold/10 text-[0.68rem] text-white/35">
-        <span>{data.universe}</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "rgba(127,184,124,0.45)" }} /> better
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "rgba(200,118,114,0.45)" }} /> worse
-        </span>
-        <span className="ml-auto font-mono">as of {data.asOf}</span>
+      <div className="flex items-center justify-end px-4 py-3 border-t border-gold/10 text-[0.68rem] text-white/35">
+        <span className="font-mono">as of {data.asOf}</span>
       </div>
     </div>
   );

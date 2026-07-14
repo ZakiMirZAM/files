@@ -124,7 +124,7 @@ export function QuestionField({
             <Check className="w-3 h-3" /> saved
           </span>
         )}
-        {status === "error" && <span className="text-loss">save failed — try again</span>}
+        {status === "error" && <span className="text-loss">save failed, try again</span>}
       </div>
     </div>
   );

@@ -71,7 +71,7 @@ export function DefinitionChart({ series, title }: DefinitionChartProps) {
       <div className="flex items-center justify-between gap-3 mb-2.5 flex-wrap">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-base text-gold tabular-nums">
-            {latest != null ? series.format(latest) : "—"}
+            {latest != null ? series.format(latest) : "n/a"}
           </span>
           {totalChange != null && (
             <span

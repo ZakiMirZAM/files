@@ -45,7 +45,7 @@ export function parseMarkdown(md: string): MdBlock[] {
     const raw = lines[i];
     const line = raw.trimEnd();
 
-    // Blank line — skip.
+    // Blank line, skip.
     if (line.trim() === "") {
       i++;
       continue;

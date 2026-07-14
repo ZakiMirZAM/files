@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 interface SectionHeaderProps {
   eyebrow: string;
   title: string;
-  /** Accepted for compatibility but intentionally not rendered — the flavor-text
+  /** Accepted for compatibility but intentionally not rendered, the flavor-text
    *  subtitles under section titles were removed as redundant. */
   subtitle?: string;
   actions?: ReactNode;

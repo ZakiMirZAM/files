@@ -17,7 +17,7 @@ const bn = (v: number | null | undefined): string => {
 
 /**
  * Net interest margin and the interest spread that drives bank profitability
- * (Damodaran, Investment Valuation, Ch.21). NIM = net interest income ÷ average
+ *. NIM = net interest income ÷ average
  * assets = asset yield − funding cost. Only renders for spread-based lenders.
  */
 export function BankProfitabilitySection({ bankProfitability: bp }: BankProfitabilitySectionProps) {
@@ -51,7 +51,7 @@ export function BankProfitabilitySection({ bankProfitability: bp }: BankProfitab
 
         {/* NIM trend */}
         <div className="lg:col-span-3 panel-soft p-5">
-          <p className="eyebrow mb-4">Net Interest Margin — history</p>
+          <p className="eyebrow mb-4">Net Interest Margin, history</p>
           {trend.length > 0 ? (
             <div className="flex items-end gap-1.5 h-40">
               {trend.map((r) => (

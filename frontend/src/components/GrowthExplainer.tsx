@@ -6,10 +6,10 @@ interface GrowthExplainerProps {
   defaultOpen?: boolean;
 }
 
-// Grounded in the vault (Damodaran, Investment Valuation Ch.11 and Figure 11.6)
+// Grounded in the vault
 // and humanizer-passed: no em dashes, no unclear pronoun references.
 const PARAS: string[] = [
-  "A growth rate can be read two ways, and this model shows both. The historical rate comes from a regression through every year of revenue the company has reported, which uses the whole record rather than two endpoints. The fundamental rate comes from what the company actually does: how much of its profit it puts back into the business, multiplied by the return it earns on that money. Damodaran's argument in Chapter 11 is that the fundamental rate is the sounder anchor, because it ties the growth to the reinvestment that has to pay for it.",
+  "A growth rate can be read two ways, and this model shows both. The historical rate comes from a regression through every year of revenue the company has reported, which uses the whole record rather than two endpoints. The fundamental rate comes from what the company actually does: how much of its profit it puts back into the business, multiplied by the return it earns on that money. The fundamental rate is the sounder anchor, because it ties the growth to the reinvestment that has to pay for it.",
   "The two rates rarely agree, and the gap is the useful part. A company growing faster than its reinvestment and returns can support is spending down an advantage rather than building one, and that gap is flagged here.",
   "There is a second-order effect most growth calculations miss. When a company earns a better return on the assets it already owns, that improvement adds growth on its own, without a single dollar of new investment. The model adds that efficiency term whenever the return on capital is rising.",
   "The life-cycle stage decides how the assumptions are set. Chapter 11 puts young growth at thirty to a hundred percent a year, high growth at ten to thirty, mature growth at five to fifteen, and stable growth at three to seven. A single ceiling would quietly clip every fast grower down to a mature company's speed, so the ceiling follows the stage instead. Whatever the stage, the terminal rate can never exceed the risk-free rate, because no company outgrows the economy forever.",

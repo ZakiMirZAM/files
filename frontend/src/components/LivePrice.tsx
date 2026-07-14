@@ -18,7 +18,7 @@ export function LivePrice({ ticker }: LivePriceProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [nextRefresh, setNextRefresh] = useState<number>(REFRESH_MS);
   // Bumped by manual refresh so the effect below re-runs, recreating the
-  // interval — otherwise the countdown display and the real timer drift apart.
+  // interval, otherwise the countdown display and the real timer drift apart.
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch the quote, called on mount + every 15min + on manual refresh
@@ -105,7 +105,7 @@ export function LivePrice({ ticker }: LivePriceProps) {
         <div>
           <p className="eyebrow mb-1 inline-flex items-center gap-2">
             <span className="inline-flex w-1.5 h-1.5 rounded-full bg-gain animate-pulse" />
-            Live · Yahoo Finance · {quote.exchange ?? "—"}
+            Live · Yahoo Finance · {quote.exchange ?? "n/a"}
           </p>
           <h2 className="font-display text-2xl md:text-3xl font-semibold text-white mt-1">
             {ticker} <span className="text-white/35 font-normal text-base">
@@ -164,16 +164,16 @@ export function LivePrice({ ticker }: LivePriceProps) {
       {/* Footer stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-5 border-t border-gold/10">
         <Stat label="Market cap" value={
-          quote.marketCap !== null ? formatCurrency(quote.marketCap) : "—"
+          quote.marketCap !== null ? formatCurrency(quote.marketCap) : "n/a"
         } />
         <Stat label="Volume" value={
-          quote.volume !== null ? quote.volume.toLocaleString() : "—"
+          quote.volume !== null ? quote.volume.toLocaleString() : "n/a"
         } />
         <Stat label="Day high" value={
-          quote.dayHigh !== null ? `$${quote.dayHigh.toFixed(2)}` : "—"
+          quote.dayHigh !== null ? `$${quote.dayHigh.toFixed(2)}` : "n/a"
         } />
         <Stat label="Day low" value={
-          quote.dayLow !== null ? `$${quote.dayLow.toFixed(2)}` : "—"
+          quote.dayLow !== null ? `$${quote.dayLow.toFixed(2)}` : "n/a"
         } />
       </div>
     </article>
@@ -184,7 +184,7 @@ function Range({
   low, high, current,
 }: { low: number | null; high: number | null; current: number | null }) {
   if (low === null || high === null) {
-    return <p className="text-white/40 text-sm">—</p>;
+    return <p className="text-white/40 text-sm">n/a</p>;
   }
   const pct = current !== null && high > low
     ? Math.max(0, Math.min(100, ((current - low) / (high - low)) * 100))

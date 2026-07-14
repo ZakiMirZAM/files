@@ -327,7 +327,7 @@ function HoldingsTable({
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-white/80">{formatShares(p.shares)}</td>
                   <td className="px-3 py-3 text-right font-mono text-white/70">
-                    {p.priced ? formatLocalPrice(p.priceLocal, p.currency) : "—"}
+                    {p.priced ? formatLocalPrice(p.priceLocal, p.currency) : "n/a"}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-white/90">{formatUsd(p.marketValueUsd)}</td>
                   <td className="px-3 py-3 text-right font-mono text-white/55">{weight.toFixed(1)}%</td>
@@ -338,7 +338,7 @@ function HoldingsTable({
                         <span className="block text-[0.7rem] opacity-80">{formatSignedPct(p.unrealizedPct)}</span>
                       </>
                     ) : (
-                      "—"
+                      "n/a"
                     )}
                   </td>
                   <td className="px-3 py-3 text-right">

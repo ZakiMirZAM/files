@@ -1,0 +1,216 @@
+{"ticker": "PCX", "name": "Patriot Coal", "cik": "0001376812", "removed": "2012-06-29", "reason": "Spin-off."}
+{"ticker": "SHLD", "name": "Sears Holdings", "cik": "0001310067", "removed": "2012-09-05", "reason": "SHLD below public float threshold"}
+{"ticker": "PSS", "name": "Collective Brands", "cik": "0001060232", "removed": "2012-10-01", "reason": "Acquisition."}
+{"ticker": "CVH", "name": "Coventry Health Care", "cik": "0001054833", "removed": "2013-05-08", "reason": "Acquired by Aetna (AET)"}
+{"ticker": "KWK", "name": "Quicksilver Resources", "cik": "0001060990", "removed": "2013-05-23", "reason": "Market capitalization change."}
+{"ticker": "PXP", "name": "Plains Exploration & Production", "cik": "0000891456", "removed": "2013-05-30", "reason": "Acquisition."}
+{"ticker": "QLGC", "name": "QLogic", "cik": "0000918386", "removed": "2013-06-21", "reason": "Market capitalization change."}
+{"ticker": "TLAB", "name": "Tellabs", "cik": "0000317771", "removed": "2013-06-28", "reason": "Spin-off."}
+{"ticker": "BMC", "name": "BMC Software", "cik": "0000835729", "removed": "2013-09-10", "reason": "BMC taken private by consortium"}
+{"ticker": "NYX", "name": "NYSE Euronext", "cik": "0001368007", "removed": "2013-11-13", "reason": "ICE Exchange acquired NYSE Euronext."}
+{"ticker": "MOLX", "name": "Molex", "cik": "0000067472", "removed": "2013-12-10", "reason": "MOLX acquired by Koch Industries."}
+{"ticker": "NVE", "name": "NV Energy", "cik": "0000741508", "removed": "2013-12-23", "reason": "Acquisition."}
+{"ticker": "HTSI", "name": "Harris Teeter Supermarkets", "cik": "0000085704", "removed": "2014-01-28", "reason": "Acquisition."}
+{"ticker": "HMA", "name": "Health Management Associates", "cik": "0000792985", "removed": "2014-01-28", "reason": "Acquisition."}
+{"ticker": "VCI", "name": "Valassis Communications", "cik": "0000883293", "removed": "2014-01-31", "reason": "Spin-off."}
+{"ticker": "UTIW", "name": "UTi Worldwide", "cik": "0001124827", "removed": "2014-05-28", "reason": "Spin-off."}
+{"ticker": "BOBE", "name": "Bob Evans Farms", "cik": "0000033769", "removed": "2014-06-06", "reason": "Spin-off."}
+{"ticker": "IGT", "name": "International Game Technology", "cik": "0000353944", "removed": "2014-06-20", "reason": "Market capitalization changes"}
+{"ticker": "GHL", "name": "Greenhill & Co.", "cik": "0001282977", "removed": "2014-06-30", "reason": "Spin-off."}
+{"ticker": "FRX", "name": "Forest Laboratories", "cik": "0000038074", "removed": "2014-07-01", "reason": "Actavis acquires Forest Laboratories"}
+{"ticker": "HSH", "name": "The Hillshire Brands", "cik": "0000023666", "removed": "2014-08-14", "reason": "Acquisition."}
+{"ticker": "RDC", "name": "Rowan Companies", "cik": "0000085408", "removed": "2014-08-18", "reason": "Market cap changes"}
+{"ticker": "MCRS", "name": "MICROS Systems", "cik": "0000320345", "removed": "2014-09-03", "reason": "Market capitalization change."}
+{"ticker": "BBG", "name": "Bill Barrett Corporation", "cik": "0001172139", "removed": "2014-09-30", "reason": "Bill Barrett's market capitalization is below $1.2 billion."}
+{"ticker": "TWTC", "name": "TW Telecom", "cik": "0001057758", "removed": "2014-11-04", "reason": "Acquisition."}
+{"ticker": "BYI", "name": "Bally Technologies", "cik": "0000002491", "removed": "2014-11-24", "reason": "Acquisition."}
+{"ticker": "CNQR", "name": "Concur Technologies", "cik": "0001066026", "removed": "2014-12-04", "reason": "Acquisition."}
+{"ticker": "TIBX", "name": "TIBCO Software", "cik": "0001085280", "removed": "2014-12-04", "reason": "Acquisition."}
+{"ticker": "CPWR", "name": "Compuware", "cik": "0000859014", "removed": "2014-12-08", "reason": "Acquisition."}
+{"ticker": "CNVR", "name": "Conversant", "cik": "0001080034", "removed": "2014-12-09", "reason": "Acquisition."}
+{"ticker": "SWY", "name": "Safeway", "cik": "0000086144", "removed": "2015-01-27", "reason": "Safeway acquired by private equity consortium"}
+{"ticker": "COV", "name": "Covidien", "cik": "0001385187", "removed": "2015-01-27", "reason": "Covidien acquired by Medtronic"}
+{"ticker": "PETM", "name": "PetSmart", "cik": "0000863157", "removed": "2015-03-12", "reason": "PetSmart acquired by private equity consortium"}
+{"ticker": "CFN", "name": "Carefusion", "cik": "0001457543", "removed": "2015-03-18", "reason": "Carefusion acquired by Becton Dickinson"}
+{"ticker": "SLXP", "name": "Salix Pharmaceuticals", "cik": "0001009356", "removed": "2015-04-07", "reason": "Salix Pharmaceuticals acquired by Valeant Pharmaceuticals (NYSE:VRX)."}
+{"ticker": "RVBD", "name": "Riverbed Technology Inc", "cik": "0001357326", "removed": "2015-04-27", "reason": "Riverbed Technology acquired by group led by Thoma Bravo LLC"}
+{"ticker": "AOL", "name": "AOL Inc", "cik": "0001468516", "removed": "2015-06-25", "reason": "S&P 100 & 500 constituent Verizon Corp. (NYSE: VZ) acquired AOL."}
+{"ticker": "DRC", "name": "Dresser-Rand Group", "cik": "0001316656", "removed": "2015-06-29", "reason": "Siemens AG acquired Dresser-Rand Group."}
+{"ticker": "UNT", "name": "Unit Corp", "cik": "0000798949", "removed": "2015-07-01", "reason": "S&P 500 constituent NiSource Inc. (NYSE: NI) spun off Columbia Pipeline Group. NiSource will remain in the S&P 500 and Columbia Pipeline will join the S&P 500. Allegheny Technologies and Unit were ranked near or at the bottom of their current indices."}
+{"ticker": "FDO", "name": "Family Dollar", "cik": "0000034408", "removed": "2015-07-08", "reason": "Family Dollar acquired."}
+{"ticker": "HSP", "name": "Hospira", "cik": "0001274057", "removed": "2015-09-02", "reason": "Hospira taken over"}
+{"ticker": "HCBK", "name": "Hudson City Bancorp", "cik": "0000921847", "removed": "2015-11-02", "reason": "HPQ spins off HPE"}
+{"ticker": "CYN", "name": "City National Corp", "cik": "0000201461", "removed": "2015-11-02", "reason": "Royal Bank of Canada (NYSE:RY) acquired City National."}
+{"ticker": "ROVI", "name": "Rovi", "cik": "0001424454", "removed": "2015-11-18", "reason": "Synchrony Financial (NYSE:SYF) replaced Genworth Financial Inc. in the S&P 500."}
+{"ticker": "SIAL", "name": "Sigma-Aldrich", "cik": "0000090185", "removed": "2015-11-19", "reason": "Sigma-Aldrich acquired by Merck KGaA (MKGAY)"}
+{"ticker": "APOL", "name": "Apollo Education", "cik": "0000929887", "removed": "2015-11-30", "reason": "CSRA Inc. will be added to the S&P 500 reflecting its spin-off from Computer Sciences. CSC will be removed from the S&P 500."}
+{"ticker": "CYT", "name": "Cytec Industries", "cik": "0000912513", "removed": "2015-12-14", "reason": "Solvay S.A. acquired Cytec Industries."}
+{"ticker": "ATW", "name": "Atwood Oceanics", "cik": "0000008411", "removed": "2016-01-19", "reason": "Microsemi acquired PMC-Sierra Inc. (NASD: PMCS) and the combined company's market capitalization was more representative of the mid-cap market space. Atwood Oceanics was ranked at the bottom of the S&P MidCap 400 and had a market capitalization more representative of the small-cap market space."}
+{"ticker": "PCP", "name": "Precision Castparts Corporation", "cik": "0000079958", "removed": "2016-02-01", "reason": "CFG replaces PCP"}
+{"ticker": "PCL", "name": "Plum Creek Timber", "cik": "0000849213", "removed": "2016-02-22", "reason": "PCL taken over by WY"}
+{"ticker": "SIRO", "name": "Sirona Dental Systems", "cik": "0001014507", "removed": "2016-03-01", "reason": "S&P 500 constituent Dentsply International Inc. (NASD:XRAY) acquired Sirona Dental Systems."}
+{"ticker": "SLH", "name": "Solera Holdings", "cik": "0001324245", "removed": "2016-03-04", "reason": "Vista Equity Partners acquired Solera."}
+{"ticker": "GMCR", "name": "Keurig Green Mountain", "cik": "0000909954", "removed": "2016-03-07", "reason": "JAB Holding Company acquired Keurig Green Mountain"}
+{"ticker": "SFG", "name": "StanCorp Financial", "cik": "0001079577", "removed": "2016-03-08", "reason": "Meiji Yasuda Life Insurance Co. acquired StanCorp Financial."}
+{"ticker": "CAM", "name": "Cameron International", "cik": "0000941548", "removed": "2016-04-04", "reason": "Schlumberger acquired Cameron"}
+{"ticker": "ATML", "name": "Atmel", "cik": "0000872448", "removed": "2016-04-06", "reason": "S&P 500 constituent Microchip Technology Inc. (NASD: MCHP) acquired Atmel."}
+{"ticker": "JAH", "name": "Jarden", "cik": "0000895655", "removed": "2016-04-18", "reason": "S&P 500 constituent Newell Rubbermaid Inc. (NYSE:NWL) acquired Jarden. Ulta Salon, Cosmetics & Fragrance Inc. (NASD:ULTA) replaced Tenet Healthcare Corp. (NYSE:THC) in the S&P 500."}
+{"ticker": "BXLT", "name": "Baxalta", "cik": "0001620546", "removed": "2016-06-03", "reason": "SHPG acquiring BXLT"}
+{"ticker": "CPGX", "name": "Columbia Pipeline Group", "cik": "0001629995", "removed": "2016-07-05", "reason": "CPGX acquired by TRP"}
+{"ticker": "FMER", "name": "FirstMerit", "cik": "0000354869", "removed": "2016-08-19", "reason": "S&P 500 constituent Huntington Bancshares Inc. (NASD:HBAN) acquired FirstMerit."}
+{"ticker": "DWA", "name": "DreamWorks Animation", "cik": "0001297401", "removed": "2016-08-26", "reason": "S&P 500 constituent Comcast Corp (NASD: CMCSA) acquired DreamWorks Animation."}
+{"ticker": "SVU", "name": "SuperValu", "cik": "0000095521", "removed": "2016-09-01", "reason": "Chemical Financial acquired Talmer Bancorp."}
+{"ticker": "RRD", "name": "RR Donnelley", "cik": "0000029669", "removed": "2016-09-27", "reason": "R.R. Donnelly & Sons is spinning off certain operations and assets. Post spin-offs, the R.R. Donnelly & Sons stub will be more representative of the small-cap market space."}
+{"ticker": "DO", "name": "Diamond Offshore Drilling", "cik": "0000949039", "removed": "2016-09-30", "reason": "COTY replaces DO"}
+{"ticker": "PLCM", "name": "Polycom", "cik": "0001010552", "removed": "2016-09-30", "reason": "Siris Capital Group acquired Polycom. Coty, Inc. replaces Diamond Offshore in the S&P 500 index."}
+{"ticker": "GES", "name": "Guess? Inc", "cik": "0000912463", "removed": "2016-11-01", "reason": "S&P 500 constituent HCP Inc. (NYSE: HCP) is spinning off Quality Care Properties."}
+{"ticker": "LXK", "name": "Lexmark International", "cik": "0001001288", "removed": "2016-11-28", "reason": "Apex Technology and PAG Asia Capital acquired Lexmark International."}
+{"ticker": "STJ", "name": "St Jude Medical", "cik": "0000203077", "removed": "2017-01-05", "reason": "S&P 100 & 500 constituent Abbott Laboratories (NYSE:ABT) acquired St. Jude Medical."}
+{"ticker": "TGI", "name": "Triumph Group", "cik": "0001021162", "removed": "2017-02-02", "reason": "S&P 500 constituent Citrix Systems (NASD: CTXS) spun-off GetGo Inc., which was immediately acquired by LogMeIn."}
+{"ticker": "ISIL", "name": "Intersil", "cik": "0001096325", "removed": "2017-02-28", "reason": "Renesas Electronics acquired Intersil."}
+{"ticker": "CLC", "name": "CLARCOR Inc.", "cik": "0000020740", "removed": "2017-03-01", "reason": "S&P 500 constituent Parker-Hannifin Corp. (NYSE:PH) acquired CLARCOR."}
+{"ticker": "LLTC", "name": "Linear Technology", "cik": "0000791907", "removed": "2017-03-13", "reason": "S&P 500 constituent Analog Devices (NASD:ADI) acquired Linear Technology."}
+{"ticker": "HAR", "name": "Harman International", "cik": "0000800459", "removed": "2017-03-16", "reason": "Samsung Electronics acquired Harman International Industries."}
+{"ticker": "RJF", "name": "Raymond James Financial", "cik": "0000720005", "removed": "2017-03-20", "reason": "Market capitalization changes"}
+{"ticker": "VSTO", "name": "Vista Outdoor", "cik": "0001616318", "removed": "2017-03-20", "reason": "Market capitalization changes"}
+{"ticker": "ENH", "name": "Endurance Specialty Holdings", "cik": "0001179755", "removed": "2017-03-29", "reason": "SOMPO Holdings Inc. acquired Endurance Specialty Holdings."}
+{"ticker": "MENT", "name": "Mentor Graphics", "cik": "0000701811", "removed": "2017-04-03", "reason": "Siemens Industry Inc. acquired Mentor Graphics."}
+{"ticker": "CEB", "name": "CEB Inc.", "cik": "0001066104", "removed": "2017-04-05", "reason": "Gartner acquired CEB."}
+{"ticker": "JOY", "name": "Joy Global", "cik": "0000801898", "removed": "2017-04-06", "reason": "Komatsu Limited acquired Joy Global."}
+{"ticker": "WWAV", "name": "WhiteWave Foods", "cik": "0001555365", "removed": "2017-04-12", "reason": "Danone SA acquired WhiteWave Foods."}
+{"ticker": "BEAV", "name": "B/E Aerospace", "cik": "0000861361", "removed": "2017-04-19", "reason": "S&P 500 constituent Rockwell Collins Inc. (NYSE:COL) acquired B/E Aerospace."}
+{"ticker": "TIME", "name": "Time Inc.", "cik": "0001591517", "removed": "2017-06-02", "reason": "TEGNA spun off Cars.com."}
+{"ticker": "PVTB", "name": "PrivateBancorp", "cik": "0000889936", "removed": "2017-06-26", "reason": "Canadian Imperial Bank of Commerce acquired PrivateBancorp."}
+{"ticker": "CST", "name": "CST Brands", "cik": "0001562039", "removed": "2017-06-29", "reason": "Alimentation Couche-Tard acquired CST Brands."}
+{"ticker": "KATE", "name": "Kate Spade & Company", "cik": "0000352363", "removed": "2017-07-12", "reason": "S&P 500 constituent Coach, Inc. (NYSE:COH) acquired Kate Spade."}
+{"ticker": "PNRA", "name": "Panera Bread", "cik": "0000724606", "removed": "2017-07-12", "reason": "JAB Holdings B.V. acquired Panera Bread."}
+{"ticker": "CHS", "name": "Chico's FAS", "cik": "0000897429", "removed": "2017-07-19", "reason": "S&P 500 constituent Vornado Realty Trust (NYSE:VNO) spun off JBG SMITH Properties."}
+{"ticker": "RAI", "name": "Reynolds American", "cik": "0001275283", "removed": "2017-07-26", "reason": "British American Tobacco (NYSE MKT:BTI) acquired Reynolds American."}
+{"ticker": "NSR", "name": "Neustar", "cik": "0001265888", "removed": "2017-08-10", "reason": "NeuStar was acquired by a private investment group led by Golden Gate Capital."}
+{"ticker": "CCP", "name": "Care Capital Properties", "cik": "0001639947", "removed": "2017-08-17", "reason": "Sabra Health Care REIT acquired Care Capital Properties."}
+{"ticker": "WFM", "name": "Whole Foods Market", "cik": "0000865436", "removed": "2017-08-29", "reason": "Amazon acquired Whole Foods Market."}
+{"ticker": "SPLS", "name": "Staples", "cik": "0000791519", "removed": "2017-09-18", "reason": "Sycamore Partners acquired Staples."}
+{"ticker": "BRCD", "name": "Brocade Communications", "cik": "0001009626", "removed": "2017-11-22", "reason": "S&P 500 constituent Broadcom Limited acquired Brocade Communications Systems."}
+{"ticker": "BWLD", "name": "Buffalo Wild Wings", "cik": "0001062449", "removed": "2018-02-05", "reason": "Arby's Restaurant Group acquired Buffalo Wild Wings."}
+{"ticker": "SNI", "name": "Scripps Networks Interactive", "cik": "0001430602", "removed": "2018-03-07", "reason": "Discovery Communications acquired SNI."}
+{"ticker": "BIVV", "name": "Bioverativ", "cik": "0001681689", "removed": "2018-03-08", "reason": "Sanofi acquired Bioverativ."}
+{"ticker": "AVP", "name": "Avon Products", "cik": "0000008868", "removed": "2018-03-19", "reason": "Market capitalization changes"}
+{"ticker": "LNCE", "name": "Snyder's-Lance", "cik": "0000057528", "removed": "2018-03-26", "reason": "S&P 500 constituent Campbell Soup Company (NYSE:CPB) acquired Snyder's-Lance."}
+{"ticker": "CSRA", "name": "CSRA", "cik": "0001646383", "removed": "2018-04-04", "reason": "S&P 500 constituent General Dynamics (NYSE: GD) acquired CSRA."}
+{"ticker": "DST", "name": "DST Systems", "cik": "0000714603", "removed": "2018-04-19", "reason": "SS&C Technologies Holdings Inc. (NASD: SSNC) acquired DST Systems."}
+{"ticker": "MSCC", "name": "Microsemi", "cik": "0000310568", "removed": "2018-05-31", "reason": "S&P 500 constituent Microchip Technology Inc. (NASD:MCHP) acquired Microsemi."}
+{"ticker": "GXP", "name": "Great Plains Energy", "cik": "0001143068", "removed": "2018-06-05", "reason": "Westar Energy acquired Great Plains Energy which moved the combined company to the S&P 500."}
+{"ticker": "ENDP", "name": "Endo International", "cik": "0001593034", "removed": "2018-06-18", "reason": "Market capitalization changes"}
+{"ticker": "WGL", "name": "WGL Holdings", "cik": "0001103601", "removed": "2018-07-11", "reason": "AltaGas Ltd. (TSX:ALA) acquired WGL Holdings."}
+{"ticker": "QCP", "name": "Quality Care Properties", "cik": "0001677203", "removed": "2018-08-01", "reason": "S&P 500 constituent Welltower Inc. (NYSE:WELL) acquired Quality Care Properties."}
+{"ticker": "DCT", "name": "DCT Industrial Trust", "cik": "0001170991", "removed": "2018-08-22", "reason": "S&P 500 constituent ProLogis Inc. acquired DCT Industrial Trust."}
+{"ticker": "ILG", "name": "ILG, Inc.", "cik": "0001434620", "removed": "2018-09-04", "reason": "Marriott Vacations Worldwide acquired ILG."}
+{"ticker": "XL", "name": "XL Group", "cik": "0000875159", "removed": "2018-09-14", "reason": "XL acquired by Axa."}
+{"ticker": "KLXI", "name": "KLX Inc.", "cik": "0001617898", "removed": "2018-09-18", "reason": "S&P 500 constituent Boeing acquired KLX."}
+{"ticker": "EDR", "name": "Education Realty Trust", "cik": "0001302343", "removed": "2018-09-20", "reason": "Greystar Real Estate Partners acquired Education Realty Trust."}
+{"ticker": "LPNT", "name": "LifePoint Health Inc.", "cik": "0001301611", "removed": "2018-11-06", "reason": "Insperity will replace LifePointHealth Inc."}
+{"ticker": "COL", "name": "Rockwell Collins", "cik": "0001137411", "removed": "2018-12-03", "reason": "UTX acquired COL"}
+{"ticker": "SCG", "name": "SCANA", "cik": "0000754737", "removed": "2019-01-02", "reason": "Dominion Energy acquired SCANA Corporation"}
+{"ticker": "AHL", "name": "Aspen Insurance Holdings", "cik": "0001267395", "removed": "2019-02-21", "reason": "Apollo Global Management (NYSE: APO) is acquiring Aspen Insurance Holdings."}
+{"ticker": "BHF", "name": "Brighthouse Financial", "cik": "0001685040", "removed": "2019-04-02", "reason": "DOW spun off from DWDP"}
+{"ticker": "ULTI", "name": "Ultimate Software Group", "cik": "0001016125", "removed": "2019-05-07", "reason": "Hellman & Friedman acquired Ultimate Software Group."}
+{"ticker": "LLL", "name": "L3 Technologies", "cik": "0001039101", "removed": "2019-07-01", "reason": "L3 purchased by Harris Corporation"}
+{"ticker": "RHT", "name": "Red Hat", "cik": "0001087423", "removed": "2019-07-15", "reason": "S&P 500 & 100 constituent IBM acquired Red Hat."}
+{"ticker": "QEP", "name": "QEP Resources", "cik": "0001108827", "removed": "2019-09-23", "reason": "Market capitalization changes"}
+{"ticker": "TUP", "name": "Tupperware Brands Corp", "cik": "0001008654", "removed": "2019-09-23", "reason": "Market capitalization changes"}
+{"ticker": "MDR", "name": "McDermott International", "cik": "0000708819", "removed": "2019-09-23", "reason": "Market capitalization changes"}
+{"ticker": "CPE", "name": "Callon Petroleum", "cik": "0000928022", "removed": "2019-09-26", "reason": "Market capitalization changes."}
+{"ticker": "VSM", "name": "Versum Materials", "cik": "0001660690", "removed": "2019-10-08", "reason": "Merck KGaAis acquiring Versum Materialsin a deal expected to be completed on or about that date pending final conditions."}
+{"ticker": "ISCA", "name": "International Speedway", "cik": "0000051548", "removed": "2019-10-18", "reason": "NASCAR Holdings Inc. acquired International Speedway."}
+{"ticker": "MDSO", "name": "Medidata Solutions", "cik": "0001453814", "removed": "2019-10-24", "reason": "Dassault Syst\u00e8mes SA is acquiring Medidata Solutions in a transaction expected to be completed on or about that date pending final conditions."}
+{"ticker": "CVET", "name": "Covetrus", "cik": "0001752836", "removed": "2019-10-30", "reason": "Market capitalization changes."}
+{"ticker": "CELG", "name": "Celgene", "cik": "0000816284", "removed": "2019-11-21", "reason": "Bristol-Myers Squibb (NYSE:BMY) acquired Celgene."}
+{"ticker": "STI", "name": "SunTrust Banks", "cik": "0000750556", "removed": "2019-12-09", "reason": "BB&T acquired SunTrust to form Truist Financial."}
+{"ticker": "PLT", "name": "Plantronics", "cik": "0000914025", "removed": "2019-12-10", "reason": "Choice Hotels International Inc. (NYSE: CHH) replaced Plantronics Inc. (NYSE: PLT)."}
+{"ticker": "AMG", "name": "Affiliated Managers Group", "cik": "0001004434", "removed": "2019-12-23", "reason": "Market capitalization change."}
+{"ticker": "GWR", "name": "Genesee & Wyoming", "cik": "0001012620", "removed": "2019-12-26", "reason": "S&P SmallCap 600 constituent RH (NYSE: RH) replaced Genesee & Wyoming Inc. (NYSE: GWR)."}
+{"ticker": "LPT", "name": "Liberty Property Trust", "cik": "0000921112", "removed": "2020-01-29", "reason": "S&P SmallCap 600 constituent Darling Ingredients Inc. (NYSE: DAR) replaced Liberty Property Trust (NYSE: LPT)."}
+{"ticker": "CY", "name": "Cypress Semiconductor", "cik": "0000791915", "removed": "2020-04-13", "reason": "S&P SmallCap 600 constituent LHC Group Inc. (NASD: LHCG) replaced Cypress Semiconductor Corp. (NASD: CY)."}
+{"ticker": "TECD", "name": "Tech Data", "cik": "0000790703", "removed": "2020-06-30", "reason": "Apollo Global Management acquired Tech Data."}
+{"ticker": "LM", "name": "Legg Mason", "cik": "0000704051", "removed": "2020-08-03", "reason": "S&P 500 constituent Franklin Resources acquired Legg Mason."}
+{"ticker": "LOGM", "name": "LogMeIn", "cik": "0001420302", "removed": "2020-09-01", "reason": "Francisco Partners and Elliott Management acquired LogMeIn."}
+{"ticker": "DLPH", "name": "Delphi Technologies", "cik": "0001707092", "removed": "2020-10-07", "reason": "S&P 500 constituent BorgWarner acquired Delphi Technologies."}
+{"ticker": "NBL", "name": "Noble Energy", "cik": "0000072207", "removed": "2020-10-12", "reason": "Chevron acquired Noble Energy."}
+{"ticker": "DNKN", "name": "Dunkin' Brands", "cik": "0001357204", "removed": "2020-12-21", "reason": "Inspire Brands acquired Dunkin' Brands Group."}
+{"ticker": "TCO", "name": "Taubman Centers", "cik": "0000890319", "removed": "2020-12-29", "reason": "S&P 500/100 constituent Simon Property Group acquired Taubman Centers."}
+{"ticker": "TIF", "name": "Tiffany & Co", "cik": "0000098246", "removed": "2021-01-07", "reason": "LVMH Moet Hennessy-Louis Vuitton SE acquired Tiffany & Co."}
+{"ticker": "WPX", "name": "WPX Energy", "cik": "0001518832", "removed": "2021-01-07", "reason": "S&P 500 constituent Devon Energy acquired WPX Energy."}
+{"ticker": "CXO", "name": "Concho Resources", "cik": "0001358071", "removed": "2021-01-21", "reason": "S&P 500/100 constituent ConocoPhillips acquired Concho Resources."}
+{"ticker": "VAR", "name": "Varian Medical Systems", "cik": "0000203527", "removed": "2021-04-20", "reason": "Siemens Healthineers acquired Varian Medical Systems."}
+{"ticker": "UFS", "name": "Domtar", "cik": "0001381531", "removed": "2021-04-20", "reason": "Market capitalization change."}
+{"ticker": "PRSP", "name": "Perspecta Inc.", "cik": "0001724670", "removed": "2021-05-07", "reason": "Veritas Capital acquired Perspecta."}
+{"ticker": "CMD", "name": "Cantel Medical Corporation", "cik": "0000019446", "removed": "2021-06-02", "reason": "S&P 500 constituent STERIS plc acquired Cantel Medical."}
+{"ticker": "HFC", "name": "HollyFrontier", "cik": "0000048039", "removed": "2021-06-04", "reason": "Market capitalization change."}
+{"ticker": "CLGX", "name": "CoreLogic", "cik": "0000036047", "removed": "2021-06-09", "reason": "Stone Point Capital and Insight Partners acquired CoreLogic."}
+{"ticker": "GRUB", "name": "Grubhub", "cik": "0001594109", "removed": "2021-06-15", "reason": "Just Eat Takeaway.com NV acquired GrubHub."}
+{"ticker": "PRAH", "name": "PRA Health Sciences", "cik": "0001613859", "removed": "2021-07-02", "reason": "ICON plc acquired PRA Health Sciences."}
+{"ticker": "ALXN", "name": "Alexion Pharmaceuticals", "cik": "0000899866", "removed": "2021-07-21", "reason": "AstraZeneca acquired Alexion Pharmaceuticals."}
+{"ticker": "WRI", "name": "Weingarten Realty", "cik": "0000828916", "removed": "2021-08-04", "reason": "S&P 500 constituent Kimco Realty acquired Weingarten Realty."}
+{"ticker": "MXIM", "name": "Maxim Integrated", "cik": "0000743316", "removed": "2021-08-30", "reason": "S&P 500 constituent Analog Devices acquired Maxim Integrated Products."}
+{"ticker": "THS", "name": "TreeHouse Foods", "cik": "0001320695", "removed": "2021-09-03", "reason": "Market capitalization change."}
+{"ticker": "XEC", "name": "Cimarex Energy", "cik": "0001168054", "removed": "2021-10-05", "reason": "S&P 500 constituent Cabot Oil & Gas acquired Cimarex Energy."}
+{"ticker": "XLNX", "name": "Xilinx", "cik": "0000743988", "removed": "2022-02-15", "reason": "S&P 500 constituent Advanced Micro Devices acquired Xilinx."}
+{"ticker": "INFO", "name": "IHS Markit", "cik": "0001598014", "removed": "2022-03-02", "reason": "S&P 500 constituent S&P Global Inc. acquired IHS Markit."}
+{"ticker": "PBCT", "name": "People's United Financial", "cik": "0001378946", "removed": "2022-04-04", "reason": "S&P 500 constituent M&T Bank Corp. acquired People's United Financial."}
+{"ticker": "MIME", "name": "Mimecast", "cik": "0001644675", "removed": "2022-05-19", "reason": "Permira Holdings Ltd. acquired Mimecast."}
+{"ticker": "CDK", "name": "CDK Global", "cik": "0001609702", "removed": "2022-07-06", "reason": "Brookfield Business Partners acquired CDK Global in a tender offer."}
+{"ticker": "CCMP", "name": "CMC Materials", "cik": "0001102934", "removed": "2022-07-07", "reason": "Entegris acquired CMC Materials."}
+{"ticker": "PSB", "name": "PS Business Parks", "cik": "0000866368", "removed": "2022-07-20", "reason": "Blackstone Inc. acquired PS Business Parks."}
+{"ticker": "SAFM", "name": "Sanderson Farms", "cik": "0000812128", "removed": "2022-07-27", "reason": "Cargill and Continental Grain Co. acquired Sanderson Farms."}
+{"ticker": "CTXS", "name": "Citrix Systems", "cik": "0000877890", "removed": "2022-10-03", "reason": "Vista Equity Partners acquired Citrix Systems."}
+{"ticker": "NLSN", "name": "Nielsen Holdings", "cik": "0001492633", "removed": "2022-10-12", "reason": "Elliot Management Corp acquired Nielsen Holdings."}
+{"ticker": "Y", "name": "Alleghany", "cik": "0000775368", "removed": "2022-10-20", "reason": "S&P 500 constituent Berkshire Hathaway acquired Alleghany."}
+{"ticker": "TWTR", "name": "Twitter", "cik": "0001418091", "removed": "2022-11-01", "reason": "Elon Musk acquired Twitter."}
+{"ticker": "MBC", "name": "MasterBrand", "cik": "0001941365", "removed": "2022-12-19", "reason": "Market capitalization change."}
+{"ticker": "NUVA", "name": "NuVasive", "cik": "0001142596", "removed": "2022-12-19", "reason": "Market capitalization change."}
+{"ticker": "ABMD", "name": "Abiomed", "cik": "0000815094", "removed": "2022-12-22", "reason": "S&P 500 constituent Johnson & Johnson acquired Abiomed."}
+{"ticker": "STOR", "name": "Store Capital", "cik": "0001538990", "removed": "2023-02-06", "reason": "Store Capital was acquired by GIC and Oak Street Capital."}
+{"ticker": "LHCG", "name": "LHC Group", "cik": "0001303313", "removed": "2023-02-23", "reason": "S&P 500 constituent UnitedHealth Group acquired LHC Group."}
+{"ticker": "SIVB", "name": "SVB Financial Group", "cik": "0000719739", "removed": "2023-03-15", "reason": "The FDIC placed SVB's main subsidiary, Silicon Valley Bank, into receivership."}
+{"ticker": "WAFD", "name": "WaFd, Inc.", "cik": "0000936528", "removed": "2023-03-20", "reason": "Market capitalization change."}
+{"ticker": "IAA", "name": "IAA, Inc.", "cik": "0001745041", "removed": "2023-03-22", "reason": "Ritchie Bros. Auctioneers acquired IAA."}
+{"ticker": "PACW", "name": "PacWest Bancorp", "cik": "0001102112", "removed": "2023-04-05", "reason": "Market capitalization change."}
+{"ticker": "VSCO", "name": "Victoria's Secret", "cik": "0001856437", "removed": "2023-06-19", "reason": "Market capitalization change."}
+{"ticker": "FULT", "name": "Fulton Financial Corporation", "cik": "0000700564", "removed": "2023-06-19", "reason": "Market capitalization change."}
+{"ticker": "WLY", "name": "John Wiley & Sons", "cik": "0000107140", "removed": "2023-06-19", "reason": "Market capitalization change."}
+{"ticker": "DISH", "name": "Dish Network", "cik": "0001001082", "removed": "2023-06-20", "reason": "Market capitalization change."}
+{"ticker": "RE", "name": "Everest Re Group", "cik": "0001095073", "removed": "2023-07-10", "reason": "Everest Re Group renamed to Everest Group and changed its ticker symbol from RE to EG"}
+{"ticker": "UNVR", "name": "Univar Solutions", "cik": "0001494319", "removed": "2023-08-04", "reason": "Apollo Global Management acquired Univar Solutions."}
+{"ticker": "PDCE", "name": "PDC Energy", "cik": "0000077877", "removed": "2023-08-08", "reason": "S&P 500 & 100 constituent Chevron Corp. acquired PDC Energy."}
+{"ticker": "FL", "name": "Foot Locker", "cik": "0000850209", "removed": "2023-09-18", "reason": "Market capitalization change."}
+{"ticker": "SYNH", "name": "Syneos Health", "cik": "0001610950", "removed": "2023-09-29", "reason": "Elliott Investment Management acquired Syneos Health."}
+{"ticker": "NATI", "name": "National Instruments", "cik": "0000935494", "removed": "2023-10-12", "reason": "S&P 500 constituent Emerson Electric acquired National Instruments."}
+{"ticker": "ATVI", "name": "Activision Blizzard", "cik": "0000718877", "removed": "2023-10-18", "reason": "S&P 500 and S&P 100 constituent Microsoft acquired Activision Blizzard."}
+{"ticker": "ENV", "name": "Envestnet", "cik": "0001337619", "removed": "2023-11-07", "reason": "Market capitalization change."}
+{"ticker": "PDCO", "name": "Patterson Companies", "cik": "0000891024", "removed": "2024-01-05", "reason": "Market capitalization change."}
+{"ticker": "MPW", "name": "Medical Properties Trust", "cik": "0001287865", "removed": "2024-03-18", "reason": "Market capitalization change."}
+{"ticker": "NARI", "name": "Inari Medical", "cik": "0001531048", "removed": "2024-04-01", "reason": "Market capitalization change."}
+{"ticker": "PXD", "name": "Pioneer Natural Resources", "cik": "0001038357", "removed": "2024-05-08", "reason": "S&P 500 and S&P 100 constituent ExxonMobil acquired Pioneer Natural Resources."}
+{"ticker": "SWAV", "name": "Shockwave Medical", "cik": "0001642545", "removed": "2024-06-03", "reason": "S&P 500 constituent Johnson & Johnson acquired Shockwave Medical."}
+{"ticker": "TGNA", "name": "Tegna Inc.", "cik": "0000039899", "removed": "2024-09-23", "reason": "Market capitalization change."}
+{"ticker": "SWN", "name": "Southwestern Energy", "cik": "0000007332", "removed": "2024-10-01", "reason": "S&P MidCap 400 constituent Chesapeake Energy Corp. acquired Southwestern Energy. The combined company renamed to Expand Energy Corporation."}
+{"ticker": "SRCL", "name": "Stericycle", "cik": "0000861878", "removed": "2024-11-06", "reason": "S&P 500 constituent Waste Management, Inc. acquired Stericycle."}
+{"ticker": "MRO", "name": "Marathon Oil", "cik": "0000101778", "removed": "2024-11-26", "reason": "S&P 500 & 100 constituent ConocoPhillips acquired Marathon Oil."}
+{"ticker": "AMTM", "name": "Amentum", "cik": "0002011286", "removed": "2024-12-23", "reason": "Market capitalization change."}
+{"ticker": "ALTM", "name": "Arcadium Lithium", "cik": "0001977303", "removed": "2025-03-06", "reason": "Rio Tinto acquired Arcadium Lithium."}
+{"ticker": "ALTR", "name": "Altair Engineering", "cik": "0001701732", "removed": "2025-03-31", "reason": "Siemens AG acquired Altair Engineering."}
+{"ticker": "DFS", "name": "Discover Financial", "cik": "0001393612", "removed": "2025-05-19", "reason": "S&P 500 constituent Capital One Financial Corp. acquired Discover Financial Services."}
+{"ticker": "ANSS", "name": "Ansys", "cik": "0001013462", "removed": "2025-07-18", "reason": "S&P 500 constituent Synopsys Inc. acquired Ansys."}
+{"ticker": "CHX", "name": "ChampionX", "cik": "0001723089", "removed": "2025-07-18", "reason": "S&P 500 constituent Schlumberger Ltd. acquired ChampionX."}
+{"ticker": "AMED", "name": "Amedisys", "cik": "0000896262", "removed": "2025-08-19", "reason": "S&P 500 and S&P 100 constituent UnitedHealth Group acquired Amedisys."}
+{"ticker": "WBA", "name": "Walgreens Boots Alliance", "cik": "0001618921", "removed": "2025-08-28", "reason": "Sycamore Partners acquired Walgreen Boots Alliance."}
+{"ticker": "SKX", "name": "Skechers", "cik": "0001065837", "removed": "2025-09-12", "reason": "3G Capital acquired Skechers USA."}
+{"ticker": "LNW", "name": "Light & Wonder", "cik": "0000750004", "removed": "2025-11-13", "reason": "Light & Wonder delisted from the NASDAQ Stock Exchange but kept its primary listing exclusively in Australia."}
+{"ticker": "IPG", "name": "Interpublic Group", "cik": "0000051644", "removed": "2025-11-28", "reason": "S&P 500 constituent Omnicom Group Inc. acquired (The) Interpublic Group."}
+{"ticker": "K", "name": "Kellanova", "cik": "0000055067", "removed": "2025-12-11", "reason": "Mars Inc. acquired Kellanova."}
+{"ticker": "ALE", "name": "Allete, Inc.", "cik": "0000066756", "removed": "2025-12-17", "reason": "Canada Pension Plan Investment Board and Global Infrastructure Partners acquired Allete."}
+{"ticker": "UAA/UA", "name": "Under Armour", "cik": "0001336917", "removed": "2025-12-22", "reason": "Market capitalization change."}
+{"ticker": "CIVI", "name": "Civitas Resources", "cik": "0001509589", "removed": "2026-01-30", "reason": "S&P SmallCap 600 constituent SM Energy Company acquired Civitas Resources."}
+{"ticker": "CMA", "name": "Comerica", "cik": "0000028412", "removed": "2026-02-02", "reason": "S&P 500 constituent Fifth Third Bancorp acquired Comerica."}
+{"ticker": "PCH", "name": "PotlatchDeltic", "cik": "0001338749", "removed": "2026-02-02", "reason": "S&P MidCap 400 constituent Rayonier Inc. acquired PotlatchDeltic."}
+{"ticker": "DAY", "name": "Dayforce", "cik": "0001725057", "removed": "2026-02-09", "reason": "Thoma Bravo L.P. acquired Dayforce."}

@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../lib/cn";
-import { API_URL, useApiHealth } from "../lib/useApiHealth";
 import { NotebookPanel } from "./notebook/NotebookPanel";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { LogoMark } from "./Logo";
@@ -27,8 +26,6 @@ import { AiPanel } from "./AiPanel";
 import { SelectionExplainButton } from "./SelectionExplainButton";
 import { TourOverlay } from "./tour/TourOverlay";
 import { HelpMenu } from "./onboarding/HelpMenu";
-import { HelpBadge } from "./onboarding/HelpBadge";
-import { RefreshCw } from "lucide-react";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: BarChart3, end: true },
@@ -61,13 +58,22 @@ export function AppShell() {
     try {
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, desktopCollapsed ? "1" : "0");
     } catch {
-      // localStorage unavailable (private mode) — state just won't persist
+      // localStorage unavailable (private mode), state just won't persist
     }
   }, [desktopCollapsed]);
 
   useEffect(() => {
     saveNotebookOpen(notebookOpen);
   }, [notebookOpen]);
+
+  // Tab title tracks the section the user is on: "IntrinsicFinEd - Economic".
+  // Longest matching route wins, so /app/economic does not match /app first.
+  useEffect(() => {
+    const match = [...NAV]
+      .filter((item) => item.to === location.pathname || location.pathname.startsWith(item.to + "/"))
+      .sort((a, b) => b.to.length - a.to.length)[0];
+    document.title = match ? `IntrinsicFinEd - ${match.label}` : "IntrinsicFinEd";
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-ink-800 text-white flex">
@@ -105,10 +111,6 @@ export function AppShell() {
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 space-y-1 mt-2">
-            <div className="px-3 mb-2 flex items-center gap-1">
-              <p className="label">Analysis</p>
-              <HelpBadge topic="workflow" />
-            </div>
             {NAV.map((item, i) => (
               <NavLink
                 key={item.to}
@@ -192,17 +194,6 @@ export function AppShell() {
                 <NotebookPen className="w-[18px] h-[18px]" strokeWidth={1.75} />
               </button>
               <HelpMenu />
-              <div className="flex items-center gap-1">
-                <ApiStatusBadge />
-                <HelpBadge topic="apiStatus" />
-              </div>
-              <div className="text-[0.7rem] uppercase tracking-[0.16em] text-white/30 hidden sm:block">
-                {new Date().toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </div>
             </div>
           </div>
         </header>
@@ -211,9 +202,8 @@ export function AppShell() {
           <Outlet />
         </main>
 
-        <footer className="border-t border-gold/10 px-4 lg:px-8 py-5 text-[0.7rem] text-white/30 flex items-center justify-between">
-          <span>© 2025 IntrinsicFinEd — Open source educational tooling.</span>
-          <span className="font-mono">v0.2 / dark + gold</span>
+        <footer className="border-t border-gold/10 px-4 lg:px-8 py-5 text-[0.7rem] text-white/30">
+          <span>© 2026 IntrinsicFinEd</span>
         </footer>
       </div>
 
@@ -252,120 +242,4 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
 function prettyLabel(s: string): string {
   if (s === "app") return "Workspace";
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function ApiStatusBadge() {
-  const { status, health, lastChecked, recheck } = useApiHealth();
-  const [open, setOpen] = useState(false);
-
-  const dot =
-    status === "checking" ? "bg-white/30 animate-pulse" :
-    status === "online"   ? "bg-gain" :
-    "bg-loss";
-  const wrap =
-    status === "checking" ? "text-white/40 border-white/15 bg-white/5" :
-    status === "online"   ? "text-gain-strong border-gain/40 bg-gain-ghost" :
-    "text-loss-strong border-loss/40 bg-loss-ghost";
-  const label =
-    status === "checking" ? "checking API" :
-    status === "online"   ? "API online" :
-    "API offline · mock data";
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "inline-flex items-center gap-2 text-[0.7rem] font-mono px-2.5 py-1 rounded-sm border cursor-pointer transition-colors",
-          wrap,
-        )}
-        aria-expanded={open}
-      >
-        <span className={cn("w-1.5 h-1.5 rounded-full", dot)} />
-        {label}
-      </button>
-
-      {open && (
-        <>
-          <button
-            aria-label="Close"
-            className="fixed inset-0 z-20 cursor-default"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute right-0 top-full mt-2 w-80 panel p-4 text-xs leading-relaxed z-30 shadow-xl">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gold/10">
-              <span className="text-white font-semibold">API Status</span>
-              <button
-                onClick={recheck}
-                className="btn-ghost p-1 text-xs"
-                title="Re-check now"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="space-y-1.5 text-white/75 mb-3">
-              <div className="flex justify-between gap-2">
-                <span className="text-white/45">URL</span>
-                <code className="text-gold text-[0.7rem] truncate">{API_URL}</code>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-white/45">Status</span>
-                <span className={cn(
-                  "font-mono",
-                  status === "online" ? "text-gain-strong" :
-                  status === "offline" ? "text-loss-strong" : "text-white/60",
-                )}>{label}</span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-white/45">Last check</span>
-                <span className="font-mono text-white/70">
-                  {lastChecked ? lastChecked.toLocaleTimeString() : "—"}
-                </span>
-              </div>
-              {health && (
-                <>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-white/45">DB</span>
-                    <span className="font-mono text-gold">{health.db_exists ? "connected" : "missing"}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-white/45">Year range</span>
-                    <span className="font-mono text-gold">{health.min_year}-{health.max_year}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-white/45">Cache entries</span>
-                    <span className="font-mono text-gold">{health.cache_entries ?? 0}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {status === "offline" && (
-              <div className="pt-3 border-t border-gold/10">
-                <p className="text-white font-semibold mb-2">To start the API:</p>
-                <p className="text-white/55 mb-2">Easiest — double-click:</p>
-                <code className="block bg-ink-900 px-2 py-1.5 rounded-sm text-gold text-[0.7rem] mb-2">
-                  start_backend.bat
-                </code>
-                <p className="text-white/55 mb-2">Or run in a terminal:</p>
-                <code className="block bg-ink-900 px-2 py-1.5 rounded-sm text-gold text-[0.7rem] whitespace-pre overflow-x-auto">
-                  {`cd c:\\Users\\Zaki_Mir\\Downloads\\files\npython -m uvicorn backend.api:app --reload --port 8000`}
-                </code>
-                <p className="text-white/45 mt-3 text-[0.7rem]">
-                  Verify by visiting <a href={`${API_URL}/api/health`} target="_blank" rel="noreferrer" className="text-gold underline">{API_URL}/api/health</a> in your browser.
-                </p>
-              </div>
-            )}
-
-            {status === "online" && (
-              <p className="pt-3 border-t border-gold/10 text-white/55 text-[0.7rem]">
-                Live data flowing from financials.db + FRED. Auto-rechecks every 30s.
-              </p>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
 }

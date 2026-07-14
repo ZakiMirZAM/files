@@ -24,9 +24,9 @@ const mosText = (mos: number | null | undefined): string =>
 
 /**
  * Two complementary equity-side intrinsic models for financial-service firms
- * (Damodaran, Investment Valuation, Ch.21), the companions to the residual-income
- * model. Method 2 — dividend discount (observable payouts sidestep the
- * unmeasurable-reinvestment problem). Method 3 — FCFE where reinvestment is
+ *, the companions to the residual-income
+ * model. Method 2, dividend discount (observable payouts sidestep the
+ * unmeasurable-reinvestment problem). Method 3, FCFE where reinvestment is
  * redefined as the equity retained to grow regulatory capital.
  */
 export function EquityModelsSection({ dividendDiscount: ddm, fcfeRegulatory: fcfe }: EquityModelsSectionProps) {

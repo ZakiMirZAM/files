@@ -11,9 +11,9 @@ import type {
 import { openDefinitionSeries } from "./definitionPanelStore";
 import type { DefinitionSeries } from "./individualSeries";
 
-/** Whether a higher or lower value is "better" — drives the heatmap tint. */
+/** Whether a higher or lower value is "better", drives the heatmap tint. */
 export const METRIC_DIRECTION: Record<string, "higher" | "lower" | "neutral"> = {
-  // Group value score, shown as a comparison ROW in the scorecard matrix — a
+  // Group value score, shown as a comparison ROW in the scorecard matrix, a
   // higher score is a stronger value creator, so it gets the green/red heatmap
   // that ranks the columns at a glance.
   valueScore: "higher",
@@ -80,7 +80,7 @@ export const METRIC_DIRECTION: Record<string, "higher" | "lower" | "neutral"> = 
 };
 
 export function formatSectorValue(value: number | null | undefined, unit: SectorMetricUnit): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
   if (unit === "$") {
     const a = Math.abs(value);
     const sign = value < 0 ? "−" : "";
@@ -100,8 +100,8 @@ export function formatSectorValue(value: number | null | undefined, unit: Sector
   if (unit === "%") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(Math.abs(value) < 1 ? 2 : 1)}%`;
   if (unit === "d") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(0)}d`;
   if (unit === "yrs") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)} yrs`;
-  if (unit === "b") return value.toFixed(2); // beta — a plain coefficient, ~1.0
-  if (unit === "#") return value.toFixed(0); // rank — a whole number
+  if (unit === "b") return value.toFixed(2); // beta, a plain coefficient, ~1.0
+  if (unit === "#") return value.toFixed(0); // rank, a whole number
   if (unit === "n") return value.toFixed(Math.abs(value) < 1 ? 2 : 1); // plain number, e.g. the value score
   return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}×`;
 }
@@ -156,7 +156,7 @@ export function buildIntegrityDeck(
 /**
  * Open the definition sidebar on one scorecard cell: the metric's full
  * markdown definition (via the surface resolver) with the group's 5-year
- * history charted above it — the same UX as the comparative matrix cells.
+ * history charted above it, the same UX as the comparative matrix cells.
  */
 export function openMetricHistory(
   columnName: string,
@@ -199,7 +199,7 @@ export function rowStats(data: SectorMetricsData, key: string): RowStats | null 
 }
 
 /**
- * Heatmap background for a cell — supplements, never replaces, the printed value.
+ * Heatmap background for a cell, supplements, never replaces, the printed value.
  * Green = better for the metric's direction, red = worse, neutral metrics untinted.
  */
 export function cellTint(
@@ -223,7 +223,7 @@ const SPREAD_KEY = "roicWaccSpread";
  * Add a derived "ROIC − WACC Spread" column to a comparative scorecard, computed
  * per company from the existing `roic`/`wacc` columns and inserted right after
  * WACC. Its per-year history is paired from the roic/wacc cell histories, so a
- * cell still opens a real trend chart in the sidebar. Pure — returns a new
+ * cell still opens a real trend chart in the sidebar. Pure, returns a new
  * object and mutates nothing. No-op when the spread is already present or the
  * roic/wacc columns are missing (so it is safe to apply to any matrix).
  */
@@ -240,7 +240,7 @@ export function withRoicWaccSpread(data: SectorMetricsData): SectorMetricsData {
     // Same group as the WACC column it sits beside, so the group header stays contiguous.
     group: data.metrics[waccIdx].group,
     definition:
-      "ROIC minus WACC — the firm-level value-creation spread. Positive: invested capital earns " +
+      "ROIC minus WACC, the firm-level value-creation spread. Positive: invested capital earns " +
       "above its cost (EVA positive, value created). Negative: returns sit below the cost of " +
       "capital (value destroyed).",
   };

@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { cn } from "../lib/cn";
 
 /**
- * Loading skeletons for the analysis surfaces — datasets, matrices, and charts.
+ * Loading skeletons for the analysis surfaces, datasets, matrices, and charts.
  *
  * Every placeholder reserves the real element's footprint so swapping in live
  * data does not shift the layout (no CLS), and announces itself with
@@ -17,12 +17,12 @@ export function Shimmer({ className, style }: { className?: string; style?: CSSP
 }
 
 // Fixed, varied heights/widths so the skeleton looks like real data without
-// reflowing between renders (no Math.random — keeps SSR/hydration stable too).
+// reflowing between renders (no Math.random, keeps SSR/hydration stable too).
 const BAR_HEIGHTS = [54, 70, 42, 82, 60, 74, 48, 66, 88, 56, 72, 62, 80, 46, 68, 58];
 const LABEL_WIDTHS = ["72%", "55%", "84%", "61%", "76%", "50%", "67%", "58%"];
 
 interface ChartSkeletonProps {
-  /** Tailwind height class for the plot area (default h-44 — matches DefinitionChart). */
+  /** Tailwind height class for the plot area (default h-44, matches DefinitionChart). */
   heightClass?: string;
   /** Number of faux columns to draw. */
   bars?: number;

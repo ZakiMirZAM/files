@@ -1,4 +1,4 @@
-// Company checklist (Erickson, Global Investing — "Own the Best and Leave the Rest").
+// Company checklist (Erickson, Global Investing, "Own the Best and Leave the Rest").
 // Text is placed VERBATIM from the source request: category titles, item wording,
 // and the explanatory notes are unmodified (formatting only). Persisted per ticker
 // via the existing Convex qualitativeAnswers table (section="individual",
@@ -32,7 +32,7 @@ export const COMPANY_CHECKLIST: ChecklistCategory[] = [
       { id: "chk.moat.rnd-leader", text: "Is the company an industry leader or a laggard in R&D?" },
       { id: "chk.moat.expansion", text: "Can it successfully expand into new regions or closely related markets?" },
     ],
-    note: `Dorsey's framing makes this the central question: "What prevents a smart, well-financed competitor from competing away the company's profits?" A wide moat is what lets a firm keep earning high returns on capital for years — and analyzing the moat before a stock gets cheap tells you whether future trouble would be temporary or terminal.`,
+    note: `Dorsey's framing makes this the central question: "What prevents a smart, well-financed competitor from competing away the company's profits?" A wide moat is what lets a firm keep earning high returns on capital for years, and analyzing the moat before a stock gets cheap tells you whether future trouble would be temporary or terminal.`,
   },
   {
     title: "3. Balance-sheet strength / risk",
@@ -48,7 +48,7 @@ export const COMPANY_CHECKLIST: ChecklistCategory[] = [
       { id: "chk.mgmt.comp-alignment", text: "Does the compensation structure align management with shareholder interests?" },
       { id: "chk.mgmt.returns-cash", text: "Is management committed to returning excess cash to shareholders?" },
     ],
-    note: `Strategic Value Investing adds the "how to vet" step: read the proxy statement, 10-K/SEC filings, and earnings releases, and listen to analyst conference calls where professionals grill management — these reveal both hard facts and the quality of the management team. For acquirers specifically, judge whether a deal is accretive vs. dilutive to EPS, whether there are real strategic benefits/cost savings, and whether the price paid is reasonable.`,
+    note: `Strategic Value Investing adds the "how to vet" step: read the proxy statement, 10-K/SEC filings, and earnings releases, and listen to analyst conference calls where professionals grill management, these reveal both hard facts and the quality of the management team. For acquirers specifically, judge whether a deal is accretive vs. dilutive to EPS, whether there are real strategic benefits/cost savings, and whether the price paid is reasonable.`,
   },
   {
     title: "5. Governance & conduct",
@@ -64,9 +64,9 @@ export const COMPANY_CHECKLIST: ChecklistCategory[] = [
   },
 ];
 
-// "Two usage notes from the source" — rendered verbatim beneath the checklist.
+// "Two usage notes from the source", rendered verbatim beneath the checklist.
 export const CHECKLIST_USAGE_NOTES: string[] = [
-  `Re-run it regularly. Erickson stresses it is not enough to answer these once — revisit the questions for each holding and its primary competitors on a recurring basis, so you catch a business about to decline or one showing emerging strength.`,
+  `Re-run it regularly. Erickson stresses it is not enough to answer these once, revisit the questions for each holding and its primary competitors on a recurring basis, so you catch a business about to decline or one showing emerging strength.`,
   `The summary signature of a good business (per the chapter): defensible, leading market positions in growing industries, astute management, strong balance sheets, and a strong social conscience. For deeper company analysis the author points you to Graham & Dodd's Security Analysis.`,
 ];
 

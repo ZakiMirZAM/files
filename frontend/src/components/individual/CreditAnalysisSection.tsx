@@ -114,7 +114,7 @@ export function CreditAnalysisSection({ credit }: CreditAnalysisSectionProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
           {debtCapacity && (
             <div className="rounded-sm border border-white/10 bg-white/[0.03] px-4 py-3.5">
-              <p className="eyebrow mb-1"><MetricTerm metric="Debt capacity" asSpan /> (Ziegel Ch. 6)</p>
+              <p className="eyebrow mb-1"><MetricTerm metric="Debt capacity" asSpan /></p>
               <p className="text-lg font-semibold text-white leading-tight">{debtCapacity.headline}</p>
               <p className="text-[0.8rem] font-mono text-white/50 mt-1">
                 Total debt / 3-yr avg free cash flow:{" "}

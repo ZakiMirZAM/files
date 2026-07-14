@@ -1,5 +1,5 @@
 // Per-page warnings for backend-data problems. The topbar ApiStatusBadge only
-// tracks /api/health, which can diverge from a per-endpoint failure — these
+// tracks /api/health, which can diverge from a per-endpoint failure, these
 // surfaces flag the actual figures on screen.
 //  - DataStatusBanner: page-top banner shown whenever the page is rendering the
 //    synthetic mock fallback instead of live backend data.

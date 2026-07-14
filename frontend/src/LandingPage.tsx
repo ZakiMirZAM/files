@@ -3,7 +3,7 @@ import Logo from "./components/Logo";
 import HeroVisual from "./components/HeroVisual";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Palette — gold/ink luxury identity, with emerald (live/positive) and a
+   Palette, gold/ink luxury identity, with emerald (live/positive) and a
    soft indigo as supporting accents so the page reads as a real market tool
    instead of a single-accent template.
    ───────────────────────────────────────────────────────────────────────── */
@@ -12,7 +12,7 @@ const GOLD_SOFT = "#d9b85c";
 const EMERALD = "#7fb87c";
 const INDIGO = "#7c93d6";
 
-/* The real five-stage pipeline — mirrors the in-app workspace (Dashboard.tsx),
+/* The real five-stage pipeline, mirrors the in-app workspace (Dashboard.tsx),
    stated in concrete terms rather than generic marketing. */
 const STEPS = [
   {
@@ -20,7 +20,7 @@ const STEPS = [
     title: "Economic Analysis",
     subtitle: "The macro tide",
     description:
-      "Real GDP, inflation, debt, rates and money supply pulled from FRED back to 2012 — each series charted against NBER recession bands and explained in plain language.",
+      "Real GDP, inflation, debt, rates and money supply pulled from FRED back to 2012, each series charted against NBER recession bands and explained in plain language.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
         <path d="M4 32 L12 20 L20 24 L28 12 L36 8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -33,7 +33,7 @@ const STEPS = [
     title: "Sector Analysis",
     subtitle: "Eleven sectors",
     description:
-      "Aggregate growth, margins, ROIC and leverage across every company in eleven GICS-style sectors — so you know which part of the market the wind is actually behind.",
+      "Aggregate growth, margins, ROIC and leverage across every company in eleven GICS-style sectors, so you know which part of the market the wind is actually behind.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
         <rect x="4" y="20" width="8" height="16" rx="1" stroke="currentColor" strokeWidth="2.5" />
@@ -47,7 +47,7 @@ const STEPS = [
     title: "Industry Analysis",
     subtitle: "164 industries",
     description:
-      "Market-cap-weighted averages computed straight from the financials database — pricing power, structural advantage and where a moat is real versus a rising tide.",
+      "Market-cap-weighted averages computed straight from the financials database: pricing power, structural advantage and where a moat is real versus a rising tide.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
         <circle cx="20" cy="20" r="15" stroke="currentColor" strokeWidth="2.5" />
@@ -60,7 +60,7 @@ const STEPS = [
     title: "Comparative Analysis",
     subtitle: "Side by side",
     description:
-      "Line up the top public companies in an industry across margin, cash generation and valuation multiples — the head-to-head that separates the leader from the laggard.",
+      "Line up the top public companies in an industry across margin, cash generation and valuation multiples: the head-to-head that separates the leader from the laggard.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
         <rect x="6" y="4" width="28" height="32" rx="2" stroke="currentColor" strokeWidth="2.5" />
@@ -73,7 +73,7 @@ const STEPS = [
     title: "Individual Analysis",
     subtitle: "Down to one share",
     description:
-      "Enter a ticker and drill into 13 years of financials, vertical analysis and a long qualitative checklist — every metric explained for what it means to intrinsic value.",
+      "Enter a ticker and drill into 13 years of financials, vertical analysis and a long qualitative checklist, with every metric explained for what it means to intrinsic value.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
         <circle cx="20" cy="14" r="7" stroke="currentColor" strokeWidth="2.5" />
@@ -84,9 +84,9 @@ const STEPS = [
 ];
 
 const FEATURES = [
-  { title: "Every number, explained", description: "Each metric carries plain-language commentary on what it is and why it moves intrinsic value — not a tooltip, a teacher." },
+  { title: "Every number, explained", description: "Each metric carries plain-language commentary on what it is and why it moves intrinsic value. Not a tooltip, a teacher." },
   { title: "Valuation, not vibes", description: "Built around DCF, residual income and EVA fundamentals. No price momentum, no social sentiment, no noise." },
-  { title: "The analyst's real process", description: "The same top-down macro-to-company sequence professionals run — sequenced into five stages you can actually follow." },
+  { title: "The analyst's real process", description: "The same top-down macro-to-company sequence professionals run, sequenced into five stages you can actually follow." },
   { title: "Free and open source", description: "No paywall, no subscription, no locked tiers. The full pipeline, the full code, on GitHub." },
   { title: "Signal over surface area", description: "We surface the handful of figures that decide the thesis and keep the rest out of your way." },
   { title: "Built for the long horizon", description: "Designed for investors who measure conviction in years and want to understand what they own." },
@@ -135,7 +135,7 @@ function useCountUp(target: number, active: boolean, durationMs = 1400) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Live hero chart — an intrinsic-value line drawing itself on, with a faint
+   Live hero chart, an intrinsic-value line drawing itself on, with a faint
    "price" line oscillating around it (the gap the product is built to close).
    Pure inline SVG so it ships with zero extra weight.
    ───────────────────────────────────────────────────────────────────────── */
@@ -192,10 +192,10 @@ function HeroChart({ active }: { active: boolean }) {
         {/* area under the value line */}
         <path d={`${valuePath} L${W} ${H - 24} L0 ${H - 24} Z`} fill="url(#hero-fill)" className={active ? "hero-area in" : "hero-area"} />
 
-        {/* faint market price line — indigo, dashed, oscillating */}
+        {/* faint market price line, indigo, dashed, oscillating */}
         <path d={pricePath} fill="none" stroke={INDIGO} strokeWidth={1.4} strokeDasharray="4 5" opacity={0.55} className={active ? "hero-price in" : "hero-price"} />
 
-        {/* intrinsic value line — gold, draws on */}
+        {/* intrinsic value line, gold, draws on */}
         <path d={valuePath} fill="none" stroke={GOLD} strokeWidth={2.4} strokeLinecap="round" className={active ? "hero-line in" : "hero-line"} />
 
         {/* live endpoint */}
@@ -268,7 +268,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         .d1 { transition-delay: 0.08s; } .d2 { transition-delay: 0.16s; } .d3 { transition-delay: 0.24s; }
         .d4 { transition-delay: 0.32s; } .d5 { transition-delay: 0.40s; }
 
-        /* Animated aurora — gold + emerald + indigo drifting behind the hero.
+        /* Animated aurora, gold + emerald + indigo drifting behind the hero.
            This is what replaces the flat single-accent background. */
         @keyframes aurora-drift {
           0%   { transform: translate3d(-6%, -4%, 0) scale(1); }
@@ -330,7 +330,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
           .hero-area, .hero-pulse { opacity: 1; }
         }
 
-        /* Founder portrait — gold-framed, gently zooms on hover */
+        /* Founder portrait, gold-framed, gently zooms on hover */
         .founder-card { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid rgba(201,168,76,0.28); background: linear-gradient(165deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); box-shadow: 0 40px 80px -50px rgba(0,0,0,0.85); }
         .founder-card img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 15%; transition: transform 0.6s cubic-bezier(0.16,1,0.3,1); }
         .founder-card:hover img { transform: scale(1.045); }
@@ -391,7 +391,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             </h1>
 
             <p className={`fade-up d2 ${hero.inView ? "in" : ""}`} style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.62)", maxWidth: 540, lineHeight: 1.75, marginBottom: "2.25rem" }}>
-              IntrinsicFinEd turns walls of financial data into plain-language explanations — and walks you through the exact top-down process analysts use, from the macro tide down to a single share.
+              IntrinsicFinEd turns walls of financial data into plain-language explanations, and walks you through the exact top-down process analysts use, from the macro tide down to a single share.
             </p>
 
             <div className={`fade-up d3 ${hero.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", flexWrap: "wrap", marginBottom: "3rem" }}>
@@ -455,7 +455,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
           <div className={`fade-up mb-14 ${steps.inView ? "in" : ""}`}>
             <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>The Framework</p>
             <h2 className="font-display" style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: 700, maxWidth: 540, lineHeight: 1.15 }}>
-              Five stages, top down — from the economy to a single share.
+              Five stages, top down: from the economy to a single share.
             </h2>
           </div>
 
@@ -499,7 +499,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
               <span style={{ color: GOLD, fontStyle: "italic" }}>understanding</span>.
             </h2>
             <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.58)", lineHeight: 1.8, marginBottom: "2rem" }}>
-              Every figure arrives with the context that gives it meaning — explained in plain English, not Bloomberg shorthand. The result is a workspace you can actually learn from while you use it.
+              Every figure arrives with the context that gives it meaning, explained in plain English, not Bloomberg shorthand. The result is a workspace you can actually learn from while you use it.
             </p>
             <button className="btn-gold" onClick={handleStart}>Start for free →</button>
           </div>
@@ -608,7 +608,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
                   Financial literacy shouldn't sit behind a paywall.
                 </h2>
                 <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.58)", lineHeight: 1.8, maxWidth: 520 }}>
-                  The entire pipeline is free and open — the data layer, the valuation models, the explanations and the code. Inspect it, fork it, learn from it. The tools for long-term wealth shouldn't depend on your bank balance.
+                  The entire pipeline is free and open: the data layer, the valuation models, the explanations and the code. Inspect it, fork it, learn from it. The tools for long-term wealth shouldn't depend on your bank balance.
                 </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flexShrink: 0 }}>
@@ -632,7 +632,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             <span style={{ color: GOLD, fontStyle: "italic" }}>conviction</span>?
           </h2>
           <p className={`fade-up d2 ${cta.inView ? "in" : ""}`} style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.58)", lineHeight: 1.8, marginBottom: "2.5rem" }}>
-            Learn to read a company the way the professionals do — from the macro tide down to the fundamentals of a single share.
+            Learn to read a company the way the professionals do, from the macro tide down to the fundamentals of a single share.
           </p>
           <div className={`fade-up d3 ${cta.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", justifyContent: "center", flexWrap: "wrap" }}>
             <button className="btn-gold" onClick={handleStart}>Start analyzing free →</button>

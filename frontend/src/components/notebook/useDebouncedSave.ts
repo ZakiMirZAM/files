@@ -6,13 +6,13 @@ export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 const SAVE_DELAY_MS = 800;
 const SAVED_BADGE_MS = 1500;
-// Convex documents cap at ~1MB — refuse to send anything close to that.
+// Convex documents cap at ~1MB, refuse to send anything close to that.
 const MAX_CONTENT_CHARS = 900_000;
 
 /**
  * Debounced autosave for a Tiptap editor (same cadence as ReportPage).
  * The doc is serialized at update time (not at flush time) so the pending
- * payload survives editor destruction — switching notes never drops edits.
+ * payload survives editor destruction, switching notes never drops edits.
  */
 export function useDebouncedSave(
   editor: Editor | null,
@@ -31,7 +31,7 @@ export function useDebouncedSave(
     const commit = async (json: string) => {
       if (json.length > MAX_CONTENT_CHARS) {
         setStatus("error");
-        toast.error("Note too large to save — remove some content");
+        toast.error("Note too large to save, remove some content");
         return;
       }
       try {

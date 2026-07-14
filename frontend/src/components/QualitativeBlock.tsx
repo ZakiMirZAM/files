@@ -6,7 +6,6 @@ import type { RuntimeGroup, SectionKey } from "../lib/types";
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/cn";
 import { QuestionField } from "./QuestionField";
-import { HelpBadge } from "./onboarding/HelpBadge";
 
 interface QualitativeBlockProps {
   section: SectionKey;
@@ -83,14 +82,8 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
       return next;
     });
 
-  const totalQuestions = groups.reduce((n, g) => n + g.questions.length, 0);
-
   const controls = (
     <div className="flex items-center gap-3" data-tour="ai-explain">
-      <HelpBadge topic="aiExplain" />
-      <p className="hidden md:block text-xs font-mono text-white/30">
-        {savedMap.size} / {totalQuestions} answered
-      </p>
       <div className="inline-flex rounded-sm border border-gold/15 overflow-hidden shrink-0">
         <button
           type="button"

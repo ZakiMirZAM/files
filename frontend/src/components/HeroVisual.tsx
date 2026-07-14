@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   HeroVisual — the homepage's bespoke art panel.
+   HeroVisual, the homepage's bespoke art panel.
 
    Not a stock photo and not a literal chart: an *atmosphere* piece. A field of
    drifting topographic contours (the "macro tide" the product starts from),
@@ -10,7 +10,7 @@
    over its lower-right for depth.
 
    `active` flips the draw-on animations once the hero scrolls into view.
-   Fully reduced-motion safe — everything resolves to its final, calm state.
+   Fully reduced-motion safe, everything resolves to its final, calm state.
    ───────────────────────────────────────────────────────────────────────── */
 
 const GOLD = "#c9a84c";
@@ -127,7 +127,7 @@ export default function HeroVisual({ active }: { active: boolean }) {
             <line key={`v${x}`} x1={x} x2={x} y1="0" y2={H} stroke={GOLD} strokeOpacity="0.04" strokeWidth="1" />
           ))}
 
-          {/* Topographic "macro tide" — drifting contour lines */}
+          {/* Topographic "macro tide", drifting contour lines */}
           <g className="hv-tide" fill="none" strokeWidth="1.4">
             <path className="t1" stroke={INDIGO} strokeOpacity="0.30" d="M-40 360 C 120 330, 240 400, 380 360 S 600 320, 660 350" />
             <path className="t2" stroke={INDIGO} strokeOpacity="0.22" d="M-40 405 C 130 380, 250 440, 390 405 S 600 365, 660 398" />
@@ -141,7 +141,7 @@ export default function HeroVisual({ active }: { active: boolean }) {
           {/* Faint oscillating market-price line */}
           <path className={`hv-mkt${on}`} d="M40 452 C 130 392, 196 432, 290 338 S 462 252, 560 140" fill="none" stroke={INDIGO} strokeWidth="1.6" strokeDasharray="4 6" opacity="0.5" />
 
-          {/* The intrinsic-value curve — the gesture */}
+          {/* The intrinsic-value curve, the gesture */}
           <path className={`hv-line${on}`} d="M40 430 C 140 410, 200 330, 300 300 S 470 150, 560 88" fill="none" stroke={GOLD} strokeWidth="3" strokeLinecap="round" />
 
           {/* Nodes on the curve */}

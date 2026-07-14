@@ -181,7 +181,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
   // ── Units toggle: Level ("regular output") ↔ Percent Change from Year Ago ──
   // Works in BOTH directions on any line metric with both views available:
   //  • level-default metric → Level is the server `trend`; YoY is computed here
-  //    (only when values stay positive — a YoY % of a zero-crossing series like a
+  //    (only when values stay positive, a YoY % of a zero-crossing series like a
   //    spread explodes into nonsense, exactly as on FRED).
   //  • YoY-default metric → YoY is the server `trend`; Level is the server
   //    `levelTrend` shipped alongside it. Bar metrics keep their single view.
@@ -213,10 +213,10 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
   const viewTrend = useMemo(() => sliceByYears(chartTrend, years), [chartTrend, years]);
   const chartUnit: Metric["unit"] = showYoY ? "%" : levelSeriesUnit;
   const chartIsRoc = showYoY;
-  const chartSeriesName = showYoY ? `${metric.name} — YoY %` : metric.name;
+  const chartSeriesName = showYoY ? `${metric.name} · YoY %` : metric.name;
   const chartLatestLabel = chartTrend.length
     ? formatValue(chartTrend[chartTrend.length - 1].value, chartUnit)
-    : "—";
+    : "n/a";
   const topLabel =
     displayType === "bar"
       ? frequency === "annual"
@@ -251,11 +251,11 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
 
   const overallChange =
     trend.length > 1 ? pctChange(trend[trend.length - 1].value, trend[0].value) : 0;
-  const latestPeriod = trend.length > 0 ? trend[trend.length - 1].period : "—";
+  const latestPeriod = trend.length > 0 ? trend[trend.length - 1].period : "n/a";
   const latestPeriodLabel = formatPeriodLabel(latestPeriod, frequency);
-  const startPeriodLabel = trend.length > 0 ? formatPeriodLabel(trend[0].period, frequency) : "—";
+  const startPeriodLabel = trend.length > 0 ? formatPeriodLabel(trend[0].period, frequency) : "n/a";
 
-  // Recession bands shaded + labelled with their exact NBER dates — clipped to
+  // Recession bands shaded + labelled with their exact NBER dates, clipped to
   // the displayed series' date range. Shared with every other economic chart.
   const recessionWindow = useMemo<[string, string] | null>(() => {
     if (frequency === "annual" || recessionBands.length === 0 || viewTrend.length === 0) return null;
@@ -431,8 +431,8 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
             )}
             <p className="text-[0.7rem] text-white/30 font-mono whitespace-nowrap">
               {viewTrend.length} pts ·{" "}
-              {viewTrend.length ? formatPeriodLabel(viewTrend[0].period, frequency) : "—"} →{" "}
-              {viewTrend.length ? formatPeriodLabel(viewTrend[viewTrend.length - 1].period, frequency) : "—"}
+              {viewTrend.length ? formatPeriodLabel(viewTrend[0].period, frequency) : "n/a"} →{" "}
+              {viewTrend.length ? formatPeriodLabel(viewTrend[viewTrend.length - 1].period, frequency) : "n/a"}
             </p>
           </div>
         </div>
@@ -472,7 +472,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                 </Bar>
               </BarChart>
             ) : chartIsRoc ? (
-              // Split-area chart for YoY % series — green when positive, red when negative.
+              // Split-area chart for YoY % series, green when positive, red when negative.
               // Mirrors the matplotlib fill_between pattern from economicmetrics.py.
               <ComposedChart
                 data={splitPosNeg(viewTrend)}
@@ -606,7 +606,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                 return (
                   <div key={period} className="rounded-sm px-3 py-2.5 border border-white/[0.05] text-center">
                     <p className="text-[0.65rem] uppercase tracking-wider text-white/30">{period}</p>
-                    <p className="font-mono text-sm text-white/30 mt-1">—</p>
+                    <p className="font-mono text-sm text-white/30 mt-1">n/a</p>
                   </div>
                 );
               }
@@ -640,7 +640,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
         </section>
       )}
 
-      {/* Snapshot pills — sub-annual data (works for both level and rate-of-change) */}
+      {/* Snapshot pills, sub-annual data (works for both level and rate-of-change) */}
       {snapshots.length > 0 && (
         <section className="mb-8">
           <div className="flex items-center justify-between mb-3">
@@ -746,7 +746,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                 )}
               >
                 {isRateOfChange
-                  ? `${trend.length > 1 ? (trend.at(-1)!.value - trend[0]!.value >= 0 ? "+" : "") + (trend.at(-1)!.value - trend[0]!.value).toFixed(1) + "pp" : "—"}`
+                  ? `${trend.length > 1 ? (trend.at(-1)!.value - trend[0]!.value >= 0 ? "+" : "") + (trend.at(-1)!.value - trend[0]!.value).toFixed(1) + "pp" : "n/a"}`
                   : `${overallChange >= 0 ? "+" : ""}${overallChange.toFixed(1)}%`}
               </dd>
             </div>

@@ -6,7 +6,7 @@ import { FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Image from "@tiptap/extension-image";
 import type { Extensions } from "@tiptap/react";
 
-// Image node that remembers its Convex storage id alongside the resolved URL —
+// Image node that remembers its Convex storage id alongside the resolved URL , 
 // needed for the PDF export CORS fallback and future orphan cleanup.
 export const NotebookImage = Image.extend({
   addAttributes() {
@@ -28,7 +28,7 @@ export function buildNotebookExtensions(): Extensions {
       heading: { levels: [1, 2, 3] },
       link: { openOnClick: false },
     }),
-    Placeholder.configure({ placeholder: "Write a note — paste images right in…" }),
+    Placeholder.configure({ placeholder: "Write a note, paste images right in…" }),
     TaskList,
     TaskItem.configure({ nested: true }),
     TextStyle,

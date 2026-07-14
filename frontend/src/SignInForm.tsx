@@ -21,12 +21,12 @@ export function SignInForm({ onBack }: SignInFormProps) {
     void signIn("password", formData).catch((error: Error) => {
       // Convex masks auth failures as a generic "Server Error" in production
       // (it hides internal error detail), so we can't distinguish wrong-password
-      // from no-such-account here — give one clear message covering both.
+      // from no-such-account here, give one clear message covering both.
       const message = error.message.includes("Invalid password")
         ? "Invalid password. Please try again."
         : flow === "signIn"
-        ? "Invalid email or password, or no account yet — try Create Account."
-        : "Could not create account — the email may already be registered. Try Sign In.";
+        ? "Invalid email or password, or no account yet. Try Create Account."
+        : "Could not create account. The email may already be registered. Try Sign In.";
       toast.error(message);
       setSubmitting(false);
     });
@@ -153,7 +153,7 @@ export function SignInForm({ onBack }: SignInFormProps) {
       </button>
 
       <p className="text-[0.7rem] text-white/30 text-center mt-8 leading-relaxed">
-        By continuing you agree this isn't financial advice — it's an educational tool.
+        By continuing you agree this isn't financial advice. It's an educational tool.
       </p>
     </div>
   );

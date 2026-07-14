@@ -107,7 +107,7 @@ export function ShenanigansSection({ shenanigans }: ShenanigansSectionProps) {
 
       {/* Qualitative checklist */}
       <div className="panel-soft p-5">
-        <p className="eyebrow mb-4">Qualitative checklist — questions to work through</p>
+        <p className="eyebrow mb-4">Qualitative checklist, questions to work through</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {shenanigans.questions.map((g) => (
             <div key={g.category}>
@@ -158,7 +158,7 @@ function ScoreCard({ score }: { score: ForensicScore }) {
             className="text-sm font-medium text-white/90 leading-tight"
           />
           <p className="text-2xl font-mono font-semibold text-white mt-1.5 tabular-nums">
-            {score.applicable && score.value !== null ? score.value.toFixed(2) : "—"}
+            {score.applicable && score.value !== null ? score.value.toFixed(2) : "n/a"}
           </p>
         </div>
         <span
@@ -167,7 +167,7 @@ function ScoreCard({ score }: { score: ForensicScore }) {
             style.pill,
           )}
         >
-          {score.headline.includes("—") ? score.headline.split("—").pop()?.trim() : score.headline}
+          {score.headline.includes("n/a") ? score.headline.split("n/a").pop()?.trim() : score.headline}
         </span>
       </div>
 

@@ -30,8 +30,7 @@ const pct = (v: number | null | undefined, d = 2): string =>
 const yr = (period: string): string => (period.length >= 4 ? period.slice(0, 4) : period);
 
 /**
- * "Fed model" comparison: the S&P 500's earnings yield (Damodaran's trailing
- * index earnings ÷ the current S&P 500 price from Yahoo Finance) against the
+ * "Fed model" comparison: the S&P 500's earnings yield against the
  * 1-Year Treasury yield (FRED DGS1). A positive spread means equities are cheap
  * relative to short-term bonds.
  */
@@ -55,7 +54,7 @@ export function FedModelSection({ fedModel, recessionBands = [] }: FedModelSecti
     return [...byDate.values()].sort((a, b) => (a.period < b.period ? -1 : 1));
   }, [fedModel]);
 
-  // Must run before any early return — keeping every hook above the
+  // Must run before any early return, keeping every hook above the
   // `!fedModel` guard so the hook count is identical on every render.
   const recessionWindow = useMemo<[string, string] | null>(() => {
     if (recessionBands.length === 0 || merged.length === 0) return null;
@@ -148,7 +147,7 @@ export function FedModelSection({ fedModel, recessionBands = [] }: FedModelSecti
         </div>
       ) : (
         <div className="rounded-sm border border-gold/20 bg-gold/[0.06] px-4 py-3 mb-6 text-sm text-white/55">
-          The earnings-yield snapshot draws on Damodaran's S&P 500 earnings and the live Yahoo
+          The earnings-yield snapshot draws on published S&P 500 earnings and the live Yahoo
           Finance price; it populates once the market-data sources have loaded. The 1-Year Treasury
           history is shown below in the meantime.
         </div>

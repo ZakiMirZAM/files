@@ -41,20 +41,30 @@ cd frontend && npm run build      # vite build only
 # type errors in the app code, run:
 cd frontend && npx tsc -p tsconfig.app.json --noEmit
 
-# Backend tests (network-free)
-cd backend && python -m pytest test_valuation_fixes.py test_group_scoring.py test_growth_estimation.py betas/test_betas.py marketdata/test_marketdata.py -q
+# Backend tests — the whole suite is network-free (339 tests, ~3s)
+cd backend && python -m pytest test_*.py betas/test_betas.py marketdata/test_marketdata.py -q
 cd backend && python -m pytest test_valuation_fixes.py -q -k negative_profit   # a single test
+
+# End-to-end check of the LIVE backend across every analysis stage (needs the
+# server up on :8000). Asserts on real CONTENT, not HTTP 200. 39 checks.
+python remediation/verify_stages.py
 ```
 
-The backend tests are `backend/test_valuation_fixes.py` (valuation/scoring/FX/normalization/
-value-lens regression — dict rows stand in for sqlite3.Row), `backend/test_group_scoring.py`
-(sector/industry scorecard value score + the 16 integrity questions — display-unit curves,
-profile-aware caps, one fire/non-fire/na test per check), `backend/test_growth_estimation.py`
-(fundamental growth, the sales-to-capital reinvestment bridge, the life-cycle clamps, and the
-17-question growth-viability deck), `backend/betas/test_betas.py`
-(bottom-up beta worked examples), and `backend/marketdata/test_marketdata.py` (marketdata layer
-incl. the expected-return decomposition). Much of the valuation engine is otherwise untested;
-add a characterization test when you touch scoring, DCF, or a normalization.
+Valuation/engine tests: `test_valuation_fixes.py` (valuation/scoring/FX/normalization/value-lens
+regression — dict rows stand in for sqlite3.Row), `test_group_scoring.py` (sector/industry
+scorecard value score + the 16 integrity questions), `test_growth_estimation.py` (fundamental
+growth, sales-to-capital bridge, life-cycle clamps), `betas/test_betas.py` (Damodaran Ch.8 worked
+examples), `marketdata/test_marketdata.py`, `test_uses_of_cash.py`.
+
+Data-layer tests (added by the 2026-07-13 DB remediation, see that section): `test_ingest_validation.py`
+(junk year/period rejection), `test_update_fill_gaps.py` (COALESCE gap-fill never overwrites),
+`test_identity_lib.py` + `test_symbol_resolution.py` (ticker identity / alias folding),
+`test_phase3_backfill.py`, `test_phase3_complete.py`, `test_phase3b_mapping.py` (XBRL→column
+mapping), `test_phase4_quarterly.py` (quarterly + TTM + Q4 derivation), `test_phase5_jobs.py`
+(scheduled jobs), `test_phase6_fx_weights.py`, `test_phase6_benchmark.py`, `test_quote_batch.py`.
+
+Much of the valuation engine is still otherwise untested; add a characterization test when you
+touch scoring, DCF, or a normalization.
 
 **Dev backend caveat:** `uvicorn --reload` here does **not** reliably pick up edits to the
 analysis modules — after changing backend Python, restart uvicorn manually (and note the
@@ -122,21 +132,49 @@ hardening/debug work — run from there to revert.
 
 ## Data updates (individual equities)
 
-`data/daily_update.py` (via `FinancialDB.update_ticker`/`update_all`, triggered by the admin
-`POST /api/daily-update`) pulls new fiscal years from yfinance into `financials.db`. It is
-**additive-only** (`INSERT OR IGNORE` — adds genuinely-new years, never restates existing rows)
-and **manual** — unlike the macro/marketdata scheduler, nothing auto-refreshes per-ticker
-fundamentals. `update_all` isolates each ticker (`try/except` → `-1`), but there are **~31k
-tickers** at ~1s each, so a full-universe refresh is an ~8h+ yfinance-rate-limited job — refresh
-on-demand per ticker, not all at once. After a manual update, `POST /api/cache/clear` (admin) so
-the 30-min-cached endpoints re-read. The `/api/individual/{ticker}` response carries an additive
+Per-ticker fundamentals refresh through **four Windows scheduled tasks** registered under
+`\IntrinsicFinEd\` (source in `remediation/jobs/`, registrar `register_tasks.ps1`). They are the
+supported path; the old "everything is manual" model is gone.
+
+| Task | Cadence | Does |
+|---|---|---|
+| `FilingsWatch` | daily 07:30 | EDGAR daily index → CIKs that filed 10-K/10-Q/20-F yesterday → refresh only those tickers (annual + quarters + TTM). A first filing flips an `awaiting_first_financials` registrant to `active`, so **IPOs onboard themselves**. |
+| `UniverseSync` | weekly Mon 07:00 | Diff SEC `company_tickers.json` against `security_map`: add new registrants, alias renames, mark vanished CIKs `delisted` (**rows are never deleted** — that is the survivorship fix). |
+| `MarketWeekly` | weekly Sat 08:00 | `refresh_market_caps()` + `refresh_fx_rates()`. |
+| `BulkSweep` | quarterly (15th Feb/May/Aug/Nov) | Reconciles anything the daily job missed. |
+
+`freshness_monitor.py` (run on demand) reports staleness per store into `remediation/jobs/freshness_report.txt`.
+
+`FinancialDB.update_ticker(ticker, fill_gaps=False)` is still the primitive underneath. It is
+**additive-only by default** (`INSERT OR IGNORE` — adds new fiscal years, never restates);
+`fill_gaps=True` additionally completes **NULL columns only** on existing rows (COALESCE
+semantics — a stored non-NULL value is never overwritten). A yfinance-sourced year fills only
+~51 of 206 columns (no market cap, currency, CIK, or ratios), so
+`remediation/phase3_complete_rows.py --ratios` recomputes the derived ratio columns set-based
+afterwards. A full-universe sweep is ~31k tickers at ~1s each (multi-hour, rate-limited) — use
+`remediation/phase3_backfill.py <db> --missing --frozen` (resumable via
+`remediation/phase3_checkpoint.json`), not `update_all`.
+
+The admin `POST /api/daily-update` still exists for a one-off ticker. After any manual write,
+`POST /api/cache/clear` (admin-token gated) so the 30-min-cached endpoints re-read; a backend
+restart does the same for free. The `/api/individual/{ticker}` response carries an additive
 `analysis_error` field (null on success) so the frontend distinguishes a crashed valuation
 pipeline from a ticker with no data.
 
 ## Architecture
 
 ### Three data stores, three roles
-- **`financials.db`** (repo root, ~600 MB, git-ignored) — the company fundamentals warehouse. Per-ticker, per-year financial metrics ingested from Excel and updated via yfinance. Owned by `data/financial_db.py`. **Backups are committed as `financials.db.backup-*` — do not treat those as the live DB.**
+- **`financials.db`** (repo root, ~640 MB, git-ignored) — the company fundamentals warehouse. Owned by `data/financial_db.py`. **Backups sit beside it as `financials.db.backup-*` / `financials.db.pre-swap-*` — do not treat those as the live DB.** Core tables:
+  - `financials` — the annual warehouse. PK `(Ticker, "Calendar Year")`, 206 columns, ~363k rows, one FY row per company-year. `Period` is always `'FY'`.
+  - `financials_quarterly` — PK `(Ticker, "Calendar Year", Period)` where Period ∈ `Q1..Q4|TTM`. Same columns. Separate table **by design**: quarterly rows in `financials` would be counted four extra times by every `SUM`-based average. Barely populated (see "Quarterly + TTM").
+  - `security_map` — company identity / symbol crosswalk (see "Ticker identity").
+  - `tickers` — the searchable universe (+ `status`, `beta`, `peg`). Has **no** `Cik` column; `financials` does.
+  - `financials_quarantine` — rows rejected by ingest validation (Wisesheets error strings) and losers of the identity re-key. Never deleted, so any purge is reversible.
+  - `rekey_audit` — every identity re-key/fold action, reversible row by row.
+  - `damodaran_benchmark` — `(year, dam_industry, metric)`, the survivorship-free EXTERNAL benchmark (2013→now).
+  - `computed_betas` / `damodaran_industry*` / `segment_*` — the bottom-up beta engine (see `backend/betas/`).
+  - `fx_rates` — currency → USD. Now **load-bearing for the weighted averages**, not just ranking.
+  - `job_runs` — `job TEXT PRIMARY KEY`. Scheduled-job completion markers. **Always upsert** (`ON CONFLICT(job) DO UPDATE`); a plain INSERT crashes on the second run.
 - **`backend/market_data.db`** — macro/market series (CAPE, implied ERP, EPU, GPR, Fed-model inputs, sector-ETF history) populated *only* by the marketdata refresh scheduler. The `/api/economic` and sector-ETF endpoints read from here; an empty series renders as a blank chart rather than erroring.
 - **Convex** (`frontend/convex/`) — per-user application state: qualitative answers, cached AI explanations (`aiAnswers`), notebook notes (Tiptap), the watchlist, the simulator tables (`sim*`), and the Investment Policy Statement (`policy`, singleton per user). Auth via `@convex-dev/auth`. This is the only store the frontend writes to directly. The `reports` table + `convex/reports.ts` are **orphaned** (the old Tiptap final report was replaced by Final Review questions) — don't build on them.
 
@@ -147,7 +185,7 @@ pipeline from a ticker with no data.
 - `backend/earnings_normalization.py` — Damodaran Ch.9 restatements (operating leases → debt, investment-income removal ex-financials, one-time normalization, goodwill/SBC); its normalized EBIT also feeds EPV, and its lease PV feeds the WACC debt weight.
 - `backend/comparitivestockanalysis.py` — industry panel + cross-company ranking/scoring (the per-COMPANY value score `score_industry`).
 - `backend/group_scoring.py` — the per-GROUP scorecard: a sector/industry 0–100 Value Score plus the 16 answerable "integrity questions". Distinct engine from `score_industry` — see the scorecard subsection below.
-- `backend/industry_averages.py` — sector/industry averages by year, CAPE, DCF, ranking. **Note:** in-house sector/industry averages are survivorship/look-ahead biased — Damodaran (via `backend/marketdata/`) is the authoritative unbiased benchmark. The industry life-cycle classifier and Porter strategic-group map live in `api.py` (`_lifecycle_from_series`, `_strategic_groups_from_metrics`) on top of these aggregates.
+- `backend/industry_averages.py` — sector/industry averages by year, CAPE, DCF, ranking. The industry life-cycle classifier and Porter strategic-group map live in `api.py` (`_lifecycle_from_series`, `_strategic_groups_from_metrics`) on top of these aggregates. **Weighting invariants (2026-07-13):** every by-year aggregate weights by `_FX_WEIGHT_SQL` — the market cap converted to USD via `LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"` — not the raw local cap (a ¥ cap was being summed against a $ cap at face value). USD/NULL currency weights 1.0/unit; an **unknown currency yields a NULL weight and drops the row from both numerator and denominator**; caps are bounded `> 0` and `< 1e14` (one Wisesheets row claimed 3.2e17 and dominated an entire industry-year). `compute_cape` / `compute_dcf` use the same weight, but their per-share prices stay LOCAL — the ratio must be currency-neutral. **Metric VALUES are never FX-converted.** Survivorship bias is now *partially* corrected (delisted companies are in the warehouse — see the remediation section), but industry labels are still current-day, so Damodaran (`damodaran_benchmark`) remains the authoritative unbiased benchmark.
 - `backend/esg_data.py` — ESG scores cache. Yahoo's free ESG feed is dead (404s), so the block returns an `ai_qualitative` marker and the numeric tiles simply do not render; the ESG section is a **user-answered question deck** (it no longer auto-generates an AI assessment). The numeric hook self-heals if the feed ever returns.
 
 Routes are grouped: `/api/economic`, `/api/sectors` + `/api/sector/{sector}`, `/api/industries` + `/api/industry/{industry}` (+ `/scorecard`, `/strategic-groups`), `/api/comparative/{industry}` (+ `/ranking`, `/company-metrics`), `/api/individual/{ticker}`, `/api/quote/{ticker}`, `/api/tickers/search`. Every endpoint returns the `SectionData` shape consumed by `frontend/src/lib/types.ts`; the industry/sector payloads also carry a `lifecycle` key.
@@ -159,7 +197,7 @@ These cross-cut `individualanalysis.py`, `comparitivestockanalysis.py`, `industr
 - **Comparative value score** (`comparitivestockanalysis.score_industry`) is **magnitude-aware and sector-weighted**, not a pure peer percentile: `metric_score = 0.70·level + 0.30·peer_percentile`, where `level` comes from absolute calibration curves (`METRIC_CURVES`, anchored on `individualanalysis.QUALITY_THRESHOLDS`), weighted by `WEIGHTS_BY_SECTOR` (per-GICS-sector profiles + `DEFAULT_WEIGHTS`, RAG-grounded), then a **hard cap (`NEG_PROFIT_CAP=30`)** so negative profitability / negative EVA can never rank high. It mirrors the individual page's `_build_verdict` quality score. Tied values share the average percentile.
 - **Market Cap is stored in the company's reporting currency** (e.g. TSM in TWD, SK Hynix in KRW), not USD. Cross-currency size ranking/weighting goes through the `fx_rates` table (`FinancialDB.refresh_fx_rates()` from yfinance, `get_fx_rates()`); the comparative ranking queries `LEFT JOIN fx_rates` and rank on `Market Cap * usd_per_unit`, and `api.py:_mc_to_usd` converts the displayed/weight cap. **Ratios stay in local currency** (currency-neutral — never FX-convert a ratio). The DB's `Reported Currency` column contains some garbage values; unconvertible currencies drop out of size ranking.
 - **Displayed spreads are derived, not re-aggregated.** Sector/industry averages winsorize each metric independently, which breaks `excess = ROE − Ke`; `_aggregate_weighted_columns` therefore recomputes `excessReturnEquity` from the clipped `roeEquity − costOfEquity` so the three displayed numbers reconcile.
-- **Most sector/industry average queries filter `Reported Currency = 'USD'`**; the two per-ticker *ranking* endpoints (`_ranking_for_industry`, `comparative_endpoint`) are the ones that include foreign names (via FX).
+- **Three different currency policies coexist — know which query you are in.** (a) The **by-year group aggregates** (`_by_year_with_groups`, `industry_averages._compute_averages*`, CAPE/DCF) include every currency and **FX-convert the WEIGHT** via `_FX_WEIGHT_SQL` (unknown currency ⇒ NULL weight ⇒ row drops). (b) The **scorecard matrices** and **ranking endpoints** include every currency and convert through `_mc_to_usd` / `LEFT JOIN fx_rates`, with a $100M USD-equivalent floor. (c) A few helpers (e.g. `_group_excess_return`, `_company_metrics_for_industry`'s top-N pick) still hard-filter `Reported Currency = 'USD'`. Never FX-convert a metric VALUE in any of them.
 - **Every individual-page analysis block follows one contract.** Compute inside `build_individual_snapshot` in its own try/except that logs and falls back to `None` (a crashed block must never break the snapshot); return `{"applicable": False, "reason": …}` markers instead of raising for companies the method doesn't fit (the financial-sector guard `fcff_applicable`/`_FCFF_GUARD_SECTORS` gates FCFF-family methods); add a dataclass field + a camelCase key in `api.py#_snapshot_to_dict`; render as a `components/individual/*Section.tsx` mounted in `IndividualPage.tsx`. Follow this shape for any new method.
 - **Cost of capital is deliberately mixed-rate.** `compute_wacc` uses the company's own *effective* tax rate for NOPAT/FCFF but the *marginal* rate (`MARGINAL_TAX_RATE = 0.21`, matching `betas/`) for the after-tax cost of debt — Damodaran Ch.8; don't "fix" the mismatch. The ERP is the **live implied two-stage premium** read from the `market_inputs` table (7-day freshness window) with `FIXED_EQUITY_RISK_PREMIUM = 0.045` only as fallback; `waccBuild.erpMethod` records which path ran. The PV of operating leases (XBRL `OperatingLeaseLiability`, absent from yfinance Total Debt) is added to the debt weight via `compute_wacc(lease_debt=…)`; on-balance-sheet *capital* leases are already inside Total Debt and must never be re-added.
 
@@ -173,6 +211,36 @@ The three scorecard-matrix endpoints (`/api/sector-metrics`, `/api/sector/{s}/in
 - **The Value Score is a matrix ROW, not a per-company metric.** `_base_metric_dicts_with_score()` splices a `valueScore` def into the emitted `metrics[]` right after the Valuation group. It is deliberately NOT in `_SECTOR_METRIC_DEFS`/`metric_keys` (those drive per-company aggregation, clipping, and history, and would null the score). `METRIC_DIRECTION.valueScore = "higher"` gives the row its heatmap; the cell opens definition 435 (sector) / 323 (industry).
 - **Integrity questions are ANSWERABLE, not auto-verdicts.** `build_group_integrity` always returns all 16 checks (each with an interpolated `{group}` question — no em dashes, no unclear pronouns — plus a `tier`, a severity, and figures). The frontend `buildIntegrityDeck` (`lib/sectorMetrics.ts`) turns them into a standing question deck rendered through `QualitativeBlock`'s optional `groups` prop: text box + autosave + Explain-AI, persisted under `(section, scopeKey=group, questionId="integrity-…")` with **no Convex schema change** (the keys are free-form). `ScoreExplainer.tsx` (sector/industry variants) is the on-page explanation.
 - `_integrity_inputs` feeds the checks from the `industry_averages` by-year aggregates (DECIMAL units, a different methodology than the matrix), so it feeds integrity ONLY — never the clicked-cell 5-year history (which re-runs `_company_metrics` per year through the same matrix pipeline).
+
+### Ticker identity: `security_map` + `_resolve_symbol` (read before touching any lookup)
+The DB's symbology is **FMP/Wisesheets**, where a *listing line* is not a *company*. The original
+export attached Goldman Sachs' statements to its PREFERRED tickers (`GS-PA`, `GS-PC`) and left the
+common symbol `GS` with zero rows; the same for `MS`→`MS-PO`, `BAC`→`BAC-PP`, `BRK-B`→`BRK-A`,
+`GOOGL`→`GOOG`. Search found the name, the page rendered empty. Fixed by making **CIK the identity**:
+
+- **`security_map`** `(cik, symbol PK, symbol_sec, symbol_yf, symbol_fmp, kind, is_primary, exchange, status, valid_from, valid_to)`. Exactly one `is_primary=1` symbol per CIK carries the fundamentals; preferreds/warrants/units/dual-class siblings are aliases. `kind` ∈ `common|preferred|warrant|unit`. `status` ∈ `active|delisted|placeholder_only|awaiting_first_financials`. The three `symbol_*` columns exist because **each source needs its own spelling** (SEC vs yfinance vs the legacy FMP string).
+- **`api.py#_resolve_symbol(symbol)`** folds an alias onto its primary before ANY lookup, and normalizes case + dot→dash (`BRK.B` → `BRK-A`). It backs both `/api/tickers/search` and `/api/individual/{ticker}`. The alias map is built once and **cached for the process lifetime — a backend restart is the only thing that refreshes it.** With `security_map` absent it degrades to a plain uppercase normalize, so behaviour is unchanged on a pre-remediation DB.
+- **CIK `'0000000000'` is a placeholder, never an identity.** It must stay NULL in `security_map`, and the alias-map JOIN explicitly excludes it. When it was treated as real, its ~24.7k rows joined its 40 "primaries" and **637 real tickers resolved to one arbitrary company** (`/api/individual/ABBV` served Zeo Energy). Guard added; do not remove it.
+- Delisted companies keep their rows forever (`status='delisted'`, `valid_to` set). Never DELETE a company.
+
+### Quarterly + TTM store (`financials_quarterly`, `TTM_MODE`)
+`data/financial_db.py` gained `save_quarters()` (Q1–Q4 from yfinance), `save_ttm()` (persists the
+rolling snapshot `get_ttm()` computes — it used to be thrown away and was called by nothing), and
+`derive_q4()` (no company files a Q4 10-Q, so Q4 flows = FY − (Q1+Q2+Q3), balance items copied
+from the FY row).
+
+- **`derive_q4` only runs for December fiscal year-ends.** Quarters are keyed by the CALENDAR year of the quarter-end date while the FY row is keyed by FISCAL year; for a Sep-FYE filer like AAPL those label different periods and the subtraction would mix them.
+- **`TTM_MODE` ∈ `off|shadow|on`, default `off`** (mirrors the `BETA_RESOLVER` convention). `on` overlays the stored TTM row onto the latest annual row at the five per-company sites (`_company_metrics`, `_sector_current_metrics`, `_industry_scorecard`, `_company_metrics_for_industry`, `_ranking_for_industry`) via the single helper `_latest_or_ttm(rs, ticker)`; `off` is byte-identical to pre-Phase-4. The overlay sets a `_ttm_overlay` marker so `operatingLeverage` (a YoY ratio) skips itself rather than comparing a trailing-twelve-month numerator against a prior FULL year.
+- **Coverage is currently ~3 companies.** The table and logic are proven, but a universe-wide quarterly backfill has not been run; `FilingsWatch` populates each company as it files.
+
+### `remediation/` — the 2026-07-13 database remediation
+One-off scripts + the standing jobs from the 8-phase repair (junk purge → CIK identity → backfill →
+delisted/survivorship → quarterly/TTM → automation → FX weights + benchmark → adversarial debug).
+`remediation/jobs/` is **production** (the scheduled tasks); the `phaseN_*.py` scripts are one-shot
+migrations kept for auditability and re-runs. Useful entry points: `baseline.py` (before/after DB
+census), `verify_stages.py` (end-to-end live check), `measure_updatability.py`,
+`phase3_backfill.py` (resumable refresh sweep). `identity_lib.py` + `ttm_lib.py` are pure helpers
+imported by BOTH the scripts and `backend/api.py` (`remediation/` is on `sys.path`).
 
 ### `backend/marketdata/` package
 Self-contained macro-data layer feeding the Economic + Sector pages: `fred_client.py` (FRED), `shiller_data.py` (CAPE — multi-source merge to avoid a stale mirror), `damodaran_market.py`, `sector_etf.py`, `geopolitical_data.py` (EPU/GPR), `market_inputs.py` (Fed model + the implied-ERP solver whose daily snapshot the WACC reads), `expected_returns.py` (Ilmanen 4-term S&P 500 expected return: D/P + 10y real earnings CAGR + T10YIE + CAPE reversion to the 30-year median clamped ±4%/yr — no separate buyback term, index-level real earnings already embed buybacks; surfaces as economic metric 68). `refresh.py` exposes `start_scheduler()`. Two daemon threads start via `@app.on_event("startup")`: a marketdata refresh loop (CAPE/ERP/EPU/GPR ~every 6h, throttled to ≤15 min) and a weekly market-PE aggregate loop. Disable with `DISABLE_WEEKLY_PE`. `http_cache.py` backs caching (`cached_download` takes an optional `user_agent` — SEC EDGAR requires a declared contact UA).
@@ -210,14 +278,23 @@ Three cross-cutting frontend systems that span several files:
 `index_vault.py` chunks an Obsidian "Financial Texts" vault into `vault.db` (sqlite-vec, nomic-embed-text 768-d, incremental on mtime). `server.py` exposes three answer routes plus `GET /health`: `POST /ask` (full qualitative-question answers, Sonnet), `POST /explain` (explain a highlighted selection, Haiku), and `POST /define` (term definition, Haiku, glossary-cached). Each route has its own system prompt, `max_turns` cap, and `max_budget_usd` guard. The local KNN `search_vault` tool is the vault source; `WebSearch`/`WebFetch` are also allowed. Answer priority is **vault → web → general knowledge**, and it never refuses. `/ask`, `/explain`, and `/define` accept an optional `data`/page-context block of figures already computed for the subject (company, sector, yield curve); when present, those page figures are **authoritative** and override anything a web search returns, so explanations stay tied to the app's own valuation rather than generic definitions.
 
 ## Conventions specific to this repo
-- **DB path is overridable** via the `FINANCIALS_DB` env var; defaults to repo-root `financials.db`. `backend/api.py` injects `backend/` and `data/` onto `sys.path` so analysis modules import by bare name.
+- **DB path is overridable** via the `FINANCIALS_DB` env var; defaults to repo-root `financials.db`. `backend/api.py` injects `backend/`, `data/`, and `remediation/` onto `sys.path` so those modules import by bare name. Use `FINANCIALS_DB` to test a migration against a copy before swapping it in — that is how the remediation shipped.
+- **Ingest validation.** `data/financial_db.py#is_valid_year_period(year, period)` gates every write path. The 2026-05 Wisesheets export wrote ~13k rows whose `Calendar Year`/`Period` held error strings ("Unavailable", "2025 data not available yet."); they are now quarantined and the guard keeps them out. Any new ingest path must call it.
 - The marketdata scheduler **excludes** sector/industry Damodaran data **except** the beta/EV-Sales datasets consumed by `backend/betas/` (see that package's section) — wacc/margin/pe industry files remain in `valuation_debug` tooling.
 - `make_excel_db.py`, `adr_mapping.json`, and `data/migrate_db_schema.py` are one-off / migration tooling for the fundamentals DB — not part of the request path.
 
 ## Gotchas
 - **Tailwind purges theme keyframes.** A `@keyframes` declared in `tailwind.config.js` is only emitted when its `animate-*` utility actually appears in scanned markup. Hand-written CSS that references such a keyframe by name (e.g. the loading-skeleton `.shimmer` sweep) renders **frozen** in a production build with no error. Declare any keyframe used by hand-authored CSS directly in `src/index.css`. Loading skeletons (`ChartSkeleton`/`MatrixSkeleton`/`ScorecardSkeleton`/`PanelSkeleton`) live in `src/components/Skeletons.tsx` and must stay reduced-motion-safe (the `.shimmer` sweep falls back to an opacity pulse, never a static bar).
 - **Recession bands are NBER-published dates, not raw USREC.** `backend/api.py#fetch_recession_bands` returns each recession with its exact published peak→trough `range` + `label` from an authoritative table; USREC is only a fallback for a future recession not yet tabulated. The shared `RecessionOverlay` renders these on every economic chart.
-- **Restarting the live backend.** `Invoke-CimMethod Win32_Process Create` now returns **returnValue=2 (access denied)**, so the old WMI launch trick is dead. Use `Stop-Process -Id <pid> -Force`, then `Start-Process` (detached, survives the shell) with the **real** interpreter, not the WindowsApps alias:
-  `Start-Process -FilePath "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_*\python3.11.exe" -ArgumentList '-m','uvicorn','backend.api:app','--host','127.0.0.1','--port','8000','--workers','1','--proxy-headers','--forwarded-allow-ips=127.0.0.1' -WorkingDirectory '<repo>' -WindowStyle Hidden`
-  A restart **zeroes the in-process cache**, so the admin-token-gated `POST /api/cache/clear` is unnecessary after one.
+- **Restarting the live backend.** `Invoke-CimMethod Win32_Process Create` returns **returnValue=2 (access denied)**, so the old WMI trick is dead. The `C:\Program Files\WindowsApps\...` glob in earlier docs **no longer resolves either** (that directory is ACL'd). The path that works is the one `sys.executable` reports:
+  ```powershell
+  $c = Get-NetTCPConnection -LocalPort 8000 -State Listen | Select-Object -First 1
+  Stop-Process -Id $c.OwningProcess -Force
+  $exe = "C:\Users\Zaki_Mir\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe"
+  Start-Process -FilePath $exe -ArgumentList '-m','uvicorn','backend.api:app','--host','127.0.0.1','--port','8000','--workers','1','--proxy-headers','--forwarded-allow-ips=127.0.0.1' -WorkingDirectory '<repo>' -WindowStyle Hidden
+  ```
+  (The bare `python.exe` in that same folder IS the broken alias — it is the `PythonSoftwareFoundation.*` subpath that is real.) A restart **zeroes the in-process cache** and **rebuilds the `security_map` alias cache**, so `POST /api/cache/clear` is unnecessary after one.
+- **SQLite has one writer.** A long backfill sweep writing to `financials.db` while you run analytic queries against it will hand the sweep `database is locked`; `phase3_backfill.py` aborts by design after 15 consecutive lock failures (exit 4) and resumes cleanly from its checkpoint. Don't interpret that as data loss — and don't hammer the DB while a sweep runs.
+- **yfinance `FastInfo` is attribute-accessed.** `fi.get("last_price")` silently returns `None`; `getattr(fi, "last_price", None)` works. A probe built on `.get()` will report a confident, wrong 0%.
+- **Never call a FastAPI route function from another route.** `/api/quotes` used to call `quote_endpoint(sym)`, which bound the ticker to the `request` parameter; every symbol threw, a broad `except` swallowed it, and the simulator silently priced nothing while returning HTTP 200. Extract a plain helper (`_quote_for(ticker)`) and have both call it. `test_quote_batch.py` guards this.
 - **Never pipe a native build through `2>&1` in PowerShell 5.1.** `.\build-prod.ps1 ... 2>&1` wraps Vite's yellow chunk-size warning in a `NativeCommandError` and reports a failure on a build that actually succeeded. Run it without the redirect and check `dist/` (and grep the bundle for a `localhost:8000` leak, which `build-prod.ps1` also guards).

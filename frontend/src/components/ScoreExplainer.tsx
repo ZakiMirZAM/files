@@ -9,8 +9,7 @@ interface ScoreExplainerProps {
   defaultOpen?: boolean;
 }
 
-// RAG-grounded (Damodaran Investment Valuation Ch.31 on the value-creation test;
-// Porter Competitive Strategy Ch.1 on industry structure) and humanizer-passed:
+// RAG-grounded and humanizer-passed:
 // no em dashes, no unclear pronoun references.
 const COPY: Record<"sector" | "industry", { title: string; paras: string[] }> = {
   sector: {
@@ -18,7 +17,7 @@ const COPY: Record<"sector" | "industry", { title: string; paras: string[] }> = 
     paras: [
       "The Value Score rates how well a sector's businesses turn capital into value, on a scale of 0 to 100. It is a screening rank that sorts the sectors quickly. It is not a price or a valuation, and a high score does not mean the sector is cheap.",
       "The score leans hardest on economic profit, which asks one question: does the sector earn more on its capital than that capital costs? The ROIC minus WACC spread answers that question as a rate, and EVA margin answers it for each dollar of sales, so those two carry the most weight. The cost of capital is scored on its own as well, because cheaper and steadier funding leaves more value for owners. Margins, cash conversion, the price paid against the book value the returns justify, and revenue growth sit behind them at lower weight.",
-      "Raw return on equity and headline growth are kept light on purpose. Return on equity is lifted by borrowing, so a heavily indebted sector can look strong without earning any more on its assets. Growth only builds value when the return on capital beats the cost of capital, and below that line growth destroys value even while profits are still reported. Damodaran makes this point directly in Investment Valuation, and by his count a majority of companies worldwide earn below their cost of capital while reporting a profit.",
+      "Raw return on equity and headline growth are kept light on purpose. Return on equity is lifted by borrowing, so a heavily indebted sector can look strong without earning any more on its assets. Growth only builds value when the return on capital beats the cost of capital, and below that line growth destroys value even while profits are still reported. A majority of companies worldwide earn below their cost of capital while still reporting a profit.",
       "Banks and real estate are judged differently. For those groups debt is raw material rather than financing, so the score drops the ROIC test and uses return on equity against the cost of equity instead. A sector that earns below its cost of capital is held near the bottom of the range, so a value destroyer can never screen as high quality.",
       "Read the score together with the questions below, which check whether the numbers behind it lean on one-time gains, on borrowing, or on a handful of very large companies.",
     ],
@@ -27,7 +26,7 @@ const COPY: Record<"sector" | "industry", { title: string; paras: string[] }> = 
     title: "How the industry Value Score works",
     paras: [
       "Industries are scored on the same engine as sectors, but each industry is ranked against the other industries inside its own sector rather than against the whole market. The score is a rank from 0 to 100, a screening tool rather than a valuation.",
-      "Industry structure is the reason for comparing within a sector. Porter's work shows that the forces shaping an industry, such as the threat of new entrants, the power of buyers and suppliers, and the intensity of rivalry, set how much return is sustainably possible there. A chip maker, a software firm, and a hardware assembler all sit inside Technology, yet those forces point in very different directions for each. Measuring them against oil or pharmaceuticals would add another layer of difference and turn the ranking into noise, so judging them within Technology holds the structural conditions roughly equal and lets real differences in operating quality show through.",
+      "Industry structure is the reason for comparing within a sector. The forces shaping an industry, such as the threat of new entrants, the power of buyers and suppliers, and the intensity of rivalry, set how much return is sustainably possible there. A chip maker, a software firm, and a hardware assembler all sit inside Technology, yet those forces point in very different directions for each. Measuring them against oil or pharmaceuticals would add another layer of difference and turn the ranking into noise, so judging them within Technology holds the structural conditions roughly equal and lets real differences in operating quality show through.",
       "The score leans hardest on economic profit, the ROIC minus WACC spread and EVA margin, because economic profit is what tells you whether reinvestment builds value rather than just adding size. Each parent sector applies its own weighting: banks and property groups are judged on return on equity against the cost of equity instead, since debt is their raw material and the usual capital test does not apply to them. An industry earning below its cost of capital is held near the bottom of the range.",
       "Read the score together with the questions below, which check whether the numbers behind it lean on one-time gains, on borrowing, or on a few large companies.",
     ],

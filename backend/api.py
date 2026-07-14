@@ -40,14 +40,35 @@ from fastapi.middleware.cors import CORSMiddleware
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(os.environ.get("FINANCIALS_DB", ROOT / "financials.db"))
 
-for p in (ROOT / "backend", ROOT / "data"):
+for p in (ROOT / "backend", ROOT / "data", ROOT / "remediation"):
     sp = str(p)
     if sp not in sys.path:
         sys.path.insert(0, sp)
 
+import ttm_lib  # noqa: E402 -- pure TTM/latest-row selection logic (Phase 4)
+
 MIN_YEAR = 2012
+
+# ── Scorecard history depth (sector + industry matrices ONLY) ────────────────
+# The clicked-cell charts on the sector/industry scorecards reach back to 2016 (a
+# full cycle: pre-COVID, the 2020 shock, the 2022 rate shock, today). The
+# comparative/ranking surfaces keep their own shorter windows — they are about
+# who is cheap NOW, not about a decade of history.
+#
+# TWO windows, and conflating them is a bug:
+#   SCORECARD_HISTORY_START — how far back the CHART goes. Includes companies
+#       that are now delisted, which is the whole point (they were often the
+#       largest names in their year).
+#   _CURRENT_MIN_YEAR       — a company must have filed since this year to be in
+#       the CURRENT column. Without it, widening the fetch would let a company
+#       whose last filing was 2018 supply "latest" values to today's average.
+SCORECARD_HISTORY_START = 2016
 CURRENT_YEAR = datetime.date.today().year
 MAX_YEAR = CURRENT_YEAR
+# A company must have filed since this year to contribute to a CURRENT column.
+# Unchanged from the previous 5-year window, so today's displayed numbers and
+# constituent sets do not move when the history window deepens.
+_CURRENT_MIN_YEAR = MAX_YEAR - 4
 MIN_TICKERS_PER_GROUP_YEAR = 3
 
 
@@ -61,6 +82,12 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 ENV = os.environ.get("ENV", "development").lower()
 IS_PRODUCTION = ENV == "production"
+
+# TTM substitution mode for the per-company metric sites (Phase 4).
+#   off    -> latest annual row only (byte-identical to pre-Phase-4 behavior)
+#   on     -> substitute the stored rolling TTM row (annual fallback per column)
+#   shadow -> valuations unchanged; TTM surfaced via _ttm_row for display
+TTM_MODE = os.getenv("TTM_MODE", "off").lower()
 
 # Hide the interactive docs / OpenAPI schema in production — they map every
 # route (including the admin endpoints) for anyone who hits /docs.
@@ -78,7 +105,9 @@ app = FastAPI(
 # costs ~10s (financial_db loads pandas + yfinance) but every subsequent call
 # is fast.
 try:
-    from financial_db import FinancialDB, fetch_latest_market_cap_yf  # type: ignore
+    from financial_db import (  # type: ignore
+        FinancialDB, fetch_latest_market_cap_yf, EXCEL_COLUMNS,
+    )
     from individualanalysis import (  # type: ignore
         build_individual_snapshot,
         load_ticker_rows,
@@ -2349,17 +2378,61 @@ _GROUP_METRIC_DISPLAY: list[tuple[int, str, str, str, str, float, float, str, st
 ]
 
 
+# FX-normalised size weight shared by the by-year group aggregates. Requires the
+# query to carry `LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"`.
+# USD / NULL currency -> 1.0 per unit; a known currency -> its usd_per_unit; an
+# unknown currency -> NULL (the row drops from both numerator and denominator).
+# A row's market cap is as-of its OWN fiscal year end, so it must be converted at
+# THAT year's exchange rate. Using the spot rate for every year understates a 2016
+# JPY filer by ~28% and a KRW filer by ~19% while inflating EUR/GBP by ~8% — a
+# systematic mis-weighting between currency blocs that grows the further back the
+# chart goes.
+#
+# Exception: the company's most recent stored year carries a SPOT cap (
+# `refresh_market_caps` overwrites it every week), so pairing it with a spot FX
+# rate is the correct as-of match. `_FX_SPOT_FROM_YEAR` is that boundary.
+#
+# Any query using _FX_WEIGHT_SQL MUST carry BOTH joins in _FX_JOIN_SQL.
+_FX_SPOT_FROM_YEAR = MAX_YEAR - 1
+
+_FX_JOIN_SQL = (
+    ' LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"'
+    " LEFT JOIN fx_rates_hist xh ON xh.currency = f.\"Reported Currency\""
+    ' AND xh.year = CAST(f."Calendar Year" AS INTEGER)'
+)
+
+_FX_WEIGHT_SQL = (
+    'f."Market Cap" * COALESCE('
+    # historical years -> that year's rate
+    f'CASE WHEN CAST(f."Calendar Year" AS INTEGER) < {_FX_SPOT_FROM_YEAR} '
+    'THEN xh.usd_per_unit END, '
+    # latest year (spot cap) / no historical rate -> spot
+    'x.usd_per_unit, '
+    # USD or unknown currency -> 1.0; anything else -> NULL (row drops out)
+    "CASE WHEN f.\"Reported Currency\" = 'USD' "
+    "OR f.\"Reported Currency\" IS NULL THEN 1.0 ELSE NULL END)"
+)
+
+
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def _by_year_with_groups(group_col: str) -> dict[int, dict[str, dict[str, Any]]]:
     """Market-cap weighted aggregates per (group, year), with SQL-level
     winsorisation. Cached for 30 minutes; invalidated by daily-update."""
+    # FX-normalised size weight: convert each filer's Market Cap to USD before
+    # weighting so a ¥/₩ cap is not summed against a $ cap at face value. USD and
+    # NULL-currency rows weight at 1.0/unit; known currencies convert via the
+    # fx_rates LEFT JOIN (alias `x`); an UNKNOWN currency has no rate, so the
+    # COALESCE resolves to NULL, the whole weight is NULL, and that row drops from
+    # both numerator and denominator (better than pretending a 1:1 rate). Metric
+    # VALUES stay untouched — ratios are currency-neutral and never FX-converted.
+    weight = _FX_WEIGHT_SQL
     select_parts: list[str] = []
     for tpl in _GROUP_METRIC_DISPLAY:
         col, clip_low, clip_high = tpl[3], tpl[5], tpl[6]
         clamped = f'MAX(MIN(f."{col}", {clip_high}), {clip_low})'
         select_parts.append(
-            f'SUM(({clamped}) * f."Market Cap") / '
-            f'NULLIF(SUM(({clamped}) * 0 + f."Market Cap"), 0) AS "{col}"'
+            f'SUM(({clamped}) * ({weight})) / '
+            f'NULLIF(SUM(({clamped}) * 0 + ({weight})), 0) AS "{col}"'
         )
 
     sql = f"""
@@ -2369,11 +2442,16 @@ def _by_year_with_groups(group_col: str) -> dict[int, dict[str, dict[str, Any]]]
             COUNT(DISTINCT f.Ticker) AS ticker_count,
             {", ".join(select_parts)}
         FROM financials f
-        JOIN tickers t ON t.ticker = f.Ticker
+        JOIN tickers t ON t.ticker = f.Ticker{_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
           AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
           AND CAST(f."Calendar Year" AS INTEGER) >= ?
           AND CAST(f."Calendar Year" AS INTEGER) <= ?
+          -- Weight sanity: a negative cap flips the weighted mean's sign and a
+          -- corrupt cap (one Wisesheets row carried 3.2e17) dominates a whole
+          -- group-year. Bound the weight to (0, $100T-equivalent).
+          AND f."Market Cap" > 0
+          AND {_FX_WEIGHT_SQL} < 1e14
         GROUP BY t.{group_col}, yr
         ORDER BY yr, t.{group_col}
     """
@@ -3371,14 +3449,89 @@ def _fx_rates() -> dict[str, float]:
         return {}
 
 
+@cached(ttl_seconds=6 * 60 * 60, key_prefix="fxhist")
+def _fx_hist() -> dict[tuple[str, int], float]:
+    """{(currency, year): USD-per-unit} from fx_rates_hist — the rate at THAT
+    year's end, so a historical market cap is weighted at the rate that applied
+    when it was measured. Empty dict when the table is absent (the callers then
+    fall back to the spot rate, i.e. pre-existing behaviour)."""
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT currency, year, usd_per_unit FROM fx_rates_hist"
+            ).fetchall()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return {}
+    return {(r["currency"], int(r["year"])): float(r["usd_per_unit"])
+            for r in rows if r["usd_per_unit"]}
+
+
 def _mc_to_usd(latest: Any, mc: float | None) -> float | None:
     """Market cap converted to USD via the row's Reported Currency (1.0 when the
     currency is USD, unknown, or has no rate). Used for size ranking / weighting /
-    display — NOT for ratios, which stay in the company's own currency."""
+    display — NOT for ratios, which stay in the company's own currency.
+
+    The rate is the one that applied at the row's OWN fiscal year end, so a 2016
+    cap is not converted at today's rate (that understated a JPY filer by ~28%).
+    The most recent year is the exception: its cap is refreshed to spot weekly,
+    so it pairs with the spot rate (see _FX_SPOT_FROM_YEAR)."""
     if mc is None:
         return None
-    ccy = latest["Reported Currency"] if "Reported Currency" in latest.keys() else None
-    return mc * _fx_rates().get(ccy, 1.0) if ccy else mc
+    keys = latest.keys()
+    ccy = latest["Reported Currency"] if "Reported Currency" in keys else None
+    if not ccy:
+        return mc
+    yr = latest["yr"] if "yr" in keys else None
+    if yr is not None:
+        try:
+            y = int(yr)
+        except (TypeError, ValueError):
+            y = None
+        if y is not None and y < _FX_SPOT_FROM_YEAR:
+            rate = _fx_hist().get((ccy, y))
+            if rate is not None:
+                return mc * rate
+    return mc * _fx_rates().get(ccy, 1.0)
+
+
+# ── TTM substitution (Phase 4) ───────────────────────────────────────────────
+# Overlay-eligible columns = EXCEL_COLUMNS metrics minus the two currency-bound
+# absolute figures (Market Cap / Enterprise Value): the stored TTM snapshot's
+# cap comes from yfinance .info and may be in a different currency than the
+# annual row's Reported Currency, which _mc_to_usd relies on. Every other metric
+# (income / balance / cash flow / currency-neutral ratios) overlays cleanly.
+_TTM_METRIC_COLS = ttm_lib.metric_columns(EXCEL_COLUMNS) - {
+    "Market Cap", "Enterprise Value",
+}
+
+
+def _ttm_row(ticker: str) -> Any | None:
+    """The stored TTM snapshot row for `ticker` (financials_quarterly,
+    Period='TTM'), or None when the table or the row is absent. Returns a
+    sqlite3.Row (mapping access by column name)."""
+    try:
+        with db_conn() as conn:
+            return conn.execute(
+                "SELECT * FROM financials_quarterly "
+                "WHERE Ticker = ? AND Period = 'TTM' LIMIT 1",
+                (ticker.upper(),),
+            ).fetchone()
+    except sqlite3.OperationalError:
+        return None  # table not created yet
+
+
+def _latest_or_ttm(rs: list[Any], ticker: str) -> Any:
+    """The effective 'latest' row for a company's per-metric calculation.
+
+    off    -> the annual latest row (rs[0]) unchanged (byte-identical).
+    on     -> annual overlaid with the stored TTM row's metric values (annual
+              fallback when there is no TTM row or a null column).
+    shadow -> annual unchanged; valuations never move (TTM via _ttm_row)."""
+    latest = rs[0]
+    if TTM_MODE == "on":
+        return ttm_lib.choose_latest(latest, _ttm_row(ticker), "on",
+                                     _TTM_METRIC_COLS)
+    return latest  # off / shadow
 
 
 def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
@@ -3415,7 +3568,11 @@ def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
         return n / d
 
     dol = None
-    if prior is not None:
+    # Skip operating leverage when `latest` is a TTM overlay: comparing a
+    # trailing-twelve-month OI/Revenue against the prior FULL fiscal year is a
+    # mixed-period ratio (Phase 7 finding VAL-04).
+    is_ttm_overlay = isinstance(latest, dict) and latest.get("_ttm_overlay")
+    if prior is not None and not is_ttm_overlay:
         oi0 = _sf(prior, "Operating Income"); rev0 = _sf(prior, "Revenue")
         if oi0 and rev0 and rev is not None and oi is not None:
             rev_g = rev / rev0 - 1
@@ -3846,17 +4003,20 @@ def _aggregate_weighted_columns(
 _EQUITY_LENS_SECTORS = {"Financial Services", "Real Estate"}
 
 
-def _per_year_history(
+def _per_year_columns(
     raw_tickers: dict[str, list[Any]],
     group: str,
     metric_keys: list[str],
     clip: dict[str, tuple[float, float]],
-) -> dict[str, list[dict[str, Any]]]:
-    """{metricKey: [{period, value}]} for one group — each year in the window
-    re-run through the SAME per-company → winsorised → market-cap-weighted
-    pipeline as the displayed cell, so the clicked-cell chart and the cell
-    agree on methodology. Rows are the ones the builder already fetched; the
-    per-year weight is that year's own (FX-converted) market cap."""
+) -> dict[int, dict[str, Any]]:
+    """{year: aggregated column} for one group — each year re-run through the
+    SAME per-company → winsorised → market-cap-weighted pipeline as the
+    displayed cell, so the clicked-cell chart and the cell agree on methodology.
+
+    The per-year weight is that year's own market cap converted at THAT year's
+    FX rate, and the roster is whoever existed in that year — including
+    companies that have since delisted. That is the point: a 2016 average
+    should contain the companies that were large in 2016."""
     per_year: dict[int, list[dict[str, float | None]]] = {}
     for _tk, rs in raw_tickers.items():
         by_yr = {int(r["yr"]): r for r in rs}
@@ -3866,22 +4026,45 @@ def _per_year_history(
             if mc is None or mc < _AVG_MC_FLOOR_USD:
                 continue
             per_year.setdefault(y, []).append(cm)
-    hist: dict[str, list[dict[str, Any]]] = {}
+
+    cols: dict[int, dict[str, Any]] = {}
     for y in sorted(per_year):
         comps = per_year[y]
         if len(comps) < MIN_TICKERS_PER_GROUP_YEAR:
             continue
-        agg = _aggregate_weighted_columns(
+        cols[y] = _aggregate_weighted_columns(
             {group: comps}, {group: [y] * len(comps)},
             {group: sum(c.get("_mc") or 0.0 for c in comps)},
             metric_keys, clip,
         )[group]
+    return cols
+
+
+def _history_from_columns(
+    cols_by_year: dict[int, dict[str, Any]],
+    metric_keys: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """{metricKey: [{period, value}]} from per-year aggregated columns."""
+    hist: dict[str, list[dict[str, Any]]] = {}
+    for y in sorted(cols_by_year):
+        col = cols_by_year[y]
         for k in metric_keys:
-            v = agg.get(k)
+            v = col.get(k)
             if v is not None:
                 hist.setdefault(k, []).append({"period": str(y), "value": v})
     # A one-point "history" charts as a single bar — not worth the click.
     return {k: pts for k, pts in hist.items() if len(pts) >= 2}
+
+
+def _per_year_history(
+    raw_tickers: dict[str, list[Any]],
+    group: str,
+    metric_keys: list[str],
+    clip: dict[str, tuple[float, float]],
+) -> dict[str, list[dict[str, Any]]]:
+    """{metricKey: [{period, value}]} for one group (see _per_year_columns)."""
+    return _history_from_columns(
+        _per_year_columns(raw_tickers, group, metric_keys, clip), metric_keys)
 
 
 def _augment_matrix_scoring(
@@ -3901,11 +4084,13 @@ def _augment_matrix_scoring(
     if not GROUP_SCORING_OK or group_scoring is None:
         return
     try:
+        cols_by_group_year: dict[str, dict[int, dict[str, Any]]] = {}
         for g, tickers in raw_by_group.items():
             col = data.get(g)
             if col is None:
                 continue  # pruned (e.g. tiny industry) — nothing to augment
-            col["_history"] = _per_year_history(tickers, g, metric_keys, clip)
+            cols_by_group_year[g] = _per_year_columns(tickers, g, metric_keys, clip)
+            col["_history"] = _history_from_columns(cols_by_group_year[g], metric_keys)
 
         if sector is not None:
             scores = group_scoring.score_groups(data, sector=sector)
@@ -3916,6 +4101,31 @@ def _augment_matrix_scoring(
         for g, col in data.items():
             col["valueScore"] = scores.get(g)
             col["scoreRank"] = ranks.get(g)
+
+        # ── Value Score history ──────────────────────────────────────────────
+        # The score is peer-relative (0.70 level + 0.30 percentile against the
+        # other groups), so a per-year score needs that year's WHOLE
+        # cross-section — it cannot be computed one group at a time. Re-run the
+        # same engine on each year's columns, so the chart and the cell are the
+        # same number by construction.
+        year_scores: dict[str, list[dict[str, Any]]] = {}
+        all_years = sorted({y for c in cols_by_group_year.values() for y in c})
+        for y in all_years:
+            year_cols = {g: c[y] for g, c in cols_by_group_year.items() if y in c}
+            if len(year_cols) < 2:
+                continue  # a percentile against one peer is meaningless
+            if sector is not None:
+                ys = group_scoring.score_groups(year_cols, sector=sector)
+            else:
+                ys = group_scoring.score_groups(
+                    year_cols, sector_by_group={g: g for g in year_cols})
+            for g, sc in (ys or {}).items():
+                if sc is not None:
+                    year_scores.setdefault(g, []).append(
+                        {"period": str(y), "value": sc})
+        for g, pts in year_scores.items():
+            if len(pts) >= 2 and data.get(g) is not None:
+                data[g].setdefault("_history", {})["valueScore"] = pts
 
         inputs = _integrity_inputs(group_col)
         peers = {g: inputs[g] for g in data if g in inputs}
@@ -3946,7 +4156,7 @@ def _sector_current_metrics() -> dict[str, Any]:
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
-    window_start = MAX_YEAR - 4
+    window_start = SCORECARD_HISTORY_START
     with db_conn() as conn:
         rows = conn.execute(sql, (window_start,)).fetchall()
 
@@ -3965,7 +4175,16 @@ def _sector_current_metrics() -> dict[str, Any]:
     mc_total: dict[str, float] = {}
     for _tk, rs in by_ticker.items():
         rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = rs[0]
+        # HISTORY roster: every company with rows in the window, including ones
+        # that have since delisted. They belong in the years they existed — that
+        # is the survivorship correction the charts exist to show.
+        raw_by_sector.setdefault(rs[0]["sec"], {})[_tk] = rs
+
+        # CURRENT column: only companies that have actually filed recently, so a
+        # dead or dormant company cannot supply "latest" values to today's cell.
+        if int(rs[0]["yr"]) < _CURRENT_MIN_YEAR:
+            continue
+        latest = _latest_or_ttm(rs, _tk)
         prior = rs[1] if len(rs) > 1 else None
         cm = _company_metrics(latest, prior)
         # Floor on the USD-converted cap so $100M means the same in every currency;
@@ -3975,7 +4194,6 @@ def _sector_current_metrics() -> dict[str, Any]:
             continue
         s = latest["sec"]
         by_sector.setdefault(s, []).append(cm)
-        raw_by_sector.setdefault(s, {})[_tk] = rs
         years.setdefault(s, []).append(int(latest["yr"]))
         mc_total[s] = mc_total.get(s, 0.0) + mc
 
@@ -4018,7 +4236,7 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
-    window_start = MAX_YEAR - 4
+    window_start = SCORECARD_HISTORY_START
     with db_conn() as conn:
         rows = conn.execute(sql, (sector, window_start)).fetchall()
 
@@ -4037,7 +4255,12 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
     mc_total: dict[str, float] = {}
     for _tk, rs in by_ticker.items():
         rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = rs[0]
+        # History roster keeps delisted companies (see _sector_current_metrics).
+        raw_by_industry.setdefault(rs[0]["ind"], {})[_tk] = rs
+
+        if int(rs[0]["yr"]) < _CURRENT_MIN_YEAR:
+            continue  # stale filer: history only, never the current column
+        latest = _latest_or_ttm(rs, _tk)
         prior = rs[1] if len(rs) > 1 else None
         cm = _company_metrics(latest, prior)
         # Currency-neutral $100M floor on the FX-converted cap (drops no-FX filers).
@@ -4047,7 +4270,6 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
         cm.update(_lens_company_metrics(sector, latest, prior, rs))
         ind = latest["ind"]
         by_industry.setdefault(ind, []).append(cm)
-        raw_by_industry.setdefault(ind, {})[_tk] = rs
         years.setdefault(ind, []).append(int(latest["yr"]))
         mc_total[ind] = mc_total.get(ind, 0.0) + mc
 
@@ -4133,7 +4355,7 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
             " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
             " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
         )
-        window_start = MAX_YEAR - 4
+        window_start = SCORECARD_HISTORY_START
         rows = conn.execute(sql, (industry, window_start)).fetchall()
 
     by_ticker: dict[str, list[Any]] = {}
@@ -4151,7 +4373,9 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
     mc_total = 0.0
     for _tk, rs in by_ticker.items():
         rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = rs[0]
+        if int(rs[0]["yr"]) < _CURRENT_MIN_YEAR:
+            continue  # stale filer: contributes to _history only, not the cell
+        latest = _latest_or_ttm(rs, _tk)
         prior = rs[1] if len(rs) > 1 else None
         cm = _company_metrics(latest, prior)
         # Currency-neutral $100M floor on the FX-converted cap (drops no-FX filers).
@@ -4187,6 +4411,13 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
                     col["valueScore"] = sc.get("valueScore")
                     col["scoreRank"] = sc.get("scoreRank")
                     col["_integrity"] = sc.get("_integrity")
+                    # The score is peer-relative, so its history can only be
+                    # computed with the whole sector cross-section. Copy it from
+                    # the sibling matrix rather than recomputing a lone-group
+                    # score that would disagree with the displayed cell.
+                    sib_vs = (sc.get("_history") or {}).get("valueScore")
+                    if sib_vs:
+                        col["_history"]["valueScore"] = sib_vs
                 score_peers = len(sib.get("sectors") or [])
         except Exception as exc:  # noqa: BLE001
             log.warning("[api] industry scorecard scoring augment failed (%s): %s",
@@ -4314,7 +4545,7 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
         if not rs:
             continue
         rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = rs[0]
+        latest = _latest_or_ttm(rs, tk)
         prior = rs[1] if len(rs) > 1 else None
         # Most-recent market cap: yfinance first (this bounded top-N set is small
         # enough to quote live), the stored filing-date cap as fallback. Only the
@@ -4484,31 +4715,46 @@ def _strategic_groups_from_metrics(cm: dict[str, Any]) -> dict[str, Any]:
         "points": points,
         "groups": [g for g in groups.values() if g["members"]],
         "unclassified": unclassified,
-        "note": (
-            "Groups split the industry's largest companies at the peer medians for "
-            "operating margin and market value (Porter, Competitive Strategy Ch.7). "
-            "Companies inside one group compete on similar terms, so profitability "
-            "gaps BETWEEN groups point at mobility barriers rather than execution."
-        ),
     }
 
 
+# How many companies the map may plot. The peer medians that split the quadrants
+# are recomputed over whatever set the caller asks for, so widening the set can
+# move a company from one group to another. That is correct, not a bug: a strategic
+# group is defined relative to the peers you are comparing against, and Porter's own
+# advice in Ch.7 is to remap the industry more than one way before trusting it.
+SG_LIMITS: tuple[int, ...] = (20, 40, 60, 100)
+SG_DEFAULT_LIMIT = 20
+
+
 @cached(ttl_seconds=30 * 60, key_prefix="db")
-def _strategic_groups_for_industry(industry: str) -> dict[str, Any]:
-    cm = _company_metrics_for_industry(industry, 20)
+def _strategic_groups_for_industry(industry: str, limit: int = SG_DEFAULT_LIMIT) -> dict[str, Any]:
+    cm = _company_metrics_for_industry(industry, limit)
     out = _strategic_groups_from_metrics(cm)
     out["industry"] = industry
     out["asOf"] = cm.get("asOf")
+    out["limit"] = limit
+    # How many the industry could actually supply, so the UI can stop offering a
+    # wider set once it is showing everything there is.
+    out["available"] = len(cm.get("sectors") or [])
+    out["limitOptions"] = list(SG_LIMITS)
     return out
 
 
 @app.get("/api/industry/{industry}/strategic-groups")
-@limiter.limit("6/minute")
+# The company-count control invites several requests in quick succession: a reader
+# comparing the map at 20, 40, 60 and 100 spends four of them in a few seconds, and
+# Porter's advice to remap an industry more than one way is the whole point of the
+# control. The old 6/minute cap made that flow fail silently with stale data on the
+# chart. The response is cached for 30 minutes per (industry, limit), so a higher
+# cap costs almost nothing.
+@limiter.limit("40/minute")
 def strategic_groups_endpoint(
     request: Request,
     industry: str = PathParam(pattern=GROUP_PATTERN),
+    limit: int = Query(SG_DEFAULT_LIMIT, ge=8, le=100),
 ) -> dict[str, Any]:
-    return _strategic_groups_for_industry(urllib.parse.unquote(industry))
+    return _strategic_groups_for_industry(urllib.parse.unquote(industry), limit)
 
 
 # ── /api/comparative/{industry}/ranking ─ the Per-Ticker Value Ranking ────────
@@ -4642,7 +4888,7 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
     snaps: list[Any] = []
     for tk, rs in by_ticker.items():
         rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = rs[0]
+        latest = _latest_or_ttm(rs, tk)
         if _sf(latest, "beta") is None:
             continue  # ranking uses stored betas only — skip a ticker that has none
         prior = rs[1] if len(rs) > 1 else None
@@ -5106,7 +5352,12 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
 @limiter.limit("10/minute")
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
-    ticker_upper = ticker.upper()
+    # Phase 2: fold an alias (GS-PA, BRK.B, MS-PO, GOOGL) onto its primary listing
+    # BEFORE load_ticker_rows / the tickers + financials SELECTs, all of which key
+    # off ticker_upper. _resolve_symbol also does the uppercase + dot->dash
+    # normalize, so it fully replaces the old ticker.upper(); with security_map
+    # absent it IS ticker.upper()-with-dots-dashed, i.e. unchanged behaviour.
+    ticker_upper = _resolve_symbol(ticker)
 
     # Build full snapshot using the existing analysis pipeline (DCF, verdict,
     # ratios, horizontal/vertical, per-share). Returns None if no data.
@@ -5228,10 +5479,21 @@ def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER
 
 @app.get("/api/quote/{ticker}")
 @limiter.limit("60/minute")
-@cached(ttl_seconds=15 * 60, key_prefix="quote")
 def quote_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
     """Live(-ish) quote from Yahoo Finance. Cached 15 minutes per ticker so
     repeated frontend polls don't hammer Yahoo."""
+    return _quote_for(ticker)
+
+
+@cached(ttl_seconds=15 * 60, key_prefix="quote")
+def _quote_for(ticker: str) -> dict[str, Any]:
+    """The quote fetch itself, keyed only by ticker.
+
+    Split out of `quote_endpoint` so the BATCH route can reuse it: the batch
+    used to call `quote_endpoint(sym)` positionally, which bound the symbol to
+    the `request` parameter, threw on every symbol, and was swallowed by the
+    batch's broad except — so /api/quotes always returned [] and the simulator
+    silently priced nothing."""
     try:
         import yfinance as yf
     except ImportError:
@@ -5286,6 +5548,88 @@ def quote_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATT
     }
 
 
+# ── Symbol resolution (Phase 2 remediation: fold aliases onto primaries) ─────
+# After the remediation applier writes `security_map` into financials.db, an
+# alias symbol (a preferred/warrant/unit sibling or a dotted share class, e.g.
+# GS-PA, BRK.B, MS-PO, GOOGL) is folded onto its CIK's primary listing so the
+# API serves the primary's data. The map is built once and cached for the life
+# of the process — a backend RESTART is the only thing that refreshes it (there
+# is no in-process invalidation). If `security_map` is missing the map is None
+# and every resolver call is an identity (uppercase + dot->dash) normalize, so
+# behaviour is byte-for-byte what it was pre-remediation.
+
+_symbol_alias_map: dict[str, str] | None = None
+_symbol_alias_loaded = False
+_symbol_alias_lock = threading.Lock()
+
+
+def _load_symbol_alias_map() -> dict[str, str] | None:
+    """Build {alias_symbol -> primary_symbol} from security_map, or None when the
+    table is absent (pre-remediation DB). One JOIN of aliases (is_primary=0, has a
+    cik) against their CIK's primary (is_primary=1). Best-effort: any SQL error
+    degrades to None (identity resolution)."""
+    try:
+        with db_conn() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='security_map'"
+            ).fetchone()
+            if exists is None:
+                return None
+            rows = conn.execute(
+                """
+                SELECT a.symbol AS alias, p.symbol AS primary_symbol
+                FROM security_map AS a
+                JOIN security_map AS p
+                  ON p.cik = a.cik AND p.is_primary = 1
+                WHERE a.is_primary = 0 AND a.cik IS NOT NULL
+                  -- the all-zeros CIK is a placeholder, never an identity:
+                  -- folding through it once mapped 637 real tickers onto one
+                  -- arbitrary company (ABBV -> ZEO). Defense in depth against
+                  -- a rebuilt map reintroducing it.
+                  AND a.cik != '0000000000'
+                """
+            ).fetchall()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, HTTPException):
+        return None
+    out: dict[str, str] = {}
+    for r in rows:
+        alias, primary = r["alias"], r["primary_symbol"]
+        if alias and primary:
+            out[str(alias).strip().upper()] = str(primary).strip().upper()
+    return out
+
+
+def _symbol_aliases() -> dict[str, str] | None:
+    """Process-cached alias map. Caches BOTH the built map and the table-absent
+    (None) outcome, so a missing security_map costs one probe, not one per call.
+    Never invalidated in-process; a backend restart refreshes it."""
+    global _symbol_alias_map, _symbol_alias_loaded
+    if not _symbol_alias_loaded:
+        with _symbol_alias_lock:
+            if not _symbol_alias_loaded:
+                _symbol_alias_map = _load_symbol_alias_map()
+                _symbol_alias_loaded = True
+    return _symbol_alias_map
+
+
+def _resolve_symbol_core(symbol: str, alias_map: dict[str, str] | None) -> str:
+    """PURE symbol resolution (unit-tested). Uppercase + dot->dash normalize, then
+    map an alias to its primary via alias_map. A None map (table absent) or a
+    symbol that is not an alias returns the normalized input unchanged."""
+    normalized = (symbol or "").strip().upper().replace(".", "-")
+    if not alias_map:
+        return normalized
+    return alias_map.get(normalized, normalized)
+
+
+def _resolve_symbol(symbol: str) -> str:
+    """Fold an alias symbol onto its primary listing (GS-PA -> GS, BRK.B -> BRK-A).
+    Cheap: reads the process-cached alias map. Falls back to the normalized input
+    when security_map is absent or the symbol is not an alias. The cache is process
+    -lifetime — restart the backend to pick up a rebuilt security_map."""
+    return _resolve_symbol_core(symbol, _symbol_aliases())
+
+
 # ── Ticker search ────────────────────────────────────────────────────────────
 
 @app.get("/api/tickers/search")
@@ -5298,7 +5642,14 @@ def search_tickers(
     q_clean = q.strip().upper()
     if len(q_clean) < 1:
         return []
+    # Phase 2: fold aliases onto primaries. alias_map is {} when security_map is
+    # absent, which makes every step below a no-op and preserves today's output.
+    alias_map = _symbol_aliases() or {}
+    resolved = _resolve_symbol(q_clean)
     pattern = f"{q_clean}%"
+    # Fetch headroom so dropping alias rows can't starve the result set; trim to
+    # `limit` after de-duping. Capped so a 1-char query can't scan the universe.
+    fetch_limit = min(limit * 3, 60)
     with db_conn() as conn:
         rows = conn.execute(
             """
@@ -5312,12 +5663,41 @@ def search_tickers(
                 ticker
             LIMIT ?
             """,
-            (pattern, f"%{q_clean}%", q_clean, pattern, limit),
+            (pattern, f"%{q_clean}%", q_clean, pattern, fetch_limit),
         ).fetchall()
-    return [
-        {"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "industry": r["industry"]}
-        for r in rows
-    ]
+        # If the query was an alias (resolved to a different primary symbol), pull
+        # that primary row directly so it can lead the list even when the alias
+        # itself is no longer a tickers row after remediation.
+        primary_row = None
+        if resolved != q_clean:
+            primary_row = conn.execute(
+                "SELECT ticker, name, sector, industry FROM tickers WHERE UPPER(ticker) = ?",
+                (resolved,),
+            ).fetchone()
+
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _emit(r: sqlite3.Row) -> None:
+        key = str(r["ticker"]).upper()
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({"ticker": r["ticker"], "name": r["name"],
+                    "sector": r["sector"], "industry": r["industry"]})
+
+    if primary_row is not None:
+        _emit(primary_row)
+    for r in rows:
+        # Skip alias rows (a ticker that maps to some OTHER primary): the primary
+        # carries the data. Aliases are dropped by ticker only, so name-substring
+        # matches still surface the primary (it shares the company name).
+        if str(r["ticker"]).upper() in alias_map:
+            continue
+        _emit(r)
+        if len(out) >= limit:
+            break
+    return out[:limit]
 
 
 # ── Bottom-up beta inspection (verification / debug surface) ─────────────────
@@ -5376,12 +5756,19 @@ def quotes_batch_endpoint(request: Request, tickers: str = Query(default="", max
     seen: set[str] = set()
     ordered = [s for s in symbols if not (s in seen or seen.add(s))][:50]
     out: list[dict[str, Any]] = []
+    failed: list[str] = []
     for sym in ordered:
         try:
-            out.append(quote_endpoint(sym))
+            out.append(_quote_for(sym))
         except HTTPException:
-            continue  # ticker not found / upstream failure — leave it unpriced
+            failed.append(sym)  # not found / upstream failure — leave unpriced
         except Exception as exc:  # noqa: BLE001 — one bad symbol must not sink the batch
             log.warning("batch quote failed for %s: %s", sym, exc)
-            continue
+            failed.append(sym)
+    if failed and not out:
+        # Every symbol failed: that is a systemic fault (bad wiring, yfinance
+        # down), not "these tickers happen to be unpriced". Say so instead of
+        # returning [] and letting the simulator render a silently empty book.
+        log.error("batch quote: all %d symbols failed (%s)",
+                  len(failed), ", ".join(failed[:5]))
     return out

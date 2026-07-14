@@ -1,4 +1,4 @@
-# Comparative Analysis Definitions — Catalog & Checklist
+# Comparative Analysis Definitions, Catalog & Checklist
 
 Definitions for the comparative surface (`/app/comparative/:industry`), which ranks the
 large companies WITHIN one industry against each other. Each row is one file named

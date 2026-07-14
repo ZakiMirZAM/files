@@ -15,7 +15,7 @@ const num = (v: number | null | undefined, d = 0): string =>
   v == null || !Number.isFinite(v) ? "n/a" : v.toLocaleString(undefined, { maximumFractionDigits: d });
 
 /**
- * S&P 500 valuation panel — Damodaran's two-stage DCF on the index. Discounts the
+ * S&P 500 valuation panel, Damodaran's two-stage DCF on the index. Discounts the
  * index's expected shareholder cash flows (earnings × payout, grown then a
  * perpetuity at the risk-free rate) to back out the implied expected return / ERP,
  * and computes a fair value against a baseline required return. Collapsible to
@@ -119,11 +119,11 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
                     {valuation.terminalCashFlow != null && (
                       <tr className="text-white/55">
                         <td className="py-2 pr-4">Terminal</td>
-                        <td className="py-2 pr-4 text-right">—</td>
+                        <td className="py-2 pr-4 text-right">n/a</td>
                         <td className="py-2 pr-4 text-right">
                           {num(valuation.terminalCashFlow, 1)} → perpetuity @ {pct(valuation.terminalGrowth)}
                         </td>
-                        <td className="py-2 text-right">—</td>
+                        <td className="py-2 text-right">n/a</td>
                       </tr>
                     )}
                   </tbody>
@@ -134,18 +134,18 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
 
           <p className="text-[0.72rem] text-white/40 leading-relaxed">
             {ou == null ? (
-              "Fair value unavailable — the baseline required return falls below terminal growth for the current inputs."
+              "Fair value unavailable, the baseline required return falls below terminal growth for the current inputs."
             ) : ou >= 0 ? (
               <>
                 At a baseline {pct(valuation.baselineERP)} equity risk premium, the index's fair value sits{" "}
                 <span className="text-gain-strong">{Math.abs(ou).toFixed(1)}% above</span> its current
-                price — the market looks <span className="text-gain-strong">cheap</span> versus that baseline.
+                price, the market looks <span className="text-gain-strong">cheap</span> versus that baseline.
               </>
             ) : (
               <>
                 At a baseline {pct(valuation.baselineERP)} equity risk premium, the index's fair value sits{" "}
                 <span className="text-loss-strong">{Math.abs(ou).toFixed(1)}% below</span> its current
-                price — the market looks <span className="text-loss-strong">expensive</span> versus that baseline.
+                price, the market looks <span className="text-loss-strong">expensive</span> versus that baseline.
               </>
             )}
           </p>

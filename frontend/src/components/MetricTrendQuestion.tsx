@@ -94,7 +94,7 @@ function PersistedTrendQuestion({
       <QuestionField
         questionId={`${scopeKey}-${HIST_QID}`}
         question={question}
-        hint="Historical trend analysis — Explain using AI reads the chart's actual trajectory against the investing texts."
+        hint="Historical trend analysis. Explain using AI reads the chart's actual trajectory against the investing texts."
         section={section}
         scopeKey={scopeKey}
         dataContext={dataContext}

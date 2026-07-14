@@ -82,7 +82,7 @@ function stripOuterParens(s: string): string {
   for (let i = 0; i < t.length; i++) {
     if (t[i] === "(") depth++;
     else if (t[i] === ")") depth--;
-    if (depth === 0 && i < t.length - 1) return t; // closes early — not one group
+    if (depth === 0 && i < t.length - 1) return t; // closes early, not one group
   }
   return t.slice(1, -1).trim();
 }
@@ -200,7 +200,7 @@ function Block({ block }: { block: MdBlock }): ReactNode {
   switch (block.type) {
     case "heading": {
       if (block.level === 1) {
-        // The file's H1 is the metric name — already shown in the dropdown header.
+        // The file's H1 is the metric name, already shown in the dropdown header.
         return (
           <h3 className="font-display text-xl font-semibold text-white mt-2 mb-3">
             <Inline text={block.text} />

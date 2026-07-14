@@ -14,7 +14,7 @@ interface MetricDropdownProps {
   metric?: Metric;
   recessionBands?: RecessionBand[];
   defaultOpen?: boolean;
-  /** The page's live data is still being fetched — show a chart placeholder
+  /** The page's live data is still being fetched, show a chart placeholder
    *  instead of the "source pending" note for metrics that may yet have a chart. */
   loading?: boolean;
   /** The page's computed figures, forwarded to each question's AI-answer helper. */

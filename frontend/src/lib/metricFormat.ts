@@ -5,7 +5,7 @@
 export type MetricUnit = "%" | "x" | "d" | "$";
 
 export function formatMetricValue(v: number | null | undefined, unit: MetricUnit): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  if (v === null || v === undefined || !Number.isFinite(v)) return "n/a";
   if (unit === "%") {
     const p = v * 100;
     return `${p.toFixed(Math.abs(p) < 1 ? 2 : 1)}%`;
@@ -27,7 +27,7 @@ export function formatMetricValue(v: number | null | undefined, unit: MetricUnit
   return `${v.toFixed(2)}x`;
 }
 
-/** Change since the first point — percentage-points for %, days for d, % change for x. */
+/** Change since the first point, percentage-points for %, days for d, % change for x. */
 export function metricDelta(
   values: number[],
   unit: MetricUnit,

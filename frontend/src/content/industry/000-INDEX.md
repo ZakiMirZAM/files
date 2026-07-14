@@ -1,4 +1,4 @@
-# Industry Analysis Definitions — Catalog & Checklist
+# Industry Analysis Definitions, Catalog & Checklist
 
 Definitions for the industry surface (`/app/industry/:industry`), which judges ONE whole
 industry as a market-cap-weighted aggregate across its companies. Each row is one file

@@ -314,14 +314,14 @@ export function TradeTicket({
                 <Stat label="Last price" value={formatLocalPrice(conv.priceLocal, conv.currency)} />
                 <Stat
                   label="In USD"
-                  value={conv.currency === "USD" ? "—" : formatUsd(conv.priceUsd)}
+                  value={conv.currency === "USD" ? "n/a" : formatUsd(conv.priceUsd)}
                 />
                 <Stat label={side === "sell" ? "Shares held" : "Buying power"} value={
                   side === "sell" ? formatShares(held) : formatUsd(cashUsd)
                 } />
                 <Stat
                   label="Day"
-                  value={liveQuote?.dayChangePct != null ? `${liveQuote.dayChangePct.toFixed(2)}%` : "—"}
+                  value={liveQuote?.dayChangePct != null ? `${liveQuote.dayChangePct.toFixed(2)}%` : "n/a"}
                 />
               </div>
             )}
@@ -360,7 +360,7 @@ export function TradeTicket({
 
             <div className="flex items-center justify-between text-sm mb-4">
               <span className="text-white/45">Estimated {side === "buy" ? "cost" : "proceeds"}</span>
-              <span className="font-mono text-white/90">{orderUsd != null ? formatUsd(orderUsd) : "—"}</span>
+              <span className="font-mono text-white/90">{orderUsd != null ? formatUsd(orderUsd) : "n/a"}</span>
             </div>
 
             {buyTooExpensive && (

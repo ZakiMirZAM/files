@@ -69,8 +69,8 @@ export interface Metric {
 }
 
 export interface RecessionBand {
-  start: string;            // ISO date — shading start (first day of the peak month)
-  end: string;              // ISO date — shading end (first day after the trough month)
+  start: string;            // ISO date, shading start (first day of the peak month)
+  end: string;              // ISO date, shading end (first day after the trough month)
   label?: string;          // episode name, e.g. "Great Recession", "COVID-19 recession"
   range?: string;          // exact published month range, e.g. "Dec 2007 – Jun 2009"
 }
@@ -104,7 +104,7 @@ export interface CashGenerationRow {
 export type HorizontalTable = Record<string, Record<string, number>>;
 export type VerticalTable = Record<string, Record<string, number>>;
 
-// ── Forward FCFF forecast (Damodaran firm valuation) ─────────────────────────
+// ── Forward FCFF forecast ─────────────────────────
 
 export interface ForecastAssumptions {
   horizonYears: number;
@@ -192,7 +192,7 @@ export interface WaccBuild {
   beta: number | null;
   riskFreeRate: number;
   equityRiskPremium: number;
-  // Marginal rate used for the debt tax shield (Damodaran Ch.8) and the firm's
+  // Marginal rate used for the debt tax shield and the firm's
   // own effective rate (used for NOPAT/FCFF), surfaced for transparency.
   marginalTaxRate?: number;
   effectiveTaxRate?: number;
@@ -213,7 +213,7 @@ export interface WaccBuild {
   betaShadowValue?: number;
 }
 
-// ── Life-cycle-aware growth estimation (Damodaran Ch.11, Figure 11.6) ────────
+// ── Life-cycle-aware growth estimation ────────
 
 /** Where the company sits in its life, classified from its own history. */
 export interface CompanyLifecycle {
@@ -531,7 +531,7 @@ export interface RndAdjusted {
   note?: string;
 }
 
-// ── Normalized-earnings bridge (Damodaran, Investment Valuation Ch.9) ─────────
+// ── Normalized-earnings bridge ─────────
 
 export interface NormalizedLeases {
   applicable: boolean;
@@ -598,7 +598,7 @@ export interface NormalizedEarnings {
   excludesFinancials: boolean;
 }
 
-// ── Earnings bridge — reported income walk from the 10-K XBRL (Ch.9) ──────────
+// ── Earnings bridge, reported income walk from the 10-K XBRL (Ch.9) ──────────
 
 export interface EarningsBridgeStep {
   key: string;
@@ -684,7 +684,7 @@ export interface OwnerEarningsBlock {
   note?: string;
 }
 
-// ── Industry life-cycle stage (Porter, Competitive Strategy Ch.8) ─────────────
+// ── Industry life-cycle stage ─────────────
 
 export interface IndustryLifecycle {
   applicable: boolean;
@@ -700,7 +700,7 @@ export interface IndustryLifecycle {
   note?: string;
 }
 
-// ── Strategic groups (Porter, Competitive Strategy Ch.7) ──────────────────────
+// ── Strategic groups ──────────────────────
 
 export interface StrategicGroupPoint {
   ticker: string;
@@ -726,7 +726,11 @@ export interface StrategicGroups {
   points?: StrategicGroupPoint[];
   groups?: { key: string; label: string; members: string[] }[];
   unclassified?: string[];
-  note?: string;
+  /** How many companies this map was built from. */
+  limit?: number;
+  /** How many the industry could actually supply, so the UI stops offering more. */
+  available?: number;
+  limitOptions?: number[];
 }
 
 // ── Business-events feed (Lev & Gu Ch.4): recent 8-K / 6-K filings ────────────
@@ -757,7 +761,7 @@ export interface ManagementComp {
   note?: string;
 }
 
-// Company credit analysis (Ziegel). Mirrors the backend _credit_analysis dict.
+// Company credit analysis. Mirrors the backend _credit_analysis dict.
 export type CreditSeverity = "good" | "warn" | "bad" | "na";
 
 export interface CreditRating {
@@ -850,7 +854,7 @@ export interface IndividualAnalysis {
   // Optional (absent in the mock fallback): per-share level history + FCFF forecast.
   perShareHistory?: Record<string, Record<string, number>>;
   forecast?: IndividualForecast | null;
-  // Growth-viability due-diligence deck (Damodaran Ch.11 + quality-of-growth work).
+  // Growth-viability due-diligence deck.
   growthViability?: GrowthViability | null;
   // Fundamental metric history ({key: {year: value}}) + the column metadata.
   metricHistory?: Record<string, Record<string, number>>;
@@ -1001,13 +1005,13 @@ export interface SectionData {
   valuation?: GroupValuation | null;           // /api/sector, /api/industry
   leaderboard?: LeaderboardRow[] | null;       // /api/comparative
   rankedMetricColumns?: string[] | null;       // /api/comparative
-  displayMetricColumns?: MetricMeta[] | null;  // /api/comparative — fundamental metric columns
+  displayMetricColumns?: MetricMeta[] | null;  // /api/comparative, fundamental metric columns
   commodities?: Commodity[] | null;            // /api/economic
-  treasuryYields?: Metric[] | null;            // /api/economic — 3M/1Y/2Y/10Y level yields (maturity switcher)
-  fedModel?: FedModel | null;                  // /api/economic — earnings yield vs 1Y Treasury
-  sp500Valuation?: Sp500Valuation | null;      // /api/economic — Damodaran S&P-500 DCF / fair value
-  lifecycle?: IndustryLifecycle | null;        // /api/industry, /api/sector — Porter life-cycle stage
-  scorecard?: GroupScorecard | null;           // /api/sector, /api/industry — value score + fired integrity questions
+  treasuryYields?: Metric[] | null;            // /api/economic, 3M/1Y/2Y/10Y level yields (maturity switcher)
+  fedModel?: FedModel | null;                  // /api/economic, earnings yield vs 1Y Treasury
+  sp500Valuation?: Sp500Valuation | null;      // /api/economic, Damodaran S&P-500 DCF / fair value
+  lifecycle?: IndustryLifecycle | null;        // /api/industry, /api/sector, Porter life-cycle stage
+  scorecard?: GroupScorecard | null;           // /api/sector, /api/industry, value score + fired integrity questions
 }
 
 // ── Scorecard value score + integrity questions (group_scoring.py) ──────────
@@ -1026,7 +1030,7 @@ export interface IntegrityCheck {
   detail?: string;
 }
 
-/** SectionData.scorecard — the group's value score plus FIRED questions only. */
+/** SectionData.scorecard, the group's value score plus FIRED questions only. */
 export interface GroupScorecard {
   valueScore: number | null;
   rank: number | null;
@@ -1037,7 +1041,7 @@ export interface GroupScorecard {
 // ── Fed model: earnings yield vs 1-Year Treasury (DGS1) ───────────────────────
 
 export interface FedModelSnapshot {
-  earningsYield: number | null;        // %  (Damodaran trailing S&P-500 EPS ÷ yfinance price)
+  earningsYield: number | null;        // %
   treasuryYield: number | null;        // %
   spread: number | null;               // trailing earnings yield − treasury, in pp
   marketPe: number | null;             // implied index PE (price ÷ trailing EPS)
@@ -1059,7 +1063,7 @@ export interface FedModel {
   snapshot: FedModelSnapshot | null;         // null until marketdata sources are available
 }
 
-// ── S&P-500 valuation (Damodaran two-stage DCF / implied ERP) ─────────────────
+// ── S&P-500 valuation ─────────────────
 
 export interface Sp500ProjectionRow {
   year: number;
@@ -1129,7 +1133,7 @@ export interface SectorMetricsData {
   asOf: string;
   universe: string;
   metrics: SectorMetricDef[];
-  /** Column names — sectors in the 11-sector matrix, industry names in the
+  /** Column names, sectors in the 11-sector matrix, industry names in the
    *  industries-within-a-sector matrix (same shape, reused renderer). */
   sectors: string[];
   data: Record<string, SectorColumn>;

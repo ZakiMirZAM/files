@@ -10,9 +10,9 @@ interface MetricsTrendsSectionProps {
 }
 
 /**
- * Capital-efficiency, DuPont, EVA, leverage and valuation-multiple metrics — each
+ * Capital-efficiency, DuPont, EVA, leverage and valuation-multiple metrics, each
  * as a compact historical sparkline tile, grouped by the backend registry. Every
- * value traces to a financials.db formula (no fabricated data; missing → "—").
+ * value traces to a financials.db formula (no fabricated data; missing → "n/a").
  */
 export function MetricsTrendsSection({ metricHistory, metricMeta }: MetricsTrendsSectionProps) {
   if (!metricHistory || !metricMeta || metricMeta.length === 0) return null;

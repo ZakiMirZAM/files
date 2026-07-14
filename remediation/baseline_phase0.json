@@ -1,0 +1,189 @@
+{
+  "db_path": "financials_remediation.db",
+  "generated_at": "2026-07-13T20:54:05.420601+00:00",
+  "tables": [
+    "beta_history",
+    "computed_betas",
+    "damodaran_industry",
+    "damodaran_industry_hist",
+    "edgar_events",
+    "esg_scores",
+    "financials",
+    "fx_rates",
+    "industry_beta_history",
+    "job_runs",
+    "market_aggregates",
+    "segment_industry_map",
+    "segment_revenue",
+    "tickers",
+    "xbrl_financials"
+  ],
+  "financials_rows": 368847,
+  "financials_distinct_tickers": 31204,
+  "tickers_rows": 31833,
+  "rows_per_year": {
+    "1997": 1,
+    "1999": 1,
+    "2000": 1,
+    "2001": 23,
+    "2002": 4,
+    "2003": 3,
+    "2004": 7,
+    "2005": 13,
+    "2006": 22,
+    "2007": 31,
+    "2008": 40,
+    "2009": 66,
+    "2010": 116,
+    "2011": 2394,
+    "2012": 19125,
+    "2013": 20430,
+    "2014": 21239,
+    "2015": 22112,
+    "2016": 23214,
+    "2017": 24134,
+    "2018": 25049,
+    "2019": 27485,
+    "2020": 28139,
+    "2021": 28598,
+    "2022": 28726,
+    "2023": 29010,
+    "2024": 29658,
+    "2025": 26001,
+    "2026": 18
+  },
+  "junk_year_rows": 13187,
+  "period_values": {
+    "2012 data not available yet.": 1,
+    "2013 data not available yet.": 1,
+    "2014 data not available yet.": 2,
+    "2015 data not available yet.": 2,
+    "2016 data not available yet.": 4,
+    "2017 data not available yet.": 4,
+    "2018 data not available yet.": 8,
+    "2019 data not available yet.": 9,
+    "2020 data not available yet.": 15,
+    "2021 data not available yet.": 22,
+    "2022 data not available yet.": 31,
+    "2023 data not available yet.": 56,
+    "2024 data not available yet.": 108,
+    "2025 data not available yet.": 786,
+    "FY": 355660,
+    "Unavailable": 12138
+  },
+  "zero_data_tickers": 629,
+  "plain_us_orphans": 428,
+  "null_market_cap_rows": 13132,
+  "ticker_newest_year_distribution": {
+    "0": 990,
+    "2024": 3437,
+    "2025": 26759,
+    "2026": 18
+  },
+  "tickers_frozen_at_2024": 3437,
+  "majors": {
+    "GS": {
+      "rows": 0,
+      "min_year": null,
+      "max_year": null
+    },
+    "MS": {
+      "rows": 0,
+      "min_year": null,
+      "max_year": null
+    },
+    "JPM": {
+      "rows": 5,
+      "min_year": 2021,
+      "max_year": 2025
+    },
+    "BAC": {
+      "rows": 0,
+      "min_year": null,
+      "max_year": null
+    },
+    "WFC": {
+      "rows": 0,
+      "min_year": null,
+      "max_year": null
+    },
+    "BRK-A": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "BRK-B": {
+      "rows": 0,
+      "min_year": null,
+      "max_year": null
+    },
+    "GOOG": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "GOOGL": {
+      "rows": 5,
+      "min_year": 2021,
+      "max_year": 2025
+    },
+    "META": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "AAPL": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "MSFT": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "NVDA": {
+      "rows": 15,
+      "min_year": 2012,
+      "max_year": 2026
+    },
+    "AMZN": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "TSLA": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "XOM": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "JNJ": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "UNH": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "V": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    },
+    "MA": {
+      "rows": 14,
+      "min_year": 2012,
+      "max_year": 2025
+    }
+  },
+  "fx_rates_count": 45,
+  "fx_rates_asof": "2026-06-28",
+  "job_runs_count": 0
+}

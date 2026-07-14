@@ -24,7 +24,7 @@ export function ValuationExtrasSection({ anchors, rnd }: ValuationExtrasSectionP
       <header className="mb-5">
         <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">Deep Value &amp; R&amp;D Capitalization</h2>
         <div className="flex flex-wrap gap-2 mt-3">
-          <DefinitionLink number={75} prominent>How Graham asset floors work</DefinitionLink>
+          <DefinitionLink number={75} prominent>How asset floors work</DefinitionLink>
           <DefinitionLink number={76} prominent>How R&amp;D capitalization works</DefinitionLink>
         </div>
       </header>
@@ -45,7 +45,7 @@ function AnchorsCard({ a }: { a: ValuationAnchors }) {
   return (
     <div className="panel-soft p-5">
       <p className="eyebrow mb-3 inline-flex items-center gap-2">
-        <Anchor className="w-4 h-4" /> Deep-Value Asset Floors (Graham)
+        <Anchor className="w-4 h-4" /> Deep-Value Asset Floors
       </p>
       <dl className="space-y-2.5 text-sm">
         <Row label="Current price" value={ps(a.price)} />
@@ -55,7 +55,7 @@ function AnchorsCard({ a }: { a: ValuationAnchors }) {
              aside={<span className={cn("font-mono text-xs", upColor(a.ncavPerShareUpside))}>{upTxt(a.ncavPerShareUpside)}</span>} />
         <Row label="Net-net / share (FMP)" value={ps(a.grahamNetNetPerShare)} />
         <div className="flex items-center justify-between pt-2 mt-1">
-          <span className="text-white/55 text-xs">Passes Graham net-net test</span>
+          <span className="text-white/55 text-xs">Passes net-net test</span>
           <span className={cn(
             "font-mono text-xs px-2 py-0.5 rounded-sm border",
             a.passesNetNetTest == null ? "text-white/40 border-white/10"
@@ -91,7 +91,7 @@ function RndCard({ r }: { r: RndAdjusted }) {
   return (
     <div className="panel-soft p-5">
       <p className="eyebrow mb-3 inline-flex items-center gap-2">
-        <FlaskConical className="w-4 h-4" /> R&amp;D Capitalization (Damodaran Ch.9)
+        <FlaskConical className="w-4 h-4" /> R&amp;D Capitalization
       </p>
       <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
         <Compare label="EBIT" rep={r.ebitReported} adj={r.ebitAdjusted} money />

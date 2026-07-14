@@ -1,11 +1,11 @@
-// Sector Rotation Matrix — a metric x sector sensitivity grid.
+// Sector Rotation Matrix, a metric x sector sensitivity grid.
 //
 // Rows are individual economic metrics (every metric the app tracks), grouped by
 // theme and weighted by predictive power. Columns are the 11 sectors. Each metric
 // has up to three readings:
-//   up      — the metric is rising  -> uses `impact`
-//   down    — the metric is falling -> uses `impact` negated
-//   neutral — the metric is stable / in-range -> uses `neutral` (its own tilt),
+//   up     , the metric is rising  -> uses `impact`
+//   down   , the metric is falling -> uses `impact` negated
+//   neutral, the metric is stable / in-range -> uses `neutral` (its own tilt),
 //             because a steady reading is itself a regime signal (a flat yield
 //             curve is late-cycle, calm credit is risk-on, stable inflation is
 //             benign for growth). Metrics where a stable reading carries no real
@@ -15,9 +15,7 @@
 // scoreMatrix() is pure and data-free, so a future automated reader can derive
 // the readings from the live payload and call it unchanged.
 //
-// Source: docs/analysis/sector-rotation-matrix.md (Ilmanen, Expected Returns
-// Ch.26/10 — equities excel in stable/disinflationary regimes, credit spreads
-// track growth; Fidelity business-cycle sector framework; general finance).
+// Source: docs/analysis/sector-rotation-matrix.md.
 
 export const SECTORS = [
   "Consumer Cyclical",
@@ -152,12 +150,12 @@ export const METRICS: MetricRow[] = [
   { id: "trade_bal", name: "Trade Balance / Current Account", group: "External & dollar", weight: 2, leadLag: "Coin", impact: { Industrials: 1, "Basic Materials": 1 } },
   { id: "exports", name: "Real Exports / Imports YoY", group: "External & dollar", weight: 2, leadLag: "Coin", impact: { "Basic Materials": 1, Industrials: 1, Energy: 1 } },
 
-  // Valuation — rising market multiples. P/E captures short-run multiple
+  // Valuation, rising market multiples. P/E captures short-run multiple
   // expansion (risk-on momentum that favors high-beta growth & cyclicals and
   // pressures bond-proxy defensives); CAPE is the long-horizon mean-reversion
   // signal (a richly valued market predicts weaker forward returns concentrated
   // in expensive growth, so an elevated reading tilts toward cheaper value &
-  // defensive sectors). Falling negates each; weight 2 — weak short-term timing,
+  // defensive sectors). Falling negates each; weight 2, weak short-term timing,
   // strong long-term context.
   { id: "sp500_pe", name: "S&P 500 P/E Ratio", group: "Valuation", weight: 2, leadLag: "Coin",
     impact: { Technology: 1, "Consumer Cyclical": 1, "Communication Services": 1, Industrials: 1, Utilities: -1, "Consumer Defensive": -1, Healthcare: -1 },

@@ -16,7 +16,7 @@ interface ToolbarDropdownProps {
   widthClass?: string;
 }
 
-// Minimal dropdown for the narrow notebook toolbar — same pattern as the
+// Minimal dropdown for the narrow notebook toolbar, same pattern as the
 // header ApiStatusBadge popover (trigger + fixed close-catcher + panel menu).
 export function ToolbarDropdown({ label, title, options, widthClass = "w-44" }: ToolbarDropdownProps) {
   const [open, setOpen] = useState(false);

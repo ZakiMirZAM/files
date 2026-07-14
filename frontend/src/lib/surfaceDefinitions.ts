@@ -74,7 +74,7 @@ export const SURFACE_METRIC_DEFS: SurfaceMetricDef[] = Object.entries(LOADERS)
     const surface = surfaceFor(number);
     if (!surface) {
       if (import.meta.env.DEV) {
-        console.warn(`surfaceDefinitions: ${path} (#${number}) matches no surface range — ignored`);
+        console.warn(`surfaceDefinitions: ${path} (#${number}) matches no surface range, ignored`);
       }
       return [];
     }

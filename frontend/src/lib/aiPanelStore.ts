@@ -15,10 +15,10 @@ export interface AiRequest {
   title: string;
   // answer mode
   question?: string;
-  /** Stable question id — used to cache/reuse the answer (Convex aiAnswers). */
+  /** Stable question id, used to cache/reuse the answer (Convex aiAnswers). */
   questionId?: string;
   section?: SectionKey;
-  /** Subject in view (ticker / sector / industry) — passed as the answer context. */
+  /** Subject in view (ticker / sector / industry), passed as the answer context. */
   context?: string;
   /** Compact summary of the page's computed figures for this subject (optional). */
   dataContext?: string;
