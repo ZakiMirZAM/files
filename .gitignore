@@ -29,3 +29,17 @@ frontend/.vite/
 tmp/
 output/
 data_cache/
+
+# Hand-supplied source workbooks (backend/marketdata/aaii_allocation.py). The AAII
+# Asset Allocation Survey is member content, so the workbook is dropped in locally
+# and never redistributed through this repo. The metric degrades to "chart data
+# source pending" when it is absent.
+data_manual/
+
+# More database artifacts. The 2026-07-13 remediation created these and they are
+# each ~630MB. They must never enter history: a single careless `git add -A` put
+# 1.26GB of them into a commit and inflated the pack to 5GB.
+financials.db.pre-swap-*
+financials_remediation.db
+*.db
+!frontend/**/*.db
