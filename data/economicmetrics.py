@@ -1,5 +1,6 @@
 
 
+import os
 import urllib.request
 import json
 import datetime
@@ -9,7 +10,7 @@ import matplotlib.dates as mdates
 import yfinance as yf
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
-FRED_API_KEY = "1bd93f3e51c3ac1e755f61c74d4cfd0a"
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations" 
 
 TODAY        = datetime.date.today()

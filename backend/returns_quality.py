@@ -131,7 +131,7 @@ def _reinvestment_rate(row: Row) -> Optional[float]:
     nopat = _nopat(row)
     if capex is None or dep is None or d_nwc is None or nopat in (None, 0):
         return None
-    return (abs(capex) - dep + d_nwc) / nopat
+    return (abs(capex) - dep - d_nwc) / nopat
 
 
 def _year(row: Row) -> Optional[int]:

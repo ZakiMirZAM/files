@@ -1,8 +1,9 @@
 """
 betas/classify.py — map 10-K segment names to Damodaran's 94 industry groups.
 
-Resolution order (cheapest first, every outcome cached permanently in
-segment_industry_map so the LLM is consulted at most twice per (ticker, segment)):
+Resolution order (cheapest first; deterministic outcomes and settled LLM verdicts
+are cached in segment_industry_map so the LLM is consulted at most twice per
+(ticker, segment); a transient RAG outage is left uncached so it retries later):
 
     1. structural  — corporate/eliminations buckets -> unmappable (excluded
                      from coverage rather than mis-weighted)
@@ -11,9 +12,11 @@ segment_industry_map so the LLM is consulted at most twice per (ticker, segment)
     3. keyword     — ~40 curated high-precision stems (confidence 0.8)
     4. llm         — RAG server /ask with a strict pick-one-verbatim prompt,
                      validated against the group list, one retry (confidence 0.6)
-    5. fallback    — the PARENT company's own industry via the alias map
-                     (source 'keyword', confidence 0.4)
-    6. unmappable  — industry NULL; the resolver's coverage gate handles it
+    5. unmappable  — an LLM failure is NOT mapped to the parent industry (that
+                     fabricates a business that isn't there); the segment stays
+                     unmappable and the resolver's coverage gate excludes it. A
+                     parent-industry guess is used only when the LLM is disabled
+                     entirely (allow_llm=False), and is never cached.
 
 The RAG server (localhost:3001, override RAG_BASE) runs Claude through the
 Agent SDK; the prompt forbids web search and demands one verbatim list entry,
@@ -36,6 +39,14 @@ from .schema import ensure_betas_schema
 _RAG_BASE = os.environ.get("RAG_BASE", "http://localhost:3001")
 _ASK_TIMEOUT_S = 120
 
+# Version stamp for deterministic (alias/keyword) classifications, written to the
+# segment_industry_map.model column so improved rules can re-derive stale rows.
+_CLASSIFIER_VERSION = "det-2026-07-17"
+
+# Sentinel distinguishing a RAG transport failure (server unreachable — retry
+# later) from a genuine "no valid answer" (server answered — cache as unmappable).
+_UNREACHABLE: object = object()
+
 # Segments that are accounting buckets, not businesses.
 _STRUCTURAL = re.compile(
     r"^(corporate( and other)?|all other( segments)?|other( sales)?|"
@@ -43,8 +54,10 @@ _STRUCTURAL = re.compile(
     r"product and service other|reconciling items?|intersegment|unallocated)$",
     re.IGNORECASE)
 
-# High-precision keyword stems -> Damodaran group. First match wins; ambiguous
-# stems are deliberately absent so they reach the LLM instead of mis-mapping.
+# High-precision keyword stems -> Damodaran group. First match wins, so a specific
+# stem must precede any broader stem it contains ("investment banking" before
+# "banking", "reinsurance" before "insurance"); ambiguous stems are deliberately
+# absent so they reach the LLM instead of mis-mapping.
 _KEYWORD_STEMS: tuple[tuple[str, str], ...] = (
     ("cloud", "Software (System & Application)"),
     ("software", "Software (System & Application)"),
@@ -61,14 +74,14 @@ _KEYWORD_STEMS: tuple[tuple[str, str], ...] = (
     ("surgical", "Healthcare Products"),
     ("diagnostic", "Healthcare Products"),
     ("health insurance", "Healthcare Support Services"),
+    ("investment banking", "Brokerage & Investment Banking"),
     ("banking", "Banks (Regional)"),
     ("bank", "Banks (Regional)"),
-    ("insurance", "Insurance (General)"),
     ("reinsurance", "Reinsurance"),
+    ("insurance", "Insurance (General)"),
     ("wealth management", "Investments & Asset Management"),
     ("asset management", "Investments & Asset Management"),
     ("brokerage", "Brokerage & Investment Banking"),
-    ("investment banking", "Brokerage & Investment Banking"),
     ("financial services", "Financial Svcs. (Non-bank & Insurance)"),
     ("payments", "Financial Svcs. (Non-bank & Insurance)"),
     ("aerospace", "Aerospace/Defense"),
@@ -197,7 +210,9 @@ def _deterministic(segment: str, groups: list[str]) -> tuple[str | None, str, fl
 
 # ── LLM pass (RAG /ask) ───────────────────────────────────────────────────────
 
-def _ask(question: str, context: str) -> str | None:
+def _ask(question: str, context: str) -> str | None | object:
+    """A group name, None (server answered but empty), or _UNREACHABLE (transport
+    failure — the caller must not cache a permanent verdict on this)."""
     payload = json.dumps({"question": question, "context": context,
                           "section": "individual"}).encode()
     req = urllib.request.Request(
@@ -207,7 +222,7 @@ def _ask(question: str, context: str) -> str | None:
         with urllib.request.urlopen(req, timeout=_ASK_TIMEOUT_S) as resp:
             body = json.loads(resp.read())
     except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
-        return None
+        return _UNREACHABLE  # server unreachable / bad response — retry later
     answer = body.get("answer")
     return str(answer) if answer else None
 
@@ -225,7 +240,7 @@ def _validate_answer(answer: str, groups: list[str]) -> str | None:
 
 
 def _llm_classify(segment: str, ticker: str, company_name: str | None,
-                  company_industry: str | None, groups: list[str]) -> str | None:
+                  company_industry: str | None, groups: list[str]) -> str | None | object:
     listing = "\n".join(groups)
     base_q = (
         "You are classifying a company business segment into exactly one industry group. "
@@ -241,12 +256,14 @@ def _llm_classify(segment: str, ticker: str, company_name: str | None,
         "exact name from the list.\n" + base_q,
     )):
         answer = _ask(question, ticker)
+        if answer is _UNREACHABLE:
+            return _UNREACHABLE  # transport failure — signal the caller to retry later
         if answer is None:
-            return None  # server down — caller uses the deterministic fallback
+            continue  # server answered but empty; re-prompt, then give up
         valid = _validate_answer(answer, groups)
         if valid:
             return valid
-    return None
+    return None  # server answered, no valid group after retries — genuinely unmappable
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -256,7 +273,8 @@ def classify_segment(
     company_name: str | None, company_industry: str | None,
     allow_llm: bool = True, force: bool = False,
 ) -> str | None:
-    """Damodaran group for one segment (None = unmappable). Cached permanently."""
+    """Damodaran group for one segment (None = unmappable). Settled outcomes are
+    cached; a transport failure is left uncached so a later run retries."""
     if not force:
         cached = get_cached(conn, ticker, segment)
         if cached is not None:
@@ -269,24 +287,33 @@ def classify_segment(
     det = _deterministic(segment, groups)
     if det is not None:
         industry, source, confidence = det
-        _store(conn, ticker, segment, industry, source, confidence)
+        _store(conn, ticker, segment, industry, source, confidence,
+               model=_CLASSIFIER_VERSION)
         return industry
 
+    reachable = True
     if allow_llm:
-        llm_industry = _llm_classify(segment, ticker, company_name,
-                                     company_industry, groups)
-        if llm_industry:
-            _store(conn, ticker, segment, llm_industry, "llm", 0.6, model="rag/ask")
-            return llm_industry
+        llm_result = _llm_classify(segment, ticker, company_name,
+                                   company_industry, groups)
+        if isinstance(llm_result, str):
+            _store(conn, ticker, segment, llm_result, "llm", 0.6, model="rag/ask")
+            return llm_result
+        # str = success (returned above); None = server answered but no valid
+        # group; _UNREACHABLE = transport failure (retry later, do not cache).
+        reachable = llm_result is not _UNREACHABLE
 
-    # Deterministic fallback: the parent company's own industry.
-    parent = alias_industry(company_industry)
-    if parent:
-        _store(conn, ticker, segment, parent, "keyword", 0.4)
-        return parent
-    if allow_llm:
-        # Only a fully-escalated failure is cached as unmappable; without LLM
-        # access we leave it uncached so a later warmed run can still try.
+    if not allow_llm:
+        # LLM disabled entirely: fall back to the parent company's industry as a
+        # last-resort guess, but leave it UNCACHED (H2) so a later LLM-enabled run
+        # derives the real segment industry instead of inheriting a stale guess.
+        return alias_industry(company_industry)
+
+    # H2: an LLM failure must NOT be cached as a successful parent mapping and must
+    # NOT count toward bottom-up coverage; the segment is unmappable. M: write the
+    # permanent unmappable verdict only when the RAG server actually answered; on a
+    # transport failure leave the row uncached so a later run retries rather than
+    # dropping the segment from coverage forever.
+    if reachable:
         _store(conn, ticker, segment, None, "llm", 0.0, model="rag/ask")
     return None
 

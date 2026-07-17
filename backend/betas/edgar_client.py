@@ -26,6 +26,7 @@ import datetime as _dt
 import json
 import re
 import sqlite3
+import threading
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -60,21 +61,23 @@ _FY_MIN_DAYS, _FY_MAX_DAYS = 330, 430
 
 _MIN_NETWORK_INTERVAL = 1.0 / 8.0  # ~8 req/s, under SEC's 10/s ceiling
 _last_network_hit = 0.0
+_network_lock = threading.Lock()
 
 
 def _fetch(url: str, cache_name: str, *, max_age_days: float, force: bool = False) -> bytes | None:
     """cached_download with the SEC contact UA + network pacing."""
     global _last_network_hit
-    wait = _MIN_NETWORK_INTERVAL - (time.monotonic() - _last_network_hit)
-    if wait > 0:
-        time.sleep(wait)
-    result = cached_download(
-        url, cache_name, max_age_days=max_age_days, force=force,
-        user_agent=SEC_USER_AGENT,
-    )
-    if not result.from_cache:
-        _last_network_hit = time.monotonic()
-    return result.data
+    with _network_lock:
+        wait = _MIN_NETWORK_INTERVAL - (time.monotonic() - _last_network_hit)
+        if wait > 0:
+            time.sleep(wait)
+        result = cached_download(
+            url, cache_name, max_age_days=max_age_days, force=force,
+            user_agent=SEC_USER_AGENT,
+        )
+        if not result.from_cache:
+            _last_network_hit = time.monotonic()
+        return result.data
 
 
 # ── ticker -> CIK ─────────────────────────────────────────────────────────────
@@ -709,10 +712,14 @@ def get_financial_facts(conn: sqlite3.Connection, ticker: str, *, force: bool = 
             "WHERE cik = ? ORDER BY fy DESC LIMIT 1", (cik,),
         ).fetchone()
         if row is not None:
-            return FinancialFacts(
-                period_end=row[0], fiscal_year=row[1],
-                income=json.loads(row[2] or "{}"), leases=json.loads(row[3] or "{}"),
-            )
+            # Freshness gate (mirrors ingest_ticker): serve the cached row only
+            # when it is not behind a newer 10-K; otherwise fall through to fetch.
+            tenk = latest_10k(cik)
+            if tenk is None or tenk.fiscal_year <= row[1]:
+                return FinancialFacts(
+                    period_end=row[0], fiscal_year=row[1],
+                    income=json.loads(row[2] or "{}"), leases=json.loads(row[3] or "{}"),
+                )
     facts = fetch_financial_facts(conn, ticker, force=force)
     if facts is None:
         return None

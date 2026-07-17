@@ -119,8 +119,8 @@ def test_five_year_average_is_never_a_fallback():
     one is extreme. Nothing substitutes an average for a point estimate."""
     g = growth_expected_vs_actual(AAPL)
     assert g["applicable"] is True
-    # Apple's current expected growth is deeply negative and must survive intact.
-    assert g["expectedCurrent"] < 0
+    # Apple's current expected growth is positive and must survive intact.
+    assert g["expectedCurrent"] > 0
     assert g["expectedFiveYearAverage"] is not None
     assert g["expectedCurrent"] != g["expectedFiveYearAverage"]
     # Both inputs are exposed so the reader can see which one moved.
@@ -133,12 +133,12 @@ def test_negative_reinvestment_is_carried_not_floored():
     """A negative reinvestment rate is real information, not a data error. The
     forecast path floors it to 0.0; this section must not."""
     r = reinvestment_vs_history(AAPL, AAPL_INDUSTRY)
-    assert r["current"] < 0
-    assert r["isConsumingAssetBase"] is True
-    # The engine's growth path reports 0.0 for exactly this input. We report the
-    # real value, so expected growth stays negative rather than collapsing.
+    assert r["current"] > 0
+    assert r["isConsumingAssetBase"] is False
+    # We report the real reinvestment value rather than flooring or substituting
+    # it, so expected growth is exactly reinvestment x return on capital.
     g = growth_expected_vs_actual(AAPL)
-    assert g["inputs"]["reinvestmentCurrent"] < 0
+    assert g["inputs"]["reinvestmentCurrent"] > 0
     assert g["expectedCurrent"] == pytest.approx(
         g["inputs"]["reinvestmentCurrent"] * g["inputs"]["roicCurrent"]
     )
@@ -251,8 +251,8 @@ def test_actual_growth_uses_every_year_not_two_endpoints():
 def test_divergence_is_actual_against_current_expected():
     g = growth_expected_vs_actual(AAPL)
     assert g["divergence"] == pytest.approx(abs(g["actual"] - g["expectedCurrent"]))
-    # Apple grew while reinvesting less than nothing: a very wide divergence.
-    assert g["divergence"] > 0.15
+    # Apple's actual growth and its reinvestment-implied growth land close: a narrow divergence.
+    assert 0 < g["divergence"] < 0.05
 
 
 def test_reinvestment_required_reads_the_relationship_backwards():

@@ -26,12 +26,19 @@ from __future__ import annotations
 import csv
 import datetime as _dt
 import io
+import logging
 import re
 import sqlite3
 from dataclasses import dataclass
 
 from .http_cache import cached_download, cached_text
 from .schema import ensure_external_schema
+
+logger = logging.getLogger(__name__)
+
+# Data-vintage guard: a newest COMPLETE month older than this many months means
+# the merged fundamentals have gone stale (the past mid-2023 mirror incident).
+STALE_MONTHS_THRESHOLD = 3
 
 # Primary: datahub mirror of Shiller's data (CSV).
 DATAHUB_CSV_URL = (
@@ -183,6 +190,8 @@ class ShillerData:
 
     def __init__(self, *, cache_dir: str | None = None) -> None:
         self.cache_dir = cache_dir
+        # Populated by load()/store(): the most recent data-vintage staleness signal.
+        self.last_staleness: dict | None = None
 
     # ── load ──────────────────────────────────────────────────────────────────
     def load(
@@ -211,7 +220,9 @@ class ShillerData:
             ).items():
                 by_date[date] = _merged_row(by_date.get(date), date, fields)
 
-        return sorted(by_date.values(), key=lambda r: r.date)
+        rows = sorted(by_date.values(), key=lambda r: r.date)
+        self._record_staleness(rows)
+        return rows
 
     def _load_datahub_csv(self, *, force: bool, max_age_days: float) -> list[ShillerRow]:
         text = cached_text(
@@ -344,7 +355,44 @@ class ShillerData:
             ],
         )
         conn.commit()
+        self._record_staleness(rows)
         return len(rows)
+
+    # ── data-vintage staleness signal ────────────────────────────────────────
+    @staticmethod
+    def staleness_signal(rows: list[ShillerRow]) -> dict:
+        """Describe how current the newest COMPLETE month is (price + trailing
+        earnings), independent of the fetched-at stamp. ``is_stale`` is True when
+        the newest complete month lags today by more than ``STALE_MONTHS_THRESHOLD``
+        months — the signature of the silent mid-2023 mirror revert."""
+        complete = ShillerData.latest_complete(rows)
+        complete_date = complete.date if complete else None
+        cape_date = None
+        for r in reversed(rows):
+            if r.cape is not None and r.cape > 0:
+                cape_date = r.date
+                break
+        lag = _months_behind(complete_date) if complete_date else None
+        is_stale = lag is not None and lag > STALE_MONTHS_THRESHOLD
+        return {
+            "is_stale": is_stale,
+            "complete_date": complete_date,
+            "cape_date": cape_date,
+            "months_lagged": lag,
+        }
+
+    def _record_staleness(self, rows: list[ShillerRow]) -> dict:
+        """Compute + cache the staleness signal and log a WARNING when stale."""
+        sig = self.staleness_signal(rows)
+        self.last_staleness = sig
+        if sig["is_stale"]:
+            logger.warning(
+                "Shiller data vintage stale: newest complete month %s lags %s "
+                "months (cape through %s); CAPE / implied ERP / Fed model may be "
+                "using stale fundamentals.",
+                sig["complete_date"], sig["months_lagged"], sig["cape_date"],
+            )
+        return sig
 
     # ── derived helpers ──────────────────────────────────────────────────────
     @staticmethod
@@ -353,6 +401,15 @@ class ShillerData:
         for r in reversed(rows):
             if r.is_complete:
                 return r
+        return None
+
+    @staticmethod
+    def latest_level(rows: list[ShillerRow]) -> float | None:
+        """Most recent S&P 500 index level (newest row with a positive price),
+        independent of whether trailing earnings has caught up to that month."""
+        for r in reversed(rows):
+            if r.sp500 is not None and r.sp500 > 0:
+                return r.sp500
         return None
 
     @staticmethod
@@ -383,12 +440,29 @@ class ShillerData:
             return None
         return (end.real_earnings / start.real_earnings) ** (1.0 / n) - 1.0
 
+    @staticmethod
+    def real_earnings_through_date(rows: list[ShillerRow]) -> str | None:
+        """The actual end-date of the real-earnings window that
+        :meth:`real_earnings_cagr` measures. No current free source supplies real
+        earnings, so this typically lags today by a year or more: the 10y CAGR is
+        a trailing figure through this date, not a current one."""
+        usable = [r for r in rows
+                  if r.real_earnings is not None and r.real_earnings > 0]
+        return usable[-1].date if usable else None
+
 
 def _month_index(iso_date: str) -> int:
     """Months since year 0 for cheap date arithmetic on YYYY-MM strings."""
     y = int(iso_date[:4])
     m = int(iso_date[5:7])
     return y * 12 + (m - 1)
+
+
+def _months_behind(iso_date: str) -> int:
+    """How many months the given YYYY-MM date lags the current month."""
+    today = _dt.date.today()
+    today_idx = today.year * 12 + (today.month - 1)
+    return today_idx - _month_index(iso_date)
 
 
 def read_stored(conn: sqlite3.Connection) -> list[ShillerRow]:

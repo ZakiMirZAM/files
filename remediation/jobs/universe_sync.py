@@ -49,6 +49,7 @@ SEC_EXCHANGE_FILE = os.path.join(
 
 _NEW_STATUS = "awaiting_first_financials"
 _DELISTED_STATUS = "delisted"
+_ACTIVE_STATUS = "active"
 
 # A weekly job must never mass-delist on a truncated/garbage SEC download. If a
 # single run would delist more than this fraction of the map, the delist step is
@@ -293,7 +294,8 @@ def apply_diff(conn: sqlite3.Connection, diff: Diff, today: str) -> dict[str, in
     INSERT OR IGNORE keeps it safe to re-run against a partially-applied state;
     a symbol already present is left as-is (never restated).
     """
-    counts = {"registrants": 0, "renames": 0, "delisted": 0, "tickers": 0}
+    counts = {"registrants": 0, "renames": 0, "delisted": 0, "tickers": 0,
+              "reconciled": 0}
     insert_sql = (
         "INSERT OR IGNORE INTO security_map "
         "(cik, symbol, symbol_sec, symbol_yf, symbol_fmp, kind, is_primary, "
@@ -320,6 +322,7 @@ def apply_diff(conn: sqlite3.Connection, diff: Diff, today: str) -> dict[str, in
             "WHERE symbol = ? AND status != ?",
             [_DELISTED_STATUS, today, sym, _DELISTED_STATUS])
         counts["delisted"] += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    counts["reconciled"] = _reconcile_primary_tickers(conn, today)
     conn.commit()
     return counts
 
@@ -340,6 +343,62 @@ def _upsert_ticker(conn: sqlite3.Connection, nr: NewRow, today: str) -> int:
         print(f"  WARN: tickers upsert failed for {nr.symbol}: {exc}",
               file=sys.stderr)
         return 0
+
+
+def _reconcile_primary_tickers(conn: sqlite3.Connection, today: str) -> int:
+    """Backfill a ``tickers`` row for every active ``is_primary=1`` company that
+    has fundamentals but no ``tickers`` row (H5).
+
+    New registrants get their ``tickers`` row from ``_upsert_ticker``, but a
+    company that became primary outside this job (a re-key, an earlier ingest)
+    can carry full ``financials`` yet never appear in ``tickers`` - and every
+    sector/industry average / search INNER-JOINs ``tickers``, so it is invisible
+    (AXS, RNR, BEP and 7 others). Name/sector/industry are sourced from the
+    ``financials`` warehouse (the SEC files carry no sector/industry). After the
+    backfill, a WARNING is logged if the active primaries are still not a subset
+    of ``tickers``. Best-effort; returns the number of rows inserted.
+    """
+    try:
+        missing = conn.execute(
+            "SELECT symbol FROM security_map "
+            "WHERE COALESCE(is_primary, 1) = 1 AND status = ? "
+            "  AND symbol NOT IN (SELECT ticker FROM tickers)",
+            [_ACTIVE_STATUS]).fetchall()
+    except sqlite3.Error as exc:
+        print(f"  WARN: tickers reconciliation query failed: {exc}",
+              file=sys.stderr)
+        return 0
+
+    added = 0
+    for (sym,) in missing:
+        frow = conn.execute(
+            'SELECT "Name", "Sector", "Industry" FROM financials '
+            'WHERE Ticker = ? '
+            'ORDER BY CAST("Calendar Year" AS INTEGER) DESC LIMIT 1',
+            [sym]).fetchone()
+        if frow is None:
+            continue  # no fundamentals to source sector/industry from
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO tickers "
+                "(ticker, name, sector, industry, last_updated) "
+                "VALUES (?,?,?,?,?)",
+                [sym, frow[0], frow[1], frow[2], today])
+            added += 1
+        except sqlite3.Error as exc:
+            print(f"  WARN: tickers backfill failed for {sym}: {exc}",
+                  file=sys.stderr)
+
+    still_missing = conn.execute(
+        "SELECT COUNT(*) FROM security_map "
+        "WHERE COALESCE(is_primary, 1) = 1 AND status = ? "
+        "  AND symbol NOT IN (SELECT ticker FROM tickers)",
+        [_ACTIVE_STATUS]).fetchone()[0]
+    if still_missing:
+        print(f"  ALERT: {still_missing} active is_primary=1 companies are not "
+              f"a subset of tickers (no fundamentals to source sector/industry) "
+              f"- reconciliation incomplete.", file=sys.stderr)
+    return added
 
 
 def main(db_path: str, *, download: bool = True) -> int:

@@ -15,8 +15,12 @@ NOTES_DIR = "notes"
 MAX_CHARS_PER_CHUNK = 180_000  # ~45K tokens, safe for Kimi's context window
 
 # Use Kimi directly or OpenRouter
+_MOONSHOT_API_KEY = os.getenv("MOONSHOT_API_KEY")
+if not _MOONSHOT_API_KEY:
+    raise RuntimeError("MOONSHOT_API_KEY is not set. Export it in the environment before running.")
+
 client = OpenAI(
-    api_key="sk-NYQDHwrOSLAjCrkbPYoUHAcShp5eTef6PzQAPCPO2MSc44Sz",
+    api_key=_MOONSHOT_API_KEY,
     base_url="https://api.moonshot.ai/v1",
     # For OpenRouter instead:
     # api_key=os.getenv("OPENROUTER_API_KEY"),

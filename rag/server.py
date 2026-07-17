@@ -14,6 +14,7 @@ Needs:  ollama serve + `ollama pull nomic-embed-text`, and `claude login`.
 """
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import json
 import os
@@ -267,7 +268,10 @@ async def search_vault(args):
     category = args.get("category") or None
     if not qtext:
         return {"content": [{"type": "text", "text": "No query provided."}]}
-    results = search(qtext, category)
+    # Blocking retrieval (Ollama embed + sqlite-vec KNN) must stay off the event
+    # loop: under concurrent requests it starves the Agent SDK's control-request
+    # handshake (60s timeout) and every parked request 500s.
+    results = await asyncio.to_thread(search, qtext, category)
     box = _sources.get()
     if box is not None:
         box.extend(r["source"] for r in results)
@@ -380,8 +384,15 @@ async def handle_ask(request: web.Request) -> web.Response:
     prompt += f"\n\nQuestion: {question}"
     # Web stays available (for facts the page does not show); the prompt above keeps
     # the page figures authoritative over any conflicting web value.
-    answer, sources = await run_agent(
-        prompt, ASK_MODEL, ASK_SYSTEM, max_turns=28, label="/ask", budget_usd=2.0)
+    try:
+        answer, sources = await run_agent(
+            prompt, ASK_MODEL, ASK_SYSTEM, max_turns=28, label="/ask", budget_usd=2.0)
+    except Exception as exc:
+        # A transient SDK failure (control-request timeout, ProcessError, rate
+        # limit) must come back as parseable JSON, not aiohttp's HTML 500 page.
+        print(f"[/ask] agent failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response(
+            {"answer": "", "sources": [], "error": "AI backend temporarily unavailable"}, status=503)
     return web.json_response({"answer": answer, "sources": sources})
 
 
@@ -405,8 +416,13 @@ async def handle_explain(request: web.Request) -> web.Response:
             + "\n\nUse these exact figures where they relate to the highlighted text; do not replace them "
             "with a different web value."
         )
-    explanation, sources = await run_agent(
-        prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=0.75)
+    try:
+        explanation, sources = await run_agent(
+            prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=0.75)
+    except Exception as exc:
+        print(f"[/explain] agent failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response(
+            {"explanation": "", "sources": [], "error": "AI backend temporarily unavailable"}, status=503)
     return web.json_response({"explanation": explanation, "sources": sources})
 
 
@@ -434,8 +450,14 @@ async def handle_define(request: web.Request) -> web.Response:
             "\n\nComputed data on the page (AUTHORITATIVE — use these exact figures where relevant, do not "
             "replace with a web value):\n" + data_context
         )
-    definition, _used = await run_agent(
-        prompt, DEFINE_MODEL, DEFINE_SYSTEM, max_turns=10, label="/define", budget_usd=0.5)
+    try:
+        definition, _used = await run_agent(
+            prompt, DEFINE_MODEL, DEFINE_SYSTEM, max_turns=10, label="/define", budget_usd=0.5)
+    except Exception as exc:
+        # Do not cache on failure — an empty definition must never enter the glossary.
+        print(f"[/define] agent failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response(
+            {"term": term, "definition": "", "error": "AI backend temporarily unavailable"}, status=503)
     with _db_lock:
         db = get_db()
         db.execute("INSERT OR REPLACE INTO glossary (term, definition) VALUES (?, ?)", (cache_key, definition))

@@ -69,16 +69,31 @@ export function fxToUsd(currency: string | null | undefined, rates: Record<strin
   return typeof r === "number" && r > 0 ? r : 1;
 }
 
+/** Minor-unit quote codes Yahoo returns for some venues (case-sensitive:
+ *  GBp/GBX are pence, ILA agorot, ZAc cents), mapped to their major currency
+ *  and the divisor to reach whole units. A price quoted in these is 100× the
+ *  major unit, so it must be scaled down before the whole-unit FX rate applies. */
+const MINOR_UNIT_CURRENCIES: Record<string, { major: string; divisor: number }> = {
+  GBp: { major: "GBP", divisor: 100 },
+  GBX: { major: "GBP", divisor: 100 },
+  ILA: { major: "ILS", divisor: 100 },
+  ZAc: { major: "ZAR", divisor: 100 },
+};
+
 /** Convert a live quote's price to USD using the FX table. Returns the USD
  *  price and the fx rate used, so a trade can be logged with both. Null price
- *  when the quote has no usable last price. */
+ *  when the quote has no usable last price. Minor-unit codes (pence/agorot/cents)
+ *  are folded to their major currency and the price scaled to whole units first. */
 export function quoteToUsd(
   quote: LiveQuote | undefined,
   rates: Record<string, number>,
 ): { priceUsd: number | null; priceLocal: number | null; currency: string; fxRate: number } {
-  const currency = (quote?.currency || "USD").toUpperCase();
+  const rawCurrency = quote?.currency || "USD";
+  const minor = MINOR_UNIT_CURRENCIES[rawCurrency.trim()];
+  const currency = (minor ? minor.major : rawCurrency).toUpperCase();
   const fxRate = fxToUsd(currency, rates);
-  const priceLocal = quote?.price ?? null;
+  const rawPrice = quote?.price ?? null;
+  const priceLocal = rawPrice != null && minor ? rawPrice / minor.divisor : rawPrice;
   const priceUsd = priceLocal != null ? priceLocal * fxRate : null;
   return { priceUsd, priceLocal, currency, fxRate };
 }

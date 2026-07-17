@@ -270,8 +270,10 @@ def _compute_averages(
             {_avg_exprs(target)}
         FROM financials f
         JOIN tickers t ON t.ticker = f.Ticker
+        LEFT JOIN security_map s ON s.symbol = f.Ticker
         {_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
+          AND COALESCE(s.is_primary, 1) = 1
           AND f."Market Cap" > 0
           AND {_FX_WEIGHT_SQL} < 1e14
         GROUP BY t.{group_col}
@@ -315,8 +317,10 @@ def _compute_averages_by_year(
             {_avg_exprs(target)}
         FROM financials f
         JOIN tickers t ON t.ticker = f.Ticker
+        LEFT JOIN security_map s ON s.symbol = f.Ticker
         {_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
+          AND COALESCE(s.is_primary, 1) = 1
           AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
           AND f."Market Cap" > 0
           AND {_FX_WEIGHT_SQL} < 1e14
@@ -375,7 +379,7 @@ def compute_cape(db: FinancialDB, group_col: str) -> dict[str, float | None]:
         WITH eps_history AS (
             SELECT
                 f.Ticker,
-                AVG(CASE WHEN f."EPS Diluted" > 0 THEN f."EPS Diluted" END) AS avg_eps,
+                AVG(CASE WHEN f."EPS Diluted" IS NOT NULL THEN f."EPS Diluted" END) AS avg_eps,
                 COUNT(CASE WHEN f."EPS Diluted" > 0 THEN 1 END)              AS pos_eps_years
             FROM financials f
             WHERE f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
@@ -485,7 +489,9 @@ def compute_dcf(
             {beta_expr} AS beta
         FROM latest l
         JOIN tickers t ON t.ticker = l.Ticker{beta_join}
+        LEFT JOIN security_map s ON s.symbol = l.Ticker
         WHERE t.{group_col} IS NOT NULL
+          AND COALESCE(s.is_primary, 1) = 1
     """
     conn = sqlite3.connect(db.db_path)
     conn.row_factory = sqlite3.Row

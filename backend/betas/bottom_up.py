@@ -43,6 +43,8 @@ COVERAGE_MIN = 0.70
 SEGMENT_SUM_BAND = (0.60, 1.15)
 DIVERGENCE_FLAG = 0.75
 RECOMPUTE_AGE_DAYS = 30
+HIGH_CONF_MIN_MAP = 0.8   # min per-segment map confidence required to stamp "high"
+LOW_CONF_MAX_MAP = 0.5    # a 0.4 parent-fallback mapping (or worse) forces "low"
 
 
 @dataclass(frozen=True)
@@ -250,13 +252,19 @@ def _resolve(conn: sqlite3.Connection, t: str, *, name: str | None,
         conn, t, dam, name=name, industry=industry, latest=latest,
         allow_network=allow_network, warnings=warnings)
     if seg_result is not None:
-        bu, method, coverage, components, any_llm, de_from_dam = seg_result
+        bu, method, coverage, components, any_llm, de_from_dam, min_map_conf = seg_result
         de, de_source = firm_de, "firm_market"
         if de is None:
             de, de_source = de_from_dam, "damodaran_industry"
             warnings.append("de_from_damodaran_industry")
-        confidence = "high" if (method == "bottom_up_ev_sales" and not any_llm
-                                and de_source == "firm_market") else "medium"
+        if (method == "bottom_up_ev_sales" and not any_llm
+                and de_source == "firm_market"
+                and min_map_conf is not None and min_map_conf >= HIGH_CONF_MIN_MAP):
+            confidence = "high"
+        elif min_map_conf is not None and min_map_conf < LOW_CONF_MAX_MAP:
+            confidence = "low"
+        else:
+            confidence = "medium"
         if de is not None:
             return finish(bu, method=method, confidence=confidence, de=de,
                           de_source=de_source, coverage=coverage,
@@ -334,11 +342,24 @@ def _resolve(conn: sqlite3.Connection, t: str, *, name: str | None,
         warnings=tuple(warnings), regression_beta=regression, asof=asof)
 
 
+def _map_confidence(conn, ticker: str, segment: str) -> float | None:
+    """Stored classification confidence for one (ticker, segment); None if absent.
+    ``source`` alone can't tell a 0.4 parent-fallback from a 0.8 keyword hit."""
+    try:
+        row = conn.execute(
+            "SELECT confidence FROM segment_industry_map "
+            "WHERE ticker = ? AND segment_norm = ?",
+            [ticker.upper(), classify._norm(segment)]).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return float(row[0]) if row and row[0] is not None else None
+
+
 def _segment_bottom_up(conn, t: str, dam: DamodaranIndustryData, *,
                        name: str | None, industry: str | None, latest,
                        allow_network: bool, warnings: list[str]):
     """L1/L2 shared machinery. Returns (bu, method, coverage, components,
-    any_llm, de_from_damodaran) or None to fall through."""
+    any_llm, de_from_damodaran, min_map_conf) or None to fall through."""
     cik = None
     if latest is not None and latest["cik"]:
         digits = "".join(ch for ch in str(latest["cik"]) if ch.isdigit())
@@ -354,13 +375,16 @@ def _segment_bottom_up(conn, t: str, dam: DamodaranIndustryData, *,
     _fy, rows = stored
 
     sum_ratio = segment_store.segment_sum_ratio(rows)
-    if sum_ratio is not None and not (SEGMENT_SUM_BAND[0] <= sum_ratio <= SEGMENT_SUM_BAND[1]):
+    if sum_ratio is None:
+        warnings.append("no_consolidated_sanity")
+    elif not (SEGMENT_SUM_BAND[0] <= sum_ratio <= SEGMENT_SUM_BAND[1]):
         warnings.append(f"skip_L1L2_segment_sum_ratio={sum_ratio:.2f}")
         return None
 
     # Classify each segment (cache first; LLM only when network is allowed).
     mapped: list[tuple[segment_store.SegmentRow, str, str]] = []  # (row, group, source)
     any_llm = False
+    map_confidences: list[float] = []
     for row in rows:
         cached = classify.get_cached(conn, t, row.segment)
         if cached is not None:
@@ -376,6 +400,10 @@ def _segment_bottom_up(conn, t: str, dam: DamodaranIndustryData, *,
         if group:
             mapped.append((row, group, source))
             any_llm = any_llm or source == "llm"
+            conf = _map_confidence(conn, t, row.segment)
+            if conf is not None:
+                map_confidences.append(conf)
+    min_map_conf = min(map_confidences) if map_confidences else None
 
     consolidated = rows[0].consolidated_revenue
     total_rev = consolidated if consolidated and consolidated > 0 else sum(
@@ -417,7 +445,7 @@ def _segment_bottom_up(conn, t: str, dam: DamodaranIndustryData, *,
             return None
         de_dam = _weighted_dam_de(weights, {s: benches[g] for _r, g, _s in mapped
                                             for s in [_r.segment]})
-        return bu, method, round(coverage, 4), components, any_llm, de_dam
+        return bu, method, round(coverage, 4), components, any_llm, de_dam, min_map_conf
 
     # L1: EV/Sales value weights when every group has the multiple.
     if all(benches[g].get("ev_sales") for _r, g, _s in mapped):

@@ -8,6 +8,9 @@ const STARTING_CASH = 100_000;
 const SNAPSHOT_THROTTLE_MS = 5 * 60 * 1000;
 /** Tolerance for float comparisons on cash / shares. */
 const EPS = 1e-6;
+/** Sane finite upper bound for any single money input or computed value, so a
+ *  direct mutation call can't mint infinite/NaN paper cash for its own account. */
+const MAX_MONEY = 1e12;
 
 const sideValidator = v.union(v.literal("buy"), v.literal("sell"));
 const progressKindValidator = v.union(v.literal("lesson"), v.literal("question"));
@@ -108,6 +111,18 @@ export const executeTrade = mutation({
     if (!ticker) throw new Error("Ticker is required");
     if (!(args.shares > 0)) throw new Error("Shares must be greater than zero");
     if (!(args.priceUsd > 0)) throw new Error("A live price is required to trade");
+    if (
+      !Number.isFinite(args.shares) ||
+      !Number.isFinite(args.priceUsd) ||
+      !Number.isFinite(args.priceLocal) ||
+      !Number.isFinite(args.fxRate) ||
+      args.shares > MAX_MONEY ||
+      args.priceUsd > MAX_MONEY ||
+      args.priceLocal > MAX_MONEY ||
+      args.fxRate > MAX_MONEY
+    ) {
+      throw new Error("Trade inputs are out of range");
+    }
 
     const now = Date.now();
 
@@ -133,6 +148,9 @@ export const executeTrade = mutation({
       .first();
 
     const valueUsd = args.shares * args.priceUsd;
+    if (!Number.isFinite(valueUsd) || valueUsd > MAX_MONEY) {
+      throw new Error("Trade value is out of range");
+    }
 
     if (args.side === "buy") {
       if (valueUsd > portfolio.cashUsd + EPS) {
@@ -239,13 +257,21 @@ export const resetPortfolio = mutation({
     if (!userId) throw new Error("Not authenticated");
     const now = Date.now();
 
-    for (const table of ["simPositions", "simTrades", "simNavSnapshots"] as const) {
-      const rows = await ctx.db
-        .query(table)
-        .filter((q) => q.eq(q.field("userId"), userId))
-        .collect();
-      for (const row of rows) await ctx.db.delete(row._id);
-    }
+    const positions = await ctx.db
+      .query("simPositions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const trades = await ctx.db
+      .query("simTrades")
+      .withIndex("by_user_executed", (q) => q.eq("userId", userId))
+      .collect();
+    const snapshots = await ctx.db
+      .query("simNavSnapshots")
+      .withIndex("by_user_taken", (q) => q.eq("userId", userId))
+      .collect();
+    for (const row of positions) await ctx.db.delete(row._id);
+    for (const row of trades) await ctx.db.delete(row._id);
+    for (const row of snapshots) await ctx.db.delete(row._id);
 
     const portfolio = await ctx.db
       .query("simPortfolio")

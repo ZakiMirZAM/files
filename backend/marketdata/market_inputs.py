@@ -198,7 +198,9 @@ def get_live_wacc_params(
     latest = ShillerData.latest_complete(rows) if rows else None
     cape = ShillerData.latest_cape(rows) if rows else None
 
-    price = latest.sp500 if latest else None
+    # Index level = latest row with a positive price (not pinned to the more-
+    # lagged latest_complete month); earnings still trailing (Damodaran/Shiller).
+    price = ShillerData.latest_level(rows) if rows else None
     earnings = _sp500_earnings(latest.earnings if latest else None, cache_dir=cache_dir)
     dividend = latest.dividend if latest else None
     earnings_yield = (earnings / price) if (price and earnings) else None
@@ -467,6 +469,9 @@ def get_current_sp500_projection(
     real_g = ShillerData.real_earnings_cagr(rows)
     growth = (real_g + infl) if real_g is not None else (0.02 + infl)
     earnings = _sp500_earnings(latest.earnings, cache_dir=cache_dir)
+    # Index level = latest row with a positive price (see get_live_wacc_params);
+    # earnings/dividend stay on latest_complete's trailing month.
+    price = ShillerData.latest_level(rows) or latest.sp500
     return sp500_projection(
-        price=latest.sp500, earnings=earnings, risk_free=rf,
+        price=price, earnings=earnings, risk_free=rf,
         growth=growth, dividend=latest.dividend, baseline_erp=baseline_erp)

@@ -83,6 +83,12 @@ def _build_db(path: str) -> None:
                PRIMARY KEY (currency, year)
            )"""
     )
+    # C3 fix adds a `LEFT JOIN security_map ... COALESCE(s.is_primary,1)=1` to the
+    # by-year aggregate; the table must exist. Left empty so every filer's missing
+    # row COALESCEs to primary (the fix's default), preserving the expected weights.
+    conn.execute(
+        "CREATE TABLE security_map (symbol TEXT PRIMARY KEY, is_primary INTEGER)"
+    )
 
     # (ticker, industry, ccy, market_cap, roe)
     companies = [

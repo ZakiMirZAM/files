@@ -1176,7 +1176,7 @@ def _forward_reinvestment_rate(latest: sqlite3.Row) -> Optional[float]:
     nopat = _nopat_for_row(latest)
     if capex is None or dep is None or d_nwc is None or nopat in (None, 0):
         return None
-    return (abs(capex) - dep + d_nwc) / nopat
+    return (abs(capex) - dep - d_nwc) / nopat
 
 
 def _fundamental_growth(rows: list[sqlite3.Row], roic: Optional[float]) -> Optional[dict]:
@@ -1272,6 +1272,42 @@ _SYNTH_SPREAD_SMALL = [   # firms <= $5B market cap
 _LARGE_CAP_CUTOFF = 5_000_000_000.0
 _FALLBACK_DEBT_SPREAD = 0.0160   # ~BBB, used when interest coverage isn't computable
 
+# The synthetic-rating size split (Damodaran Ch.8 large- vs small-firm tables) is a
+# USD $5B line, but Market Cap is stored in the filer's local currency. Convert it to
+# USD via fx_rates (usd_per_unit — the same convention as the ranking paths in api.py)
+# so a weak-currency filer is not misrouted onto the large-firm table.
+_FX_RATES_CACHE: Optional[dict[str, float]] = None
+
+
+def _fx_rates_for_conversion() -> dict[str, float]:
+    """{currency: usd_per_unit} from fx_rates, loaded once per process. Best-effort:
+    a missing DB/table yields an empty map, so callers fall back to the local cap."""
+    global _FX_RATES_CACHE
+    if _FX_RATES_CACHE is None:
+        _FX_RATES_CACHE = {}
+        db_path = os.environ.get("FINANCIALS_DB", "financials.db")
+        try:
+            if os.path.exists(db_path):
+                _FX_RATES_CACHE = FinancialDB(db_path).get_fx_rates()
+        except Exception:  # noqa: BLE001 — a missing DB/table must never break a valuation
+            _FX_RATES_CACHE = {}
+    return _FX_RATES_CACHE
+
+
+def _market_cap_usd(row: sqlite3.Row) -> Optional[float]:
+    """Local-currency Market Cap converted to USD for the synthetic-rating size split
+    ONLY (never for the WACC equity weight, which stays local against local debt). A
+    USD, unknown, or rate-less currency returns the cap unconverted, keeping the
+    pre-conversion behaviour for that row rather than guessing a rate."""
+    mc = _row_val(row, "Market Cap")
+    if mc is None:
+        return None
+    ccy = _row_str(row, "Reported Currency")
+    if not ccy or ccy == "USD":
+        return mc
+    rate = _fx_rates_for_conversion().get(ccy)
+    return mc * rate if rate is not None else mc
+
 
 def _synthetic_default_spread(interest_coverage: float, market_cap: Optional[float]) -> float:
     table = _SYNTH_SPREAD_LARGE if (market_cap is not None and market_cap > _LARGE_CAP_CUTOFF) else _SYNTH_SPREAD_SMALL
@@ -1304,6 +1340,7 @@ def compute_wacc(
     erp_eff = EQUITY_RISK_PREMIUM if erp is None else erp
 
     market_cap = _row_val(latest, "Market Cap")
+    market_cap_usd = _market_cap_usd(latest)   # size split only; weights stay local
     conventional_debt = _row_val(latest, "Total Debt") or 0.0
     # Damodaran Ch.9: operating leases are debt. The caller passes the debt value
     # of operating leases (PV of lease commitments) when it is available (10-K
@@ -1321,7 +1358,7 @@ def compute_wacc(
     if total_debt > 0:
         if interest is not None and abs(interest) > 0 and ebit is not None:
             interest_coverage = ebit / abs(interest)
-            cost_debt_pretax = rf_eff + _synthetic_default_spread(interest_coverage, market_cap)
+            cost_debt_pretax = rf_eff + _synthetic_default_spread(interest_coverage, market_cap_usd)
         else:
             cost_debt_pretax = rf_eff + _FALLBACK_DEBT_SPREAD
     # Damodaran Ch.8: the debt tax shield uses the MARGINAL rate (the interest
@@ -2180,7 +2217,7 @@ def _compute_one_metric(
 
     reinvestment_rate = None
     if abs_capex is not None and dep is not None and d_nwc is not None and nopat not in (None, 0):
-        reinvestment_rate = (abs_capex - dep + d_nwc) / nopat
+        reinvestment_rate = (abs_capex - dep - d_nwc) / nopat
 
     marginal_roic = None
     operating_leverage = None
@@ -4190,7 +4227,7 @@ def _credit_analysis(rows: list[sqlite3.Row],
         return None
     rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
     latest = rows[-1]
-    market_cap = _row_val(latest, "Market Cap")
+    market_cap_usd = _market_cap_usd(latest)   # USD-equivalent for the size split
     solvency = _compute_solvency_ratios(latest)
     interest_coverage = solvency.get("Interest Coverage Ratio")
     # A firm with positive EBIT and negligible/zero interest expense is fully
@@ -4201,7 +4238,7 @@ def _credit_analysis(rows: list[sqlite3.Row],
         intr = _row_val(latest, "Interest Expense")
         if ebit is not None and ebit > 0 and (intr is None or abs(intr) < 1):
             interest_coverage = 1_000.0
-    rating = _synthetic_rating(interest_coverage, market_cap)
+    rating = _synthetic_rating(interest_coverage, market_cap_usd)
 
     is_corporate, na_reason = fcff_applicable(latest)
     source = ("Ziegel, Fundamentals of Credit and Credit Analysis; "

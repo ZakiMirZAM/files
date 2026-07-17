@@ -103,13 +103,17 @@ Five always-on local processes: **ollama** (embeddings), **backend** (`start_bac
   CORS in prod and drops the localhost regex; `/docs` + `/openapi.json` disabled in prod;
   `/api/health` no longer leaks the DB path.
 - All RAG protection (origin pinning, per-IP rate limits, wildcard-CORS strip, body caps) is done
-  at **nginx** — `rag/server.py` is treated as **untouchable** (do not edit it or the Claude SDK
-  prompt logic). Verify with `git diff --stat rag/server.py` (must be empty).
+  at **nginx** — treat `rag/server.py` as **protected**: never change its prompt, model, or Claude
+  SDK logic without explicit owner approval. One owner-approved change exists (2026-07-17): the
+  vault search runs via `asyncio.to_thread` (blocking embed/KNN off the event loop — the fix for
+  /ask 500s under parallel load) and the three answer handlers return JSON 503 on SDK failure
+  instead of aiohttp's HTML 500. Prompts, models, tools, and budgets are unchanged.
 
 **Required prod env vars** (machine/user level so services inherit them): `ENV=production`,
 `ADMIN_TOKEN`, `ALLOWED_ORIGINS=https://intrinsicfined.org,https://www.intrinsicfined.org`,
-`FRED_API_KEY` (now env-only — the old hardcoded fallback was removed; missing key ⇒ FRED series
-render empty, app still runs).
+`FRED_API_KEY` (env-only in the request path `backend/marketdata/fred_client.py`; the hardcoded
+fallback that lingered in the dead-code `data/economicmetrics.py` has now also been converted to
+env-only; missing key ⇒ FRED series render empty, app still runs).
 
 **Building for prod — two gotchas:** `VITE_API_BASE`/`VITE_AI_BASE`/`VITE_CONVEX_URL` are baked
 into the bundle at build time. A local `npm run build` picks up `.env.local` (the **dev** Convex

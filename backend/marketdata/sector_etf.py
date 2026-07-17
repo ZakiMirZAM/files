@@ -106,7 +106,11 @@ def latest_price(ticker: str) -> tuple[str | None, float | None]:
         return None, None
     try:
         fi = yf.Ticker(ticker).fast_info
-        px = fi.get("last_price") if hasattr(fi, "get") else fi["last_price"]
+        # FastInfo is attribute-accessed; fi.get("last_price") silently returns
+        # None. getattr is the correct read, with subscript as a fallback.
+        px = getattr(fi, "last_price", None)
+        if px is None:
+            px = fi["last_price"]
         if px is not None:
             return _dt.date.today().isoformat(), round(float(px), 4)
     except Exception:  # noqa: BLE001

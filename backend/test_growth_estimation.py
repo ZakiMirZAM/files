@@ -89,13 +89,13 @@ def test_sales_to_capital_rejects_nonpositive_capital():
 # ── Fundamental growth: reinvestment rate x ROIC (+ efficiency) ──────────────
 
 def test_fundamental_growth_is_reinvestment_times_roic():
-    # reinvestment rate = (|capex| - dep + d_nwc) / NOPAT = (100 - 50 + 10) / NOPAT.
+    # reinvestment rate = (|capex| - dep - d_nwc) / NOPAT = (100 - 50 - 10) / NOPAT.
     # Both years carry the same return on capital, so there is no efficiency gain
     # and the growth is purely reinvestment x ROIC.
     rows = [_row(2023, 900.0, 100.0), _row(2024, 1000.0, 100.0)]
     roic = ia._compute_return_ratios(rows[-1]).get("Return On Invested Capital")
     nopat = ia._nopat_for_row(rows[-1])
-    expected_reinvest = (100.0 - 50.0 + 10.0) / nopat
+    expected_reinvest = (100.0 - 50.0 - 10.0) / nopat
     out = ia._fundamental_growth(rows, roic=roic)
     assert out is not None
     assert out["reinvestmentRate"] == pytest.approx(expected_reinvest, rel=1e-3)

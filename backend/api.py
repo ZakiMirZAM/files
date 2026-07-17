@@ -433,7 +433,8 @@ def metric(
 @contextmanager
 def db_conn() -> Iterator[sqlite3.Connection]:
     if not DB_PATH.exists():
-        raise HTTPException(503, f"financials.db not found at {DB_PATH}")
+        log.error("financials database not found at %s", DB_PATH)
+        raise HTTPException(503, "financials database unavailable")
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
@@ -2545,8 +2546,10 @@ def _by_year_with_groups(group_col: str) -> dict[int, dict[str, dict[str, Any]]]
             COUNT(DISTINCT f.Ticker) AS ticker_count,
             {", ".join(select_parts)}
         FROM financials f
-        JOIN tickers t ON t.ticker = f.Ticker{_FX_JOIN_SQL}
+        JOIN tickers t ON t.ticker = f.Ticker
+        LEFT JOIN security_map s ON s.symbol = f.Ticker{_FX_JOIN_SQL}
         WHERE t.{group_col} IS NOT NULL
+          AND COALESCE(s.is_primary, 1) = 1
           AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
           AND CAST(f."Calendar Year" AS INTEGER) >= ?
           AND CAST(f."Calendar Year" AS INTEGER) <= ?
@@ -3594,7 +3597,15 @@ def _mc_to_usd(latest: Any, mc: float | None) -> float | None:
             rate = _fx_hist().get((ccy, y))
             if rate is not None:
                 return mc * rate
-    return mc * _fx_rates().get(ccy, 1.0)
+    spot = _fx_rates().get(ccy)
+    if spot is not None:
+        return mc * spot
+    if ccy == "USD":
+        return mc
+    # Non-USD currency absent from BOTH rate tables: drop the row (return None)
+    # rather than pretend a 1:1 USD rate, matching the NULL-weight drop rule in
+    # _FX_WEIGHT_SQL. Callers treat None as "exclude from size ranking/weighting".
+    return None
 
 
 # ── TTM substitution (Phase 4) ───────────────────────────────────────────────
@@ -4254,8 +4265,9 @@ def _sector_current_metrics() -> dict[str, Any]:
     sql = (
         f"SELECT f.Ticker, t.sector AS sec, {_cb_beta('t')}, "
         'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
-        " FROM financials f JOIN tickers t ON t.ticker = f.Ticker" + _cb_join() +
-        " WHERE t.sector IS NOT NULL"
+        " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
+        " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
+        " WHERE t.sector IS NOT NULL AND COALESCE(s.is_primary, 1) = 1"
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
@@ -4334,8 +4346,9 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
     sql = (
         f"SELECT f.Ticker, t.sector AS sec, t.industry AS ind, {_cb_beta('t')}, t.peg AS peg, "
         'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
-        " FROM financials f JOIN tickers t ON t.ticker = f.Ticker" + _cb_join() +
-        " WHERE t.sector = ? AND t.industry IS NOT NULL"
+        " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
+        " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
+        " WHERE t.sector = ? AND t.industry IS NOT NULL AND COALESCE(s.is_primary, 1) = 1"
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
@@ -4607,7 +4620,9 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
             SELECT f.Ticker, f."Market Cap" AS mc,
                    MAX(CAST(f."Calendar Year" AS INTEGER)) AS yr
             FROM financials f JOIN tickers t ON t.ticker = f.Ticker
+            LEFT JOIN security_map s ON s.symbol = f.Ticker
             WHERE t.industry = ?
+              AND COALESCE(s.is_primary, 1) = 1
               AND f."Reported Currency" = 'USD'
               AND f.Ticker NOT GLOB '*-P[A-Z]'
               AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
@@ -4944,7 +4959,9 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
             ' MAX(CAST(f."Calendar Year" AS INTEGER)) AS yr'
             " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
             ' LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"'
+            " LEFT JOIN security_map s ON s.symbol = f.Ticker"
             " WHERE t.industry = ?"
+            " AND COALESCE(s.is_primary, 1) = 1"
             " AND f.Ticker NOT GLOB '*-P[A-Z]'"
             " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
             " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ?"
@@ -5145,7 +5162,9 @@ def comparative_endpoint(
                    MAX(CAST(f."Calendar Year" AS INTEGER)) AS yr
             FROM financials f JOIN tickers t ON t.ticker = f.Ticker
             LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"
+            LEFT JOIN security_map s ON s.symbol = f.Ticker
             WHERE t.industry = ?
+              AND COALESCE(s.is_primary, 1) = 1
               AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
               AND CAST(f."Calendar Year" AS INTEGER) >= ?
             GROUP BY f.Ticker HAVING mc IS NOT NULL
