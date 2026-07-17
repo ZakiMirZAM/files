@@ -17,6 +17,8 @@ import { ReportPage } from "./pages/ReportPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
 import { GuidePage } from "./pages/GuidePage";
 import { PublicGuide } from "./pages/PublicGuide";
+import { TermsPage } from "./pages/TermsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { LoadingState } from "./components/LoadingState";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -73,6 +75,8 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/guide" element={<PublicGuide />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}
@@ -83,6 +87,10 @@ export default function App() {
           <Route path="/" element={<Navigate to="/app" replace />} />
           <Route path="/auth" element={<Navigate to="/app" replace />} />
           <Route path="/guide" element={<Navigate to="/app/guide" replace />} />
+          {/* Legal pages stay reachable while signed in, otherwise the catch-all
+              below would swallow them and send the reader to the dashboard. */}
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/app" element={<AppShell />}>
             <Route index element={<DashboardPage />} />
             <Route path="economic" element={<EconomicPage />} />

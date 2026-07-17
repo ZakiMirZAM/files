@@ -582,6 +582,8 @@ class IndividualSnapshot:
 
     # Extended (5-factor) DuPont decomposition of ROE. JSON-safe.
     dupont: Optional[dict] = None
+    # Leverage decomposition of ROE, ROE = ROIC + D/E × [ROIC − i(1−t)]. JSON-safe.
+    leverage_roe: Optional[dict] = None
 
     # Uses of cash: what each year's operating cash flow was actually spent on
     # (capex, R&D, acquisitions, buybacks, dividends, debt paydown), in dollars and
@@ -2047,6 +2049,14 @@ DISPLAY_METRICS: list[tuple[str, str, str, str]] = [
     ("fcf_total_debt", "FCF / Total Debt", "Leverage & Coverage", "%"),
     # ROE history for the P/B-vs-ROE anchor (joins Profitability & EVA).
     ("roe", "Return On Equity", "Profitability & EVA", "%"),
+    # Leverage ROE decomposition terms (Damodaran Ch.11). ROIC, Debt To Equity and
+    # Return On Equity are already above, so only the three terms unique to the
+    # identity are added; each one gives its table cell a sidebar chart.
+    ("book_interest_rate", "Book Interest Rate", "Leverage & Coverage", "%"),
+    ("effective_tax_rate", "Effective Tax Rate", "Profitability & EVA", "%"),
+    ("leverage_gain", "Leverage Gain", "Profitability & EVA", "%"),
+    ("after_tax_debt_cost", "After-Tax Cost of Debt", "Leverage & Coverage", "%"),
+    ("roic_book_rate_spread", "ROIC − After-Tax Debt Cost", "Profitability & EVA", "%"),
     # Ratio histories backing the definition sidebar graphs (formulas mirror the
     # quality-score ratio computations in _compute_solvency_ratios).
     ("roa", "Return On Assets", "Profitability & EVA", "%"),
@@ -2213,6 +2223,10 @@ def _compute_one_metric(
             and abs_int is not None and (interest_income / rev) >= 0.20):
         net_interest_margin = (interest_income - abs_int) / ta
 
+    # Leverage ROE identity terms (Damodaran Ch.11), computed by the same helper
+    # the section itself uses so the charts and the table can never disagree.
+    lev_roe = _leverage_roe_terms(row)
+
     return {
         "net_margin": _safe_div(ni, rev),
         "asset_turnover": _safe_div(rev, ta),
@@ -2220,6 +2234,11 @@ def _compute_one_metric(
         "dupont_tax_burden": dupont_tax_burden,
         "dupont_interest_burden": dupont_interest_burden,
         "dupont_ebit_margin": dupont_ebit_margin,
+        "book_interest_rate": lev_roe["bookInterestRate"],
+        "effective_tax_rate": lev_roe["taxRate"],
+        "leverage_gain": lev_roe["leverageGain"],
+        "after_tax_debt_cost": lev_roe["afterTaxDebtCost"],
+        "roic_book_rate_spread": lev_roe["spread"],
         "operating_margin": _safe_div(op_inc, rev),
         "eva_margin": _safe_div(eva, rev),
         "roic_wacc_spread": (roic - wacc) if (roic is not None and wacc is not None) else None,
@@ -4426,6 +4445,166 @@ def _dupont_5factor(rows: list[sqlite3.Row]) -> Optional[dict]:
     }
 
 
+def _leverage_roe_terms(row: sqlite3.Row) -> dict:
+    """The five book inputs of the leverage ROE identity for ONE fiscal year.
+
+    Kept separate from `_leverage_roe` so `metric_history` can reuse the exact
+    same arithmetic per year instead of a second, drifting copy.
+    """
+    equity = _row_val(row, "Total Stockholders Equity") or _row_val(row, "Total Equity")
+    debt = _row_val(row, "Total Debt")
+    interest = _row_val(row, "Interest Expense")
+    nopat = _nopat_for_row(row)
+    tax_rate = _effective_tax_rate(row)
+
+    # Negative or zero book equity makes D/E and ROE meaningless (the ratio flips
+    # sign and the identity stops describing anything), so the whole year drops.
+    if equity is None or equity <= 0:
+        return {"roic": None, "debtEquity": None, "bookInterestRate": None,
+                "taxRate": tax_rate, "afterTaxDebtCost": None, "spread": None,
+                "leverageGain": None, "roeModel": None, "roeReported": None}
+
+    invested = (equity + debt) if debt is not None else None
+    roic = _safe_div(nopat, invested)
+
+    debt_equity = _safe_div(debt, equity)
+    # Interest expense is stored with an inconsistent sign across vendors.
+    book_rate = _safe_div(abs(interest), debt) if interest is not None else None
+
+    # A debt-free company has no book interest rate to quote, but its leverage
+    # gain is a defined 0: D/E is 0, so the spread cannot reach ROE either way.
+    if debt is not None and debt == 0:
+        book_rate = None
+        after_tax_cost = None
+        spread = None
+        leverage_gain = 0.0 if roic is not None else None
+    else:
+        # A stored 0 interest expense against real debt is MISSING DATA, not a 0%
+        # rate: no company borrows for free. Vendors report 0 when the filer nets
+        # interest inside "other income" (AAPL FY2024-25 does exactly this, on
+        # >$100B of debt). Taken literally it makes i(1-t) zero, hands the whole
+        # ROIC to the spread, and massively overstates the leverage gain. Treat the
+        # rate as unknown so the year drops out instead of printing a fake 0.00%.
+        if book_rate == 0.0:
+            book_rate = None
+        after_tax_cost = book_rate * (1 - tax_rate) if book_rate is not None else None
+        spread = (roic - after_tax_cost) if (roic is not None and after_tax_cost is not None) else None
+        leverage_gain = (debt_equity * spread) if (debt_equity is not None and spread is not None) else None
+
+    roe_model = (roic + leverage_gain) if (roic is not None and leverage_gain is not None) else None
+    roe_reported = _row_val(row, "ROE")
+    if roe_reported is None:
+        roe_reported = _safe_div(_row_val(row, "Net Income"), equity)
+
+    return {
+        "roic": roic,
+        "debtEquity": debt_equity,
+        "bookInterestRate": book_rate,
+        "taxRate": tax_rate,
+        "afterTaxDebtCost": after_tax_cost,
+        "spread": spread,
+        "leverageGain": leverage_gain,
+        "roeModel": roe_model,
+        "roeReported": roe_reported,
+    }
+
+
+def _leverage_roe(rows: list[sqlite3.Row]) -> Optional[dict]:
+    """Damodaran's leverage decomposition of ROE (Investment Valuation, Ch.11):
+
+        ROE = ROIC + D/E × [ROIC − i(1−t)]
+
+    ROIC is the after-tax operating return on BOOK capital, D/E the book debt-to-
+    equity ratio, i the book interest rate (interest expense / book debt) and t
+    the effective tax rate. It reads ROE as an operating return plus a financing
+    bonus, where DuPont instead reads it as a chain of margin/turnover/leverage
+    levers. The two answer different questions, so both sections stand.
+
+    INVARIANT: the identity telescopes exactly only when ROIC's base is book
+    equity + book debt with NO cash subtraction, which is the base
+    `_invested_capital`/`_nopat_for_row` already use. Damodaran's own ROIC
+    definition elsewhere subtracts cash and cross-holdings; swapping that base in
+    here would silently break the reconciliation, so do not "fix" it.
+
+    The gap between the modelled and the reported ROE is itself a signal rather
+    than an error: NOPAT is an operating figure, so a wide gap means non-operating
+    profit is propping up the reported ROE. That is one of the three ways a ROE is
+    inflated; the other two (leverage and a depressed tax rate) are read straight
+    off the D/E and tax terms.
+    """
+    if not rows:
+        return None
+
+    def _r(v: Optional[float]) -> Optional[float]:
+        return round(v, 6) if v is not None else None
+
+    hist = []
+    for row in rows:
+        terms = _leverage_roe_terms(row)
+        terms["year"] = int(row["Calendar Year"])
+        hist.append(terms)
+
+    # Headline on the most recent year the identity actually computes, not simply
+    # the last row. A single year with a vendor gap (a 0 interest expense against
+    # real debt is the common one) would otherwise blank the whole section for a
+    # company whose earlier years are complete. `rows` still carries every year,
+    # so the reader sees exactly where the data stops, and `staleLatest` tells the
+    # UI to say which year it is showing.
+    usable = [h for h in hist if h["roeModel"] is not None]
+    latest = usable[-1] if usable else hist[-1]
+    data_through = hist[-1]["year"]
+    model, reported = latest["roeModel"], latest["roeReported"]
+    # 1pp of ROE, or 10% of the reading, whichever is looser: the residual is
+    # non-operating income, not arithmetic drift, so the band is deliberately
+    # wider than DuPont's (that chain is an exact algebraic identity, this is not).
+    reconciles = (
+        model is not None and reported is not None
+        and abs(model - reported) <= max(0.01, abs(reported) * 0.10)
+    )
+    gap = (reported - model) if (model is not None and reported is not None) else None
+
+    # Share of the modelled ROE that leverage, not the business, produced. Only
+    # meaningful when both terms push the same way: with a negative ROIC or a
+    # ROE straddling zero the ratio is arithmetic noise, so it is withheld.
+    leverage_share = None
+    if (model is not None and latest["leverageGain"] is not None
+            and latest["roic"] is not None and latest["roic"] > 0 and model > 0):
+        leverage_share = latest["leverageGain"] / model
+
+    return {
+        "applicable": latest["roeModel"] is not None,
+        "latestYear": latest["year"],
+        # Last fiscal year on file. When it is ahead of latestYear the newest rows
+        # could not be modelled, and the UI says so rather than implying the
+        # headline is current.
+        "dataThroughYear": data_through,
+        "staleLatest": latest["year"] != data_through,
+        "terms": {k: _r(latest[k]) for k in (
+            "roic", "debtEquity", "bookInterestRate", "taxRate",
+            "afterTaxDebtCost", "spread", "leverageGain")},
+        "roeModel": _r(model),
+        "roeReported": _r(reported),
+        "reconciles": reconciles,
+        "nonOperatingGap": _r(gap),
+        "leverageShare": _r(leverage_share),
+        "spreadPositive": (latest["spread"] > 0) if latest["spread"] is not None else None,
+        "rows": [
+            {"year": h["year"], **{k: _r(h[k]) for k in (
+                "roic", "debtEquity", "bookInterestRate", "taxRate",
+                "afterTaxDebtCost", "spread", "leverageGain", "roeModel")}}
+            for h in hist
+        ],
+        "note": (
+            "Leverage decomposition: ROE = ROIC + D/E × [ROIC − i(1−t)], where i is the "
+            "book interest rate (interest expense / book debt) and t the effective tax rate. "
+            "ROIC is after-tax operating income over book capital (equity + debt). The second "
+            "term is the leverage gain: borrowed capital earns ROIC but costs i(1−t), and the "
+            "surplus on every borrowed dollar belongs to equity. A negative spread turns that "
+            "gain into a drag that grows with D/E."
+        ),
+    }
+
+
 # ── Earnings bridge (Damodaran Ch.9): how reported earnings were built ────────
 # Ordered income-statement walk assembled from the 10-K XBRL facts, so the user
 # can see, line by line, how the company got from revenue to net income (and where
@@ -4951,6 +5130,11 @@ def build_individual_snapshot(
         log.warning("dupont failed for %s: %s", ticker.upper(), exc)
         dupont = None
     try:
+        leverage_roe = _leverage_roe(rows)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("leverage roe failed for %s: %s", ticker.upper(), exc)
+        leverage_roe = None
+    try:
         credit_analysis = _credit_analysis(rows, shenanigans=shenanigans,
                                            bank_profitability=bank_profitability)
     except Exception as exc:  # noqa: BLE001
@@ -5015,6 +5199,7 @@ def build_individual_snapshot(
         tobins_q=tobins_q,
         owner_earnings=owner_earnings,
         dupont=dupont,
+        leverage_roe=leverage_roe,
         uses_of_cash=uses_of_cash,
         strengths=strengths,
         weaknesses=weaknesses,

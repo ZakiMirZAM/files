@@ -85,6 +85,7 @@ A reference library of 51 economic and macro metrics for finding the best sector
 - [37 - VIX](37-VIX.md)
 - [38 - BofA Global Fund Manager Survey (Cash Allocation)](38-BofA-Global-Fund-Manager-Survey-Cash-Allocation.md)
 - [68 - S&P 500 Expected Return (Building Blocks)](68-Expected-Return-Building-Blocks.md)
+- [69 - AAII Asset Allocation Survey](69-AAII-Asset-Allocation-Survey.md)
 
 ## Structural
 

@@ -14,6 +14,7 @@ import { HistoricalFinancialsSection } from "../components/individual/Historical
 import { PerShareSection } from "../components/individual/PerShareSection";
 import { MetricsTrendsSection } from "../components/individual/MetricsTrendsSection";
 import { DupontSection } from "../components/individual/DupontSection";
+import { LeverageRoeSection } from "../components/individual/LeverageRoeSection";
 import { ForecastSection } from "../components/individual/ForecastSection";
 import { EVAValuationSection } from "../components/individual/EVAValuationSection";
 import { ResidualIncomeSection } from "../components/individual/ResidualIncomeSection";
@@ -365,6 +366,12 @@ export function IndividualPage() {
 
         {data?.analysis?.dupont && <DupontSection dupont={data.analysis.dupont} />}
 
+        {/* The same ROE read a second way: ROE = ROIC + D/E × [ROIC − i(1−t)].
+            Sits directly below DuPont so the two decompositions read together. */}
+        {data?.analysis?.leverageRoe && (
+          <LeverageRoeSection leverageRoe={data.analysis.leverageRoe} ticker={ticker} />
+        )}
+
         {data?.analysis?.metricHistory && (
           <MetricsTrendsSection
             metricHistory={data.analysis.metricHistory}
@@ -515,6 +522,9 @@ export function IndividualPage() {
               "Board & Governance",
               "Earnings Quality",
               "Catalyst & Value Trap",
+              // Rendered inside LeverageRoeSection. Without this it would also
+              // render here, in the page-bottom bank, and appear twice.
+              "ROE Sustainability & Leverage",
               // Rendered inside UsesOfCashSection. Without this it would also render
               // here, in the page-bottom bank, and the deck would appear twice.
               "Capital Allocation",

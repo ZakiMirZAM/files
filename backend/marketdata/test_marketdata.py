@@ -221,3 +221,223 @@ def test_compute_expected_return_partial_when_inflation_missing():
     assert out is not None
     assert out["expectedInflation"] is None and out["partial"] is True
     assert out["expectedReturnNominal"] is not None   # partial sum still shown, flagged
+
+
+# ── AAII Asset Allocation Survey ──────────────────────────────────────────────
+#
+# The workbook is hand-supplied (aaii.com is behind a bot WAF), so the tests that
+# need the real file skip when it is absent. The logic that actually matters, the
+# positional date rebuild that works around AAII's mislabelled 2006/2007 rows, is
+# covered by pure-function tests that need no file at all.
+
+import datetime as _date_mod
+from pathlib import Path
+
+from . import aaii_allocation as aaii
+
+
+def test_rebuild_dates_is_dense_monthly_from_the_survey_start():
+    dates = aaii._rebuild_dates(_date_mod.date(1987, 11, 30), _date_mod.date(1988, 2, 29), 4)
+    assert dates == ["1987-11-01", "1987-12-01", "1988-01-01", "1988-02-01"]
+
+
+def test_rebuild_dates_repairs_the_2006_2007_mislabelling():
+    # AAII stamps Feb-Dec 2006/2007 with 2005 month-ends. Position, not the label,
+    # is the truth: row 219 (0-based) must land on 2006-02 regardless of its cell.
+    n = 464  # 1987-11 .. 2026-06
+    dates = aaii._rebuild_dates(_date_mod.date(1987, 11, 30), _date_mod.date(2026, 6, 24), n)
+    assert len(dates) == n
+    assert dates[219] == "2006-02-01"
+    assert dates[231] == "2007-02-01"
+    assert dates[-1] == "2026-06-01"
+
+
+def test_rebuild_dates_refuses_when_the_sheet_is_not_dense():
+    # A real gap must fail loudly: guessing would shift every observation.
+    with pytest.raises(ValueError, match="dense"):
+        aaii._rebuild_dates(_date_mod.date(1987, 11, 30), _date_mod.date(1988, 2, 29), 3)
+
+
+def test_rebuild_dates_rejects_an_unexpected_survey_start():
+    with pytest.raises(ValueError, match="start"):
+        aaii._rebuild_dates(_date_mod.date(1990, 1, 31), _date_mod.date(1990, 4, 30), 4)
+
+
+def test_locate_columns_takes_the_granular_block_not_the_rollup_duplicates():
+    # "Stocks"/"Bonds"/"Cash" appear twice: once granular (left of Total), once
+    # rolled up (right of it). Everything must bind to the left-hand block.
+    header = [None, "Stock Funds", "Stocks", "Bond Funds", "Bonds", "Cash", "Total",
+              None, "Stocks", "Bonds", "Cash"]
+    cols = aaii._locate_columns(header)
+    assert cols["stock funds"] == 1
+    assert cols["stocks"] == 2      # not 8
+    assert cols["bonds"] == 4       # not 9
+    assert cols["cash"] == 5        # not 10
+    assert cols["total"] == 6
+
+
+def test_locate_columns_without_a_total_column_raises():
+    with pytest.raises(ValueError, match="Total"):
+        aaii._locate_columns([None, "Stock Funds", "Stocks", "Cash"])
+
+
+def test_store_writes_three_percent_series_and_is_idempotent():
+    conn = sqlite3.connect(":memory:")
+    try:
+        rows = [aaii.AllocRow("1987-11-01", 45.33, 19.80, 34.91),
+                aaii.AllocRow("1987-12-01", 46.30, 21.20, 32.50)]
+        assert aaii.store(conn, rows)[aaii.STOCKS_SERIES] == 2
+        aaii.store(conn, rows)  # upsert, must not duplicate
+        n = conn.execute(
+            "SELECT COUNT(*) FROM macro_series WHERE series_id LIKE 'AAII%'"
+        ).fetchone()[0]
+        assert n == 6  # 3 series x 2 months
+        v, unit, src = conn.execute(
+            "SELECT value, unit, source FROM macro_series "
+            "WHERE series_id=? AND date='1987-11-01'", (aaii.STOCKS_SERIES,)
+        ).fetchone()
+        assert (round(v, 2), unit, src) == (45.33, "%", "AAII")
+    finally:
+        conn.close()
+
+
+def test_refresh_without_a_source_file_is_a_no_op_not_an_error():
+    conn = sqlite3.connect(":memory:")
+    try:
+        schema.ensure_external_schema(conn)
+        out = aaii.refresh_aaii_allocation(conn, path="does-not-exist.xls")
+        assert out["status"] == "no source file" and out["rows"] == 0
+    finally:
+        conn.close()
+
+
+def test_parse_workbook_reads_percentages_and_sums_the_granular_components(tmp_path):
+    # Synthetic workbook: fractions in, percentages out, roll-ups summed from the
+    # five granular columns and cross-checked against the roll-up block.
+    xlsx = tmp_path / "aaii_asset_allocation.xlsx"
+    frame = pd.DataFrame([
+        ["AAII", None, None, None, None, None, None, None, None, None, None],
+        [None, None, None, None, None, None, None, None, None, None, None],
+        [None, "Stock Funds", "Stocks", "Bond Funds", "Bonds", "Cash", "Total",
+         None, "Stocks", "Bonds", "Cash"],
+        [_date_mod.datetime(1987, 11, 30), 0.20, 0.25, 0.09, 0.11, 0.35, 1.0,
+         None, 0.45, 0.20, 0.35],
+        [_date_mod.datetime(1987, 12, 30), 0.22, 0.24, 0.09, 0.12, 0.33, 1.0,
+         None, 0.46, 0.21, 0.33],
+    ])
+    with pd.ExcelWriter(xlsx, engine="openpyxl") as w:
+        frame.to_excel(w, sheet_name=aaii.SHEET_NAME, index=False, header=False)
+
+    rows = aaii.parse_workbook(xlsx)
+    assert len(rows) == 2
+    assert rows[0].date == "1987-11-01"
+    assert rows[0].stocks == pytest.approx(45.0)   # (0.20 + 0.25) * 100
+    assert rows[0].bonds == pytest.approx(20.0)
+    assert rows[0].cash == pytest.approx(35.0)
+    assert rows[1].date == "1987-12-01"
+
+
+def test_parse_workbook_rejects_a_sheet_whose_components_do_not_total_100(tmp_path):
+    xlsx = tmp_path / "bad.xlsx"
+    frame = pd.DataFrame([
+        [None, "Stock Funds", "Stocks", "Bond Funds", "Bonds", "Cash", "Total"],
+        [_date_mod.datetime(1987, 11, 30), 0.20, 0.25, 0.09, 0.11, 0.05, 0.70],
+    ])
+    with pd.ExcelWriter(xlsx, engine="openpyxl") as w:
+        frame.to_excel(w, sheet_name=aaii.SHEET_NAME, index=False, header=False)
+    with pytest.raises(ValueError, match="outside"):
+        aaii.parse_workbook(xlsx)
+
+
+# ── the real workbook, when it has been dropped in ────────────────────────────
+
+_REAL = aaii.find_source_file()
+_needs_workbook = pytest.mark.skipif(
+    _REAL is None, reason="AAII workbook not present in backend/data_manual/"
+)
+
+
+@_needs_workbook
+def test_real_workbook_parses_to_a_dense_monthly_series_since_1987():
+    rows = aaii.parse_workbook(_REAL)
+    assert rows[0].date == "1987-11-01"
+    # dense: every row is exactly one month after the previous one
+    seen = {r.date for r in rows}
+    assert len(seen) == len(rows)
+    assert all(90.0 <= r.stocks + r.bonds + r.cash <= 110.0 for r in rows)
+
+
+@_needs_workbook
+def test_real_workbook_reproduces_aaiis_published_long_run_averages():
+    # AAII prints "Stocks Avg = 62%, Bonds Avg = 16%, Cash Avg = 22%" on the sheet.
+    # Reproducing those from our own parse proves the column mapping and the
+    # positional date rebuild are both right.
+    rows = aaii.parse_workbook(_REAL)
+    n = len(rows)
+    assert sum(r.stocks for r in rows) / n == pytest.approx(62.0, abs=0.6)
+    assert sum(r.bonds for r in rows) / n == pytest.approx(16.0, abs=0.6)
+    assert sum(r.cash for r in rows) / n == pytest.approx(22.0, abs=0.6)
+
+
+@_needs_workbook
+def test_real_workbook_places_the_known_extremes_on_the_right_months():
+    # The two readings whose dates are historically unambiguous. If the 2006/2007
+    # date repair regressed, these would land on the wrong month.
+    by_date = {r.date: r for r in aaii.parse_workbook(_REAL)}
+    peak = max(by_date.values(), key=lambda r: r.stocks)
+    trough = min(by_date.values(), key=lambda r: r.stocks)
+    assert peak.date == "2000-01-01" and peak.stocks == pytest.approx(77.0, abs=0.2)
+    assert trough.date == "2009-03-01" and trough.stocks == pytest.approx(40.8, abs=0.2)
+    # cash peaked the same month the market bottomed
+    assert max(by_date.values(), key=lambda r: r.cash).date == "2009-03-01"
+
+
+class _FlakyConn:
+    """Delegates to a real connection but fails the Nth executemany.
+
+    sqlite3.Connection attributes are read-only, so the failure is injected with a
+    proxy rather than a monkeypatch. Everything else (execute, commit, rollback)
+    passes straight through to the real connection.
+    """
+
+    def __init__(self, real: sqlite3.Connection, fail_on: int) -> None:
+        self._real = real
+        self._fail_on = fail_on
+        self._n = 0
+
+    def executemany(self, sql, params):
+        self._n += 1
+        if self._n == self._fail_on:
+            raise sqlite3.OperationalError("database is locked")
+        return self._real.executemany(sql, params)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def test_store_is_atomic_across_the_three_series():
+    """A failure partway through must leave NOTHING behind.
+
+    run_due() reuses one connection for every task in a tick, so an orphaned
+    partial write would be committed by a later task and leave the AAII series
+    lopsided, which the metric-69 reader cannot compute a percentile from.
+    """
+    real = sqlite3.connect(":memory:")
+    try:
+        schema.ensure_external_schema(real)
+        rows = [aaii.AllocRow("1987-11-01", 45.33, 19.80, 34.91)]
+
+        # stocks writes, bonds blows up
+        conn = _FlakyConn(real, fail_on=2)
+        with pytest.raises(sqlite3.OperationalError):
+            aaii.store(conn, rows)  # type: ignore[arg-type]
+
+        # Simulate the later task in the same tick that would otherwise sweep an
+        # orphaned partial write into a commit.
+        real.commit()
+        left = real.execute(
+            "SELECT COUNT(*) FROM macro_series WHERE series_id LIKE 'AAII%'"
+        ).fetchone()[0]
+        assert left == 0, "partial AAII write survived; store() is not atomic"
+    finally:
+        real.close()

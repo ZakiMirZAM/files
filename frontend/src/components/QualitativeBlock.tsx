@@ -11,8 +11,7 @@ interface QualitativeBlockProps {
   section: SectionKey;
   scopeKey: string;
   /** Hide the "Frameworks & Open Questions" title block (used on the final report,
-   *  where the page already has its own title). The expand/collapse controls and
-   *  answered count are kept. */
+   *  where the page already has its own title). The expand/collapse controls are kept. */
   hideHeader?: boolean;
   /** Compact summary of the page's computed figures, fed to the AI answer so it uses
    *  the site's own data (e.g. the yield curve). Omit when data is mock/offline. */

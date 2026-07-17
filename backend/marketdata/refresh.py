@@ -69,6 +69,19 @@ def refresh_geo(conn, *, force: bool = False) -> dict[str, int]:
     return refresh_geopolitical(conn, cache_dir=str(CACHE_DIR), force=force)
 
 
+def refresh_aaii(conn, *, force: bool = False) -> dict[str, object]:
+    """Re-ingest the hand-dropped AAII workbook (see :mod:`aaii_allocation`).
+
+    Unlike the other tasks this one never touches the network: aaii.com is behind
+    a bot WAF, so the file arrives by hand. It has no staleness gate either — the
+    module compares the file's mtime against the last ingest, which costs one
+    stat() per tick and picks a newly dropped file up on the next hour rather
+    than after some arbitrary gate expires.
+    """
+    from .aaii_allocation import refresh_aaii_allocation
+    return refresh_aaii_allocation(conn, force=force)
+
+
 def refresh_market_inputs(conn, *, force: bool = False) -> dict[str, object]:
     from .market_inputs import get_live_wacc_params, historical_implied_erp_series
     p = get_live_wacc_params(conn, cache_dir=str(CACHE_DIR), persist=True)
@@ -160,6 +173,15 @@ def run_due(*, force: bool = False) -> bool:
                 ran = True
             except Exception as e:  # noqa: BLE001
                 log.warning("[marketdata] GPR/EPU refresh failed: %s", e)
+        # AAII — local file, self-gating on mtime, so it runs every tick and is a
+        # no-op unless the workbook actually changed.
+        try:
+            res = refresh_aaii(conn, force=force)
+            if res.get("status") == "ingested":
+                log.info("[marketdata] AAII allocation refresh: %s", res)
+                ran = True
+        except Exception as e:  # noqa: BLE001
+            log.warning("[marketdata] AAII allocation refresh failed: %s", e)
         # market_inputs depends on fresh Shiller + DGS10 in the DB.
         if mi_stale or fred_stale or shiller_stale:
             try:

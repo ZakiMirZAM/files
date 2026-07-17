@@ -877,6 +877,7 @@ export interface IndividualAnalysis {
   ownerEarnings?: OwnerEarningsBlock | null;
   events?: CompanyEvent[] | null;
   dupont?: Dupont | null;
+  leverageRoe?: LeverageRoe | null;
   usesOfCash?: UsesOfCash | null;
 }
 
@@ -949,6 +950,48 @@ export interface Dupont {
   roeReported: number | null;
   reconciles: boolean;
   rows: DupontRow[];
+  note: string;
+}
+
+// ── Leverage decomposition of ROE: ROE = ROIC + D/E × [ROIC − i(1−t)] ────────
+// Every value is a DECIMAL (0.0666 = 6.66%), matching the backend's convention
+// for ratio metrics. `debtEquity` is a ratio, not a percent.
+
+export interface LeverageRoeTerms {
+  roic: number | null;
+  debtEquity: number | null;
+  bookInterestRate: number | null;
+  taxRate: number | null;
+  afterTaxDebtCost: number | null;
+  spread: number | null;
+  leverageGain: number | null;
+}
+
+export interface LeverageRoeRow extends LeverageRoeTerms {
+  year: number;
+  roeModel: number | null;
+}
+
+export interface LeverageRoe extends Record<string, unknown> {
+  applicable: boolean;
+  /** Fiscal year the headline terms describe: the latest year that computes. */
+  latestYear: number;
+  /** Latest fiscal year on file. Ahead of latestYear when recent rows lack inputs. */
+  dataThroughYear: number;
+  /** True when latestYear is not the newest year on file. */
+  staleLatest: boolean;
+  terms: LeverageRoeTerms;
+  /** ROE rebuilt from the identity's operating terms. */
+  roeModel: number | null;
+  /** ROE as reported (net income / book equity). */
+  roeReported: number | null;
+  reconciles: boolean;
+  /** reported − modelled. A wide gap means non-operating profit lifts the ROE. */
+  nonOperatingGap: number | null;
+  /** Share of the modelled ROE produced by leverage; null when not meaningful. */
+  leverageShare: number | null;
+  spreadPositive: boolean | null;
+  rows: LeverageRoeRow[];
   note: string;
 }
 

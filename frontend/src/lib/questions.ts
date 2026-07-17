@@ -633,6 +633,60 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       ],
     },
     {
+      title: "ROE Sustainability & Leverage",
+      questions: [
+        {
+          id: "indiv.levroe_attribution",
+          text: "How much of this ROE came from ROIC, and how much came from the leverage gain? If the company carried no debt at all, would the return still be attractive?",
+          hint: "A return the business earns tends to repeat. A return the balance sheet manufactures reverses when conditions turn.",
+        },
+        {
+          id: "indiv.levroe_cushion",
+          text: "How many percentage points could ROIC fall before the spread reaches zero? Compare that cushion against the worst ROIC year in the history table.",
+          hint: "Below the break-even, every extra dollar of debt pushes ROE further under ROIC.",
+        },
+        {
+          id: "indiv.levroe_worst_year",
+          text: "Did the spread ever turn negative in the years on file? If it did, how far did ROE fall below ROIC that year, and what brought it back?",
+          hint: "A structure that inverted once in a downturn will invert again in the next one.",
+        },
+        {
+          id: "indiv.levroe_refinancing",
+          text: "Is the book interest rate a fair estimate of what this company would pay to borrow today? How much of the debt matures within three years, and at what rate would it be replaced?",
+          hint: "The book rate is an average of old borrowings. It lags a deteriorating credit, so a comfortable spread can already be inverted at market rates.",
+        },
+        {
+          id: "indiv.levroe_tax_durability",
+          text: "Is the effective tax rate below the statutory rate? Name the source of the benefit and say when it runs out. What does the spread become once the rate normalizes?",
+          hint: "A tax break leaves more after-tax operating profit, so a low rate flatters ROIC, the spread and ROE at the same time. All three fall when the rate normalizes, with no change in the business.",
+        },
+        {
+          id: "indiv.levroe_nonoperating",
+          text: "How wide is the gap between the modelled ROE and the reported ROE? Which non-operating items explain it, and would you pay the same multiple for those earnings as for operating earnings?",
+          hint: "The identity only sees operating profit. A wide gap means investment income or one-time gains are lifting the reported return.",
+        },
+        {
+          id: "indiv.levroe_direction",
+          text: "Is book D/E rising while ROIC stays flat or falls? Is management substituting financial risk for operating improvement?",
+          hint: "Check whether the D/E moved because of new borrowing or because buybacks shrank the equity base.",
+        },
+        {
+          id: "indiv.levroe_business_model",
+          text: "Does the revenue underneath this debt justify the leverage? Is it regulated, contracted, or cyclical? Compare the D/E against direct competitors rather than against the market as a whole.",
+          hint: "A regulated utility can carry a D/E above 100% on a thin spread because its revenue is near certain. A cyclical manufacturer with the same structure is a different proposition.",
+        },
+        {
+          id: "indiv.levroe_risk_adjusted",
+          text: "Borrowing raises the cost of equity as well as the ROE. Once the extra risk that leverage creates is priced in, is the shareholder actually better off, or is the higher ROE just payment for danger?",
+          hint: "Levered beta rises with D/E, so part of any leverage gain is compensation for risk rather than value created.",
+        },
+        {
+          id: "indiv.levroe_break_it",
+          text: "What single event would invert the spread: a refinancing, a tax change, a price war, or a demand cycle? How likely is that event within three years, and is the current price ignoring it?",
+        },
+      ],
+    },
+    {
       title: "Earnings Quality & Forensics",
       questions: [
         { id: "indiv.accruals", text: "Does operating cash flow track net income over 5+ years, or has an accruals gap opened (earnings rising while operating cash flow stalls)? (Sloan; Lev & Gu)" },

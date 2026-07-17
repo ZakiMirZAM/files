@@ -378,6 +378,12 @@ groups are excluded from the page's bottom deck so they render only inside their
 | [x] | 536 | 536-Goodwill-To-Assets.md | Goodwill / Assets |
 | [x] | 537 | 537-One-Time-Item-Normalization.md | One-Time Item Normalization |
 | [x] | 596 | 596-Ten-K-And-Ten-Q.md | 10-K & 10-Q |
+| [x] | 850 | 850-Leverage-ROE-Decomposition.md | Leverage ROE Decomposition |
+| [x] | 851 | 851-Book-Interest-Rate.md | Book Interest Rate |
+| [x] | 852 | 852-Effective-Tax-Rate.md | Effective Tax Rate |
+| [x] | 853 | 853-After-Tax-Cost-Of-Debt.md | After-Tax Cost of Debt |
+| [x] | 854 | 854-ROIC-After-Tax-Debt-Cost.md | ROIC − After-Tax Debt Cost |
+| [x] | 855 | 855-Leverage-Gain.md | Leverage Gain |
 
 Normalized-earnings cards reuse Operating Income (094), Net Income (100), SBC (151),
 SBC / Revenue (022), Sustainable EBIT (528). The Earnings Bridge section converts its AI

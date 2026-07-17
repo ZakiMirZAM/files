@@ -46,7 +46,7 @@ body {
   background: rgba(201, 168, 76, 0.32);
 }
 
-/* Keyboard focus baseline — a branded gold ring on any interactive element that
+/* Keyboard focus baseline, a branded gold ring on any interactive element that
    doesn't define its own. Drawn INSET (negative outline-offset) so the many
    `overflow-hidden` panels / segmented toggle groups can never clip it, and an
    outline (not a box-shadow ring) for the same reason. Shows only for keyboard
@@ -82,12 +82,12 @@ body {
     @apply rounded-md bg-white/[0.02] border border-gold/10;
   }
 
-  /* Skeleton loading shimmer — a gold band that sweeps across a faint base so a
+  /* Skeleton loading shimmer, a gold band that sweeps across a faint base so a
      wait reads as actively "loading", not a frozen bar. The @keyframes are hand-
      authored in plain CSS below (NOT via Tailwind's theme), so they are always
      emitted: a theme keyframe is dropped by purge unless its animate-* utility
      is used in markup. Under prefers-reduced-motion the sweep is swapped for a
-     gentle opacity pulse — still animated, never frozen. */
+     gentle opacity pulse, still animated, never frozen. */
   .shimmer {
     background-color: rgba(255, 255, 255, 0.06);
     background-image: linear-gradient(
@@ -248,7 +248,7 @@ body {
     @apply outline outline-2 outline-gold/70;
   }
 
-  /* Notebook panel — tighter type scale for the ~400px column */
+  /* Notebook panel, tighter type scale for the ~400px column */
   .notebook-panel .tiptap-editor h1 {
     @apply text-xl mt-4 mb-2;
   }
@@ -262,7 +262,7 @@ body {
     @apply text-[0.875rem] leading-6 mb-2.5;
   }
 
-  /* Reduced motion respect — kill page entrance motion, but keep loading
+  /* Reduced motion respect, kill page entrance motion, but keep loading
      skeletons animated with a non-positional opacity pulse so they never look
      frozen (opacity fades are vestibular-safe). */
   @media (prefers-reduced-motion: reduce) {
@@ -276,7 +276,7 @@ body {
   }
 }
 
-/* Skeleton loading keyframes — plain CSS (not Tailwind theme) so they survive
+/* Skeleton loading keyframes, plain CSS (not Tailwind theme) so they survive
    purge regardless of which animate-* utilities are present in markup. */
 @keyframes shimmer-sweep {
   0% {
@@ -333,7 +333,7 @@ body {
   color: rgba(255, 255, 255, 0.85) !important;
 }
 
-/* PDF export — light theme for the offscreen capture container.
+/* PDF export, light theme for the offscreen capture container.
    Plain CSS (outside @layer) so it is always emitted; the container is built
    in JS by exportNotePdf.ts at 794px width. Inline font-family/font-size spans
    from the editor win over these rules, so user font choices survive. */

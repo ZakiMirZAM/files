@@ -53,7 +53,12 @@ export type IndividualSectionKey =
   // slots wide, so this lands in the empty 800s. anyDefByNumber tries the
   // individual resolver first and no other surface reaches here (economic is
   // 600+NN, credit 700+NN, and both miss at 800), so the band is free.
-  | "capitalAllocation"; // 800-849 -> UsesOfCashSection
+  | "capitalAllocation" // 800-849 -> UsesOfCashSection
+  // Leverage decomposition of ROE, ROE = ROIC + D/E x [ROIC - i(1-t)]. Follows
+  // capitalAllocation into the 800s for the same reason. ROE (002), ROIC (003)
+  // and Debt To Equity (012) are reused from their existing bands rather than
+  // duplicated; only the terms unique to the identity are numbered here.
+  | "leverageRoe"; // 850-869 -> LeverageRoeSection
 
 /** Inclusive number ranges per section, the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
@@ -104,6 +109,7 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   // debt repayment 165, operating cash flow 024), so they are reused rather than
   // duplicated here. Only the section overview and the derived share metric are new.
   ["capitalAllocation", 800, 849],
+  ["leverageRoe", 850, 869],
 ];
 
 /** Per-number exceptions; takes precedence over SECTION_RANGES. */
@@ -130,6 +136,7 @@ const TITLE_OVERRIDES: Partial<Record<number, string>> = {
   535: "SBC / Operating Cash Flow",
   536: "Goodwill / Assets",
   550: "Equity / Total Assets (Capital Adequacy)",
+  854: "ROIC − After-Tax Debt Cost",
 };
 
 export interface IndividualMetricDef {

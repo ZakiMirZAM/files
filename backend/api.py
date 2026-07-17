@@ -537,6 +537,11 @@ def trend_pairs(obs: list[dict[str, Any]]) -> list[tuple[str, float]]:
 # is the source of truth — preferred over the monthly USREC indicator, whose
 # 0/1 transitions sit a month off the official peak/trough. USREC is used only
 # to append any future recession not yet in this table.
+# Earliest date the Economic page's recession shading reaches back to. Anchored on
+# the oldest series the page serves (AAII asset allocation, November 1987) rather
+# than MIN_YEAR, which governs the FRED metrics only.
+_ECON_BANDS_START = "1987-01-01"
+
 _NBER_RECESSIONS: tuple[tuple[str, str, str], ...] = (
     ("Great Depression", "1929-08", "1933-03"),
     ("1937–38 recession", "1937-05", "1938-06"),
@@ -1284,6 +1289,99 @@ def _marketdata_metrics() -> list[dict[str, Any]]:
                          "harder. Compare it with the ten-year Treasury yield to judge "
                          "what owning stocks pays over waiting in bonds.",
             ))
+
+        # 69 — AAII Asset Allocation Survey (stocks / bonds / cash).
+        #
+        # Deliberately NOT filtered by MIN_YEAR. The whole point of this series is
+        # to show how households shift allocation across the cycle, and MIN_YEAR
+        # (2012) contains a single two-month recession. Truncating here would drop
+        # the 77% stock reading at the 2000 peak and the 40.8% / 44.8%-cash reading
+        # at the March 2009 bottom, which are the observations that make the metric
+        # worth showing. The series is monthly since 1987, so the full history is
+        # ~464 points per variant: cheap enough to ship whole.
+        # Guarded like the metric 23 and 68 blocks above: this function returns
+        # `out` only at the end, so an exception here would discard every metric
+        # already built (CAPE, ERP, EPU, GPR, expected return), not just this one.
+        # All three series must be present and equally long before anything is
+        # computed: a lopsided population would divide by zero in `_stat`.
+        try:
+            alloc: dict[str, list[tuple[str, float]]] = {}
+            for key, sid in (("stocks", "AAII_ALLOC_STOCKS"),
+                             ("bonds", "AAII_ALLOC_BONDS"),
+                             ("cash", "AAII_ALLOC_CASH")):
+                alloc[key] = [
+                    (r[0], r[1]) for r in conn.execute(
+                        "SELECT date, value FROM macro_series WHERE series_id = ? ORDER BY date",
+                        (sid,),
+                    ).fetchall()
+                ]
+            complete = (
+                all(alloc[k] for k in ("stocks", "bonds", "cash"))
+                and len({len(alloc[k]) for k in ("stocks", "bonds", "cash")}) == 1
+            )
+            if alloc["stocks"] and not complete:
+                log.warning(
+                    "_marketdata_metrics: AAII allocation is unevenly populated "
+                    "(stocks=%d bonds=%d cash=%d), skipping metric 69",
+                    len(alloc["stocks"]), len(alloc["bonds"]), len(alloc["cash"]),
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("_marketdata_metrics: AAII allocation read failed (metric 69): %s", exc)
+            alloc, complete = {"stocks": [], "bonds": [], "cash": []}, False
+        if complete:
+            def _stat(vals: list[float]) -> tuple[float, float]:
+                n = len(vals)
+                mean = sum(vals) / n
+                latest = vals[-1]
+                pct = sum(1 for v in vals if v < latest) / n * 100.0
+                return mean, pct
+
+            s_vals = [v for _, v in alloc["stocks"]]
+            b_vals = [v for _, v in alloc["bonds"]]
+            c_vals = [v for _, v in alloc["cash"]]
+            s_mean, s_pct = _stat(s_vals)
+            b_mean, _ = _stat(b_vals)
+            c_mean, c_pct = _stat(c_vals)
+            vertical = [
+                {"label": "Stocks now", "value": round(s_vals[-1], 1), "unit": "%"},
+                {"label": "Bonds now", "value": round(b_vals[-1], 1), "unit": "%"},
+                {"label": "Cash now", "value": round(c_vals[-1], 1), "unit": "%"},
+                {"label": "Stocks vs long-run average",
+                 "value": round(s_vals[-1] - s_mean, 1),
+                 "unit": f"pp vs {s_mean:.1f}% average"},
+                {"label": "Bonds vs long-run average",
+                 "value": round(b_vals[-1] - b_mean, 1),
+                 "unit": f"pp vs {b_mean:.1f}% average"},
+                {"label": "Cash vs long-run average",
+                 "value": round(c_vals[-1] - c_mean, 1),
+                 "unit": f"pp vs {c_mean:.1f}% average"},
+                {"label": "Stock allocation percentile (since 1987)",
+                 "value": round(s_pct), "unit": "of months are lower"},
+                {"label": "Cash allocation percentile (since 1987)",
+                 "value": round(c_pct), "unit": "of months are lower"},
+            ]
+            out.append(metric(
+                number=69, name="AAII Asset Allocation Survey", unit="%",
+                frequency="monthly", display_type="line",
+                trend=[(d, round(v, 2)) for d, v in alloc["stocks"]],
+                alt_trend=[(d, round(v, 2)) for d, v in alloc["cash"]],
+                alt_unit="%",
+                base_variant_label="Stocks", alt_variant_label="Cash",
+                vertical=vertical,
+                definition="The share of their own portfolios that members of the American "
+                           "Association of Individual Investors report holding in stocks and "
+                           "stock funds, bonds and bond funds, and cash. It is a monthly "
+                           "survey of actual reported holdings rather than an opinion poll, "
+                           "and it runs without a break since November 1987.",
+                analysis="Read it against the long-run averages of roughly 62% stocks, 16% "
+                         "bonds and 22% cash. Individual investors hold the most stock after "
+                         "prices have already risen and the most cash after they have already "
+                         "fallen, so extremes tend to mark the wrong moment: stock allocation "
+                         "peaked at 77% in January 2000 and bottomed at 40.8% in March 2009, "
+                         "the exact month cash peaked at 44.8%. Across the four recessions in "
+                         "the record, stock allocation averages 54.8% during the recession "
+                         "against 62.9% in expansions.",
+            ))
     finally:
         conn.close()
     return out
@@ -1759,7 +1857,12 @@ def economic(request: Request) -> dict[str, Any]:
     sp_m2real_norm = filter_from(sp_m2real_norm, MIN_YEAR)
     sp500_qret = filter_from(quarterly_returns(sp500_d_full), MIN_YEAR)
 
-    recession_bands = fetch_recession_bands(start, end)
+    # Bands cover the EARLIEST series on the page, not MIN_YEAR. Metric 69 (AAII
+    # asset allocation) runs from 1987 and would otherwise shade only the COVID
+    # recession, hiding the 1990, 2001 and 2008 cycles that are the whole reason
+    # to plot it. Sending the extra bands is free for the 2012-start charts:
+    # `visibleRecessions` clips them to each chart's own domain before rendering.
+    recession_bands = fetch_recession_bands(_ECON_BANDS_START, end)
 
     metrics: list[dict[str, Any]] = [
         # Growth & employment
@@ -5335,6 +5438,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "events": snap.events,
         # Extended (5-factor) DuPont decomposition of ROE
         "dupont": snap.dupont,
+        # Leverage decomposition of ROE: ROE = ROIC + D/E × [ROIC − i(1−t)]
+        "leverageRoe": snap.leverage_roe,
         # Uses of cash: what each year's operating cash flow was spent on. Net
         # borrowing and net divestitures ride in `sources`, never in `uses`.
         "usesOfCash": snap.uses_of_cash,

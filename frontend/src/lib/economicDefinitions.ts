@@ -110,6 +110,7 @@ const CHART_METRIC_NAME: Record<number, string | undefined> = {
   66: "10-Year Real Yield (TIPS)",
   67: "Net Liquidity ($)",
   68: "S&P 500 Expected Return (building blocks)",
+  69: "AAII Asset Allocation Survey", // monthly since 1987, hand-dropped workbook (aaii.com blocks fetching)
 };
 
 export interface EconomicMetricDef {

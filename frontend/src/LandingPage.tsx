@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import Logo from "./components/Logo";
-import HeroVisual from "./components/HeroVisual";
+import HeroLiveData from "./components/HeroLiveData";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Palette, gold/ink luxury identity, with emerald (live/positive) and a
-   soft indigo as supporting accents so the page reads as a real market tool
-   instead of a single-accent template.
+   Palette, gold/ink luxury identity. The supporting accents (emerald for a
+   live feed, indigo for a reference line) now live where they are actually
+   used, inside the live-data panel.
    ───────────────────────────────────────────────────────────────────────── */
 const GOLD = "#c9a84c";
 const GOLD_SOFT = "#d9b85c";
-const EMERALD = "#7fb87c";
-const INDIGO = "#7c93d6";
 
 /* The real five-stage pipeline, mirrors the in-app workspace (Dashboard.tsx),
    stated in concrete terms rather than generic marketing. */
@@ -87,7 +86,7 @@ const FEATURES = [
   { title: "Every number, explained", description: "Each metric carries plain-language commentary on what it is and why it moves intrinsic value. Not a tooltip, a teacher." },
   { title: "Valuation, not vibes", description: "Built around DCF, residual income and EVA fundamentals. No price momentum, no social sentiment, no noise." },
   { title: "The analyst's real process", description: "The same top-down macro-to-company sequence professionals run, sequenced into five stages you can actually follow." },
-  { title: "Free and open source", description: "No paywall, no subscription, no locked tiers. The full pipeline, the full code, on GitHub." },
+  { title: "Free and open", description: "No paywall, no subscription, no locked tiers. The full pipeline, from the data layer to the valuation models, is free to use." },
   { title: "Signal over surface area", description: "We surface the handful of figures that decide the thesis and keep the rest out of your way." },
   { title: "Built for the long horizon", description: "Designed for investors who measure conviction in years and want to understand what they own." },
 ];
@@ -108,115 +107,6 @@ function useInView(threshold = 0.15) {
     return () => observer.disconnect();
   }, [threshold]);
   return { ref, inView };
-}
-
-/** Count a number up from 0 → target once `active` flips true. Respects reduced motion. */
-function useCountUp(target: number, active: boolean, durationMs = 1400) {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      setValue(target);
-      return;
-    }
-    let raf = 0;
-    let start = 0;
-    const tick = (t: number) => {
-      if (!start) start = t;
-      const p = Math.min(1, (t - start) / durationMs);
-      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
-      setValue(target * eased);
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, active, durationMs]);
-  return value;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   Live hero chart, an intrinsic-value line drawing itself on, with a faint
-   "price" line oscillating around it (the gap the product is built to close).
-   Pure inline SVG so it ships with zero extra weight.
-   ───────────────────────────────────────────────────────────────────────── */
-const W = 520;
-const H = 300;
-// Deterministic series (0..1 of height, top = high value).
-const VALUE_PTS = [0.74, 0.7, 0.66, 0.6, 0.55, 0.52, 0.46, 0.42, 0.37, 0.32, 0.26, 0.2];
-const PRICE_PTS = [0.82, 0.64, 0.72, 0.58, 0.62, 0.44, 0.55, 0.36, 0.46, 0.3, 0.34, 0.22];
-
-function toPath(pts: number[]): string {
-  const stepX = W / (pts.length - 1);
-  return pts
-    .map((p, i) => {
-      const x = i * stepX;
-      const y = 24 + p * (H - 48);
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-function HeroChart({ active }: { active: boolean }) {
-  const valuePath = toPath(VALUE_PTS);
-  const pricePath = toPath(PRICE_PTS);
-  const lastX = W;
-  const lastY = 24 + VALUE_PTS[VALUE_PTS.length - 1] * (H - 48);
-
-  return (
-    <div className="hero-chart-card">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.55rem" }}>
-          <span className="live-dot" />
-          <span style={{ fontSize: "0.7rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace" }}>
-            Intrinsic value vs. price
-          </span>
-        </div>
-        <span style={{ fontSize: "0.7rem", color: EMERALD, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
-          +38.2%
-        </span>
-      </div>
-
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" style={{ display: "block", height: 240 }} role="img" aria-label="Intrinsic value rising above market price">
-        <defs>
-          <linearGradient id="hero-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={GOLD} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={GOLD} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-
-        {/* gridlines */}
-        {[0.25, 0.5, 0.75].map((g) => (
-          <line key={g} x1={0} x2={W} y1={24 + g * (H - 48)} y2={24 + g * (H - 48)} stroke="rgba(201,168,76,0.08)" strokeWidth={1} />
-        ))}
-
-        {/* area under the value line */}
-        <path d={`${valuePath} L${W} ${H - 24} L0 ${H - 24} Z`} fill="url(#hero-fill)" className={active ? "hero-area in" : "hero-area"} />
-
-        {/* faint market price line, indigo, dashed, oscillating */}
-        <path d={pricePath} fill="none" stroke={INDIGO} strokeWidth={1.4} strokeDasharray="4 5" opacity={0.55} className={active ? "hero-price in" : "hero-price"} />
-
-        {/* intrinsic value line, gold, draws on */}
-        <path d={valuePath} fill="none" stroke={GOLD} strokeWidth={2.4} strokeLinecap="round" className={active ? "hero-line in" : "hero-line"} />
-
-        {/* live endpoint */}
-        <circle cx={lastX - 2} cy={lastY} r={4.5} fill={GOLD_SOFT} className={active ? "hero-pulse in" : "hero-pulse"} />
-      </svg>
-
-      <div style={{ display: "flex", gap: "1.5rem", marginTop: "1rem", flexWrap: "wrap" }}>
-        <LegendDot color={GOLD} label="Intrinsic value" />
-        <LegendDot color={INDIGO} label="Market price" dashed />
-      </div>
-    </div>
-  );
-}
-
-function LegendDot({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontSize: "0.72rem", color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace" }}>
-      <span style={{ width: 16, height: 2, background: dashed ? "transparent" : color, borderTop: dashed ? `2px dashed ${color}` : "none", display: "inline-block" }} />
-      {label}
-    </span>
-  );
 }
 
 export default function LandingPage({ onGetStarted }: { onGetStarted?: () => void } = {}) {
@@ -250,11 +140,6 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
   const features = useInView(0.1);
   const about = useInView(0.1);
   const cta = useInView(0.1);
-
-  // Animated hero stats
-  const yearsVal = useCountUp(2012, hero.inView, 1600);
-  const industriesVal = useCountUp(164, hero.inView, 1500);
-  const stagesVal = useCountUp(5, hero.inView, 1000);
 
   return (
     <div className="landing-root min-h-screen bg-ink-800 text-white overflow-x-hidden">
@@ -306,28 +191,12 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         .ticker-wrap { display: flex; animation: ticker 32s linear infinite; }
         @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-        /* Hero chart */
-        .hero-chart-card { position: relative; border: 1px solid rgba(201,168,76,0.18); background: linear-gradient(165deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01)); border-radius: 8px; padding: 1.5rem; box-shadow: 0 32px 64px -40px rgba(0,0,0,0.8); backdrop-filter: blur(6px); }
-        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: ${EMERALD}; box-shadow: 0 0 0 0 rgba(127,184,124,0.6); animation: live-pulse 2s ease-out infinite; }
-        @keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(127,184,124,0.5); } 70% { box-shadow: 0 0 0 8px rgba(127,184,124,0); } 100% { box-shadow: 0 0 0 0 rgba(127,184,124,0); } }
-        .hero-line { stroke-dasharray: 1200; stroke-dashoffset: 1200; }
-        .hero-line.in { animation: draw 2.2s cubic-bezier(0.16,1,0.3,1) 0.2s forwards; }
-        .hero-price { stroke-dasharray: 1200; stroke-dashoffset: 1200; }
-        .hero-price.in { animation: draw 2.6s ease-out 0.5s forwards; }
-        @keyframes draw { to { stroke-dashoffset: 0; } }
-        .hero-area { opacity: 0; }
-        .hero-area.in { animation: area-in 1.2s ease-out 1.4s forwards; }
-        @keyframes area-in { to { opacity: 1; } }
-        .hero-pulse { opacity: 0; transform-box: fill-box; transform-origin: center; }
-        .hero-pulse.in { animation: dot-in 0.5s ease-out 2.1s forwards, dot-pulse 2.4s ease-in-out 2.6s infinite; }
-        @keyframes dot-in { to { opacity: 1; } }
-        @keyframes dot-pulse { 0%,100% { r: 4.5; } 50% { r: 6.5; } }
+        .footer-link { font-size: 0.85rem; color: rgba(255,255,255,0.32); text-decoration: none; transition: color 0.2s; }
+        .footer-link:hover { color: rgba(255,255,255,0.7); }
 
         @media (prefers-reduced-motion: reduce) {
-          .fade-up, .aurora span, .ticker-wrap, .hero-line, .hero-price, .hero-area, .hero-pulse, .live-dot, .btn-gold::after { animation: none !important; transition: none !important; }
+          .fade-up, .aurora span, .ticker-wrap, .btn-gold::after { animation: none !important; transition: none !important; }
           .fade-up { opacity: 1; transform: none; }
-          .hero-line, .hero-price { stroke-dashoffset: 0; }
-          .hero-area, .hero-pulse { opacity: 1; }
         }
 
         /* Founder portrait, gold-framed, gently zooms on hover */
@@ -335,8 +204,6 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         .founder-card img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 15%; transition: transform 0.6s cubic-bezier(0.16,1,0.3,1); }
         .founder-card:hover img { transform: scale(1.045); }
         .founder-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 -90px 70px -50px rgba(10,15,30,0.7); }
-        .founder-chip { font-size: 0.72rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(201,168,76,0.22); border-radius: 999px; padding: 0.32rem 0.85rem; background: rgba(201,168,76,0.05); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em; transition: border-color 0.25s, color 0.25s; }
-        .founder-chip:hover { border-color: rgba(201,168,76,0.5); color: rgba(255,255,255,0.85); }
 
         @media (max-width: 900px) { .hide-mobile { display: none !important; } .hero-grid { grid-template-columns: 1fr !important; } .about-grid { grid-template-columns: 1fr !important; } }
       `}</style>
@@ -377,55 +244,26 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         <div ref={hero.ref} className="hero-grid max-w-6xl mx-auto relative z-[1] w-full grid items-center gap-14 grid-cols-[1.05fr_0.95fr]">
           {/* Left: copy */}
           <div>
-            <div className={`fade-up ${hero.inView ? "in" : ""}`}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.75rem", padding: "0.4rem 0.95rem", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 999, background: "rgba(201,168,76,0.06)" }}>
-                <span className="live-dot" />
-                <span style={{ fontSize: "0.7rem", color: GOLD, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>Open source · Valuation-first</span>
-              </div>
-            </div>
-
-            <h1 className={`font-display fade-up d1 ${hero.inView ? "in" : ""}`} style={{ fontSize: "clamp(2.5rem, 5.5vw, 4.5rem)", fontWeight: 700, lineHeight: 1.05, marginBottom: "1.5rem" }}>
+            <h1 className={`font-display fade-up ${hero.inView ? "in" : ""}`} style={{ fontSize: "clamp(2.5rem, 5.5vw, 4.5rem)", fontWeight: 700, lineHeight: 1.05, marginBottom: "1.5rem" }}>
               Invest like you{" "}
               <span style={{ color: GOLD, fontStyle: "italic" }}>understand</span>{" "}
               what you own.
             </h1>
 
-            <p className={`fade-up d2 ${hero.inView ? "in" : ""}`} style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.62)", maxWidth: 540, lineHeight: 1.75, marginBottom: "2.25rem" }}>
+            <p className={`fade-up d1 ${hero.inView ? "in" : ""}`} style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.62)", maxWidth: 540, lineHeight: 1.75, marginBottom: "2.25rem" }}>
               IntrinsicFinEd turns walls of financial data into plain-language explanations, and walks you through the exact top-down process analysts use, from the macro tide down to a single share.
             </p>
 
-            <div className={`fade-up d3 ${hero.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", flexWrap: "wrap", marginBottom: "3rem" }}>
+            <div className={`fade-up d2 ${hero.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", flexWrap: "wrap" }}>
               <button className="btn-gold" onClick={handleStart}>Start analyzing free →</button>
-              <button className="btn-outline">View on GitHub</button>
-            </div>
-
-            <div className={`fade-up d4 ${hero.inView ? "in" : ""}`} style={{ display: "flex", gap: "2.5rem", flexWrap: "wrap" }}>
-              {[
-                { val: `${Math.round(stagesVal)}`, label: "Stage framework" },
-                { val: `${Math.round(industriesVal)}`, label: "Industries covered" },
-                { val: `${Math.round(yearsVal)}`, label: "Macro data since" },
-              ].map((s) => (
-                <div key={s.label} style={{ borderLeft: "2px solid rgba(201,168,76,0.25)", paddingLeft: "1rem" }}>
-                  <div className="font-display" style={{ fontSize: "1.85rem", fontWeight: 700, color: GOLD, fontVariantNumeric: "tabular-nums" }}>{s.val}</div>
-                  <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
+              <button className="btn-outline" onClick={() => { window.location.href = "/guide"; }}>Learn the framework</button>
             </div>
           </div>
 
-          {/* Right: bespoke art panel with the live chart card floating over it */}
-          <div className={`hero-visual-wrap fade-up d3 hide-mobile ${hero.inView ? "in" : ""}`} style={{ position: "relative" }}>
-            <div style={{ transform: `translate3d(0, ${scrollY * -0.045}px, 0)`, transition: "transform 0.12s linear", willChange: "transform" }}>
-              <HeroVisual active={hero.inView} />
-            </div>
-            <div
-              className="hero-float-card"
-              style={{
-                position: "absolute", right: "-7%", bottom: "-9%", width: "80%",
-                transform: `translate3d(0, ${scrollY * 0.05}px, 0)`, transition: "transform 0.12s linear", willChange: "transform",
-              }}
-            >
-              <HeroChart active={hero.inView} />
+          {/* Right: the workspace's own live data, pulled from the analysis engine */}
+          <div className={`hero-visual-wrap fade-up d2 hide-mobile ${hero.inView ? "in" : ""}`} style={{ position: "relative" }}>
+            <div style={{ transform: `translate3d(0, ${scrollY * -0.04}px, 0)`, transition: "transform 0.12s linear", willChange: "transform" }}>
+              <HeroLiveData active={hero.inView} />
             </div>
           </div>
         </div>
@@ -583,11 +421,6 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
               So he built the tool he wished he had, for the investors who need it most and can least afford an expensive professional terminal. It walks through the same process analysts use, from the broad economy down to a single share, and it stays free, open source, and explained in plain language for anyone willing to ask why.
             </p>
 
-            <div className={`fade-up d4 ${about.inView ? "in" : ""}`} style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-              {["Houston, TX", "Valuation over speculation", "Self-taught analyst", "Reads Graham, Shiller, Dalio"].map((c) => (
-                <span key={c} className="founder-chip">{c}</span>
-              ))}
-            </div>
           </div>
         </div>
       </section>
@@ -612,7 +445,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
                 </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flexShrink: 0 }}>
-                <button className="btn-gold">View on GitHub →</button>
+                <button className="btn-gold" onClick={handleStart}>Start analyzing free →</button>
                 <button className="btn-outline" onClick={() => { window.location.href = "/guide"; }}>Read the docs</button>
               </div>
             </div>
@@ -631,10 +464,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             Ready to invest with{" "}
             <span style={{ color: GOLD, fontStyle: "italic" }}>conviction</span>?
           </h2>
-          <p className={`fade-up d2 ${cta.inView ? "in" : ""}`} style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.58)", lineHeight: 1.8, marginBottom: "2.5rem" }}>
-            Learn to read a company the way the professionals do, from the macro tide down to the fundamentals of a single share.
-          </p>
-          <div className={`fade-up d3 ${cta.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", justifyContent: "center", flexWrap: "wrap" }}>
+          <div className={`fade-up d2 ${cta.inView ? "in" : ""}`} style={{ display: "flex", gap: "0.875rem", justifyContent: "center", flexWrap: "wrap", marginTop: "2.5rem" }}>
             <button className="btn-gold" onClick={handleStart}>Start analyzing free →</button>
             <button className="btn-outline" onClick={() => { window.location.href = "/guide"; }}>Learn the framework</button>
           </div>
@@ -646,12 +476,15 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-6">
           <Logo size={24} idSuffix="footer" wordmarkSize={1} />
 
-          <div style={{ display: "flex", gap: "2rem" }}>
-            {["How It Works", "Features", "GitHub", "Docs"].map((l) => (
-              <a key={l} href="#" style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.32)", textDecoration: "none", transition: "color 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.32)")}
-              >{l}</a>
+          <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+            {[
+              { label: "How It Works", to: "/#how-it-works" },
+              { label: "Features", to: "/#features" },
+              { label: "Docs", to: "/guide" },
+              { label: "Terms", to: "/terms" },
+              { label: "Privacy", to: "/privacy" },
+            ].map((l) => (
+              <Link key={l.label} to={l.to} className="footer-link">{l.label}</Link>
             ))}
           </div>
 
