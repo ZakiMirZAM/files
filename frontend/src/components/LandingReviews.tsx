@@ -95,10 +95,11 @@ export default function LandingReviews() {
       <div ref={sectionRef} className="max-w-6xl mx-auto">
         <div className={`fade-up mb-12 text-center ${inView ? "in" : ""}`}>
           <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>
-            Early Feedback
+            Proof It Teaches
           </p>
-          <h2 className="font-display" style={{ fontSize: "clamp(1.8rem, 3.5vw, 2.5rem)", fontWeight: 700, lineHeight: 1.18 }}>
-            What our first <span style={{ color: GOLD, fontStyle: "italic" }}>testers</span> say.
+          <h2 className="font-display" style={{ fontSize: "clamp(1.8rem, 3.5vw, 2.5rem)", fontWeight: 700, lineHeight: 1.18, maxWidth: 640, marginInline: "auto" }}>
+            Our first testers were students, twelve to eighteen. All five walked away{" "}
+            <span style={{ color: GOLD, fontStyle: "italic" }}>understanding</span>.
           </h2>
         </div>
 
