@@ -12,26 +12,31 @@ const GOLD = "#c9a84c";
 const REVIEWS = [
   {
     name: "Titus",
+    date: "May 29, 2026",
     quote:
       "The AI explanations were the part that won me over. I couldn't tell they were AI at all. They never got technical on me, and every term I clicked finally made sense.",
   },
   {
     name: "Walker",
+    date: "June 7, 2026",
     quote:
       "Really informative, and every definition is genuinely clear. Nothing I looked up left me guessing.",
   },
   {
     name: "Aatif",
+    date: "June 12, 2026",
     quote:
       "The design is so clean, and nothing about it feels generic. The colors fit the software perfectly.",
   },
   {
     name: "Jack",
+    date: "June 30, 2026",
     quote:
       "I definitely learned a lot about analyzing the economy and finding well valued companies.",
   },
   {
     name: "Suraj",
+    date: "July 15, 2026",
     quote:
       "I was impressed by how deep the data goes, and I could still follow the valuation methods behind every number.",
   },
@@ -155,7 +160,7 @@ export default function LandingReviews() {
                   </blockquote>
                   <figcaption style={{ marginTop: "1.6rem" }}>
                     <div className="font-display" style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.1 }}>{r.name}</div>
-                    <div style={{ fontSize: "0.66rem", color: GOLD, letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 4 }}>Student</div>
+                    <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.08em", marginTop: 5 }}>{r.date}</div>
                   </figcaption>
                 </figure>
               </div>

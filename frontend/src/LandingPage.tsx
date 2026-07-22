@@ -87,7 +87,7 @@ const FEATURES = [
   { title: "Every number, explained", description: "Each metric carries plain-language commentary on what it is and why it moves intrinsic value. Not a tooltip, a teacher." },
   { title: "Valuation, not vibes", description: "Built around DCF, residual income and EVA fundamentals. No price momentum, no social sentiment, no noise." },
   { title: "The analyst's real process", description: "The same top-down macro-to-company sequence professionals run, sequenced into five stages you can actually follow." },
-  { title: "Free and open", description: "No paywall, no subscription, no locked tiers. The full pipeline, from the data layer to the valuation models, is free to use." },
+  { title: "Free means free", description: "No paywall, no subscription, no locked tiers. The full pipeline, from the data layer to the valuation models, costs nothing." },
   { title: "Signal over surface area", description: "We surface the handful of figures that decide the thesis and keep the rest out of your way." },
   { title: "Built for the long horizon", description: "Designed for investors who measure conviction in years and want to understand what they own." },
 ];
@@ -140,6 +140,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
   const steps = useInView(0.1);
   const features = useInView(0.1);
   const about = useInView(0.1);
+  const faq = useInView(0.1);
   const cta = useInView(0.1);
 
   return (
@@ -195,6 +196,17 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         .footer-link { font-size: 0.85rem; color: rgba(255,255,255,0.32); text-decoration: none; transition: color 0.2s; }
         .footer-link:hover { color: rgba(255,255,255,0.7); }
 
+        .faq-item { border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .faq-item summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 0; }
+        .faq-item summary::-webkit-details-marker { display: none; }
+        .faq-q { font-size: 1.05rem; font-weight: 600; transition: color 0.2s; }
+        .faq-item summary:hover .faq-q { color: ${GOLD}; }
+        .faq-plus { font-size: 1.2rem; line-height: 1; color: rgba(255,255,255,0.35); transition: transform 0.25s, color 0.2s; flex-shrink: 0; }
+        .faq-item[open] .faq-plus { transform: rotate(45deg); color: ${GOLD}; }
+        .faq-a { padding: 0 0 1.35rem; font-size: 0.95rem; color: rgba(255,255,255,0.58); line-height: 1.8; max-width: 640px; margin: 0; }
+        .faq-link { color: ${GOLD}; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(201,168,76,0.4); transition: text-decoration-color 0.2s; }
+        .faq-link:hover { text-decoration-color: ${GOLD}; }
+
         @media (prefers-reduced-motion: reduce) {
           .fade-up, .aurora span, .ticker-wrap, .btn-gold::after { animation: none !important; transition: none !important; }
           .fade-up { opacity: 1; transform: none; }
@@ -221,7 +233,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
           <Logo size={30} idSuffix="nav" wordmarkSize={1.1} />
 
           <div style={{ display: "flex", gap: "2rem", alignItems: "center" }} className="hide-mobile">
-            {["How It Works", "Features", "Our Story", "Open Source"].map((l) => (
+            {["How It Works", "Features", "Our Story", "FAQ"].map((l) => (
               <a key={l} href={`#${l.toLowerCase().replace(/\s+/g, "-")}`} className="nav-link">{l}</a>
             ))}
           </div>
@@ -277,7 +289,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
         <div style={{ display: "flex", overflow: "hidden" }}>
           <div className="ticker-wrap" style={{ gap: "3rem", whiteSpace: "nowrap" }}>
             {[...Array(2)].flatMap((_, i) =>
-              ["FRED Macro Data", "NBER Recession Bands", "Sector ROIC", "164 Industries", "DCF & Residual Income", "EVA Valuation", "13-Year Financials", "Open Source"].map((t) => (
+              ["FRED Macro Data", "NBER Recession Bands", "Sector ROIC", "164 Industries", "DCF & Residual Income", "EVA Valuation", "13-Year Financials", "No Paywall"].map((t) => (
                 <span key={`${i}-${t}`} style={{ fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.24)", textTransform: "uppercase", letterSpacing: "0.1em", display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
                   <span style={{ width: 4, height: 4, borderRadius: "50%", background: GOLD, opacity: 0.6, flexShrink: 0 }} />
                   {t}
@@ -427,15 +439,15 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             </blockquote>
 
             <p className={`fade-up d3 ${about.inView ? "in" : ""}`} style={{ fontSize: "1rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.85, marginBottom: "1.75rem" }}>
-              So he built the tool he wished he had, for the investors who need it most and can least afford an expensive professional terminal. It walks through the same process analysts use, from the broad economy down to a single share, and it stays free, open source, and explained in plain language for anyone willing to ask why.
+              So he built the tool he wished he had, for the investors who need it most and can least afford an expensive professional terminal. It walks through the same process analysts use, from the broad economy down to a single share, and it stays free and explained in plain language for anyone willing to ask why.
             </p>
 
           </div>
         </div>
       </section>
 
-      {/* OPEN SOURCE */}
-      <section id="open-source" className="px-6 pt-8 pb-28">
+      {/* FREE FOR EVERYONE */}
+      <section id="access" className="px-6 pt-8 pb-28">
         <div className="max-w-6xl mx-auto">
           <div style={{
             borderRadius: 6, padding: "clamp(2rem, 5vw, 3.5rem)",
@@ -445,12 +457,12 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             <div style={{ position: "absolute", top: 0, right: 0, width: 320, height: 320, background: GOLD, borderRadius: "50%", filter: "blur(90px)", opacity: 0.05, transform: "translate(30%, -30%)", pointerEvents: "none" }} />
             <div style={{ position: "relative", zIndex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "2.5rem" }}>
               <div style={{ flex: "1 1 320px" }}>
-                <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>Open Source</p>
+                <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>Free for Everyone</p>
                 <h2 className="font-display" style={{ fontSize: "clamp(1.6rem, 3vw, 2.25rem)", fontWeight: 700, marginBottom: "1rem", lineHeight: 1.2 }}>
                   Financial literacy shouldn't sit behind a paywall.
                 </h2>
                 <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.58)", lineHeight: 1.8, maxWidth: 520 }}>
-                  The entire pipeline is free and open: the data layer, the valuation models, the explanations and the code. Inspect it, fork it, learn from it. The tools for long-term wealth shouldn't depend on your bank balance.
+                  Everything here is included for everyone: the full data layer, the valuation models, and every plain-language explanation. There is no card to enter and no premium tier hiding the good parts. You can even explore anonymously before creating an account. The tools for long-term wealth shouldn't depend on your bank balance.
                 </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flexShrink: 0 }}>
@@ -458,6 +470,79 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
                 <button className="btn-outline" onClick={() => { window.location.href = "/guide"; }}>Read the docs</button>
               </div>
             </div>
+            {/* the scale of what free actually includes */}
+            <div style={{ position: "relative", zIndex: 1, marginTop: "2.25rem", paddingTop: "1.75rem", borderTop: "1px solid rgba(201,168,76,0.15)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1.5rem" }}>
+              {[
+                { value: "360,000+", label: "Company-years of financials" },
+                { value: "31,000+", label: "Tickers covered" },
+                { value: "164", label: "Industries tracked" },
+                { value: "13", label: "Years of history per company" },
+              ].map((s) => (
+                <div key={s.label}>
+                  <div className="font-display" style={{ fontSize: "1.75rem", fontWeight: 700, color: GOLD, lineHeight: 1.1 }}>{s.value}</div>
+                  <div style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginTop: 6 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="px-6 pb-28">
+        <div ref={faq.ref} className="max-w-[760px] mx-auto">
+          <div className={`fade-up mb-10 ${faq.inView ? "in" : ""}`}>
+            <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>Common Questions</p>
+            <h2 className="font-display" style={{ fontSize: "clamp(1.8rem, 3.5vw, 2.5rem)", fontWeight: 700, lineHeight: 1.18 }}>
+              The questions everyone asks <span style={{ color: GOLD, fontStyle: "italic" }}>first</span>.
+            </h2>
+          </div>
+
+          <div className={`fade-up d1 ${faq.inView ? "in" : ""}`}>
+            <details className="faq-item">
+              <summary>
+                <span className="faq-q font-display">Is it really free?</span>
+                <span className="faq-plus" aria-hidden="true">+</span>
+              </summary>
+              <p className="faq-a">
+                Yes. Everything on the platform is included. There is no card to enter, no trial
+                that expires, and no locked tier. You do not even need an account to look around,
+                anonymous access is built in. The project exists to teach, and a paywall would
+                defeat the point.
+              </p>
+            </details>
+
+            <details className="faq-item">
+              <summary>
+                <span className="faq-q font-display">Where does the data come from?</span>
+                <span className="faq-plus" aria-hidden="true">+</span>
+              </summary>
+              <p className="faq-a">
+                The macro series come from{" "}
+                <a className="faq-link" href="https://fred.stlouisfed.org" target="_blank" rel="noopener noreferrer">FRED</a>,
+                the Federal Reserve's public database, with recessions marked using{" "}
+                <a className="faq-link" href="https://www.nber.org/research/data/us-business-cycle-expansions-and-contractions" target="_blank" rel="noopener noreferrer">NBER's official dates</a>.
+                Company fundamentals are built from{" "}
+                <a className="faq-link" href="https://www.sec.gov/edgar" target="_blank" rel="noopener noreferrer">SEC EDGAR</a>{" "}
+                filings and public market data, reaching back 13 years for most companies. The
+                valuation benchmarks lean on the same public datasets analysts cite, including the{" "}
+                <a className="faq-link" href="https://shillerdata.com" target="_blank" rel="noopener noreferrer">Shiller CAPE history</a>{" "}
+                and{" "}
+                <a className="faq-link" href="https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html" target="_blank" rel="noopener noreferrer">NYU Stern's industry studies</a>.
+              </p>
+            </details>
+
+            <details className="faq-item">
+              <summary>
+                <span className="faq-q font-display">Is this financial advice?</span>
+                <span className="faq-plus" aria-hidden="true">+</span>
+              </summary>
+              <p className="faq-a">
+                No. Nothing here tells you what to buy or sell. IntrinsicFinEd teaches the process
+                analysts use to value a company and gives you the tools to run it yourself. The
+                conclusions, and the decisions, are yours.
+              </p>
+            </details>
           </div>
         </div>
       </section>
@@ -495,10 +580,11 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
             ].map((l) => (
               <Link key={l.label} to={l.to} className="footer-link">{l.label}</Link>
             ))}
+            <a href="mailto:zamzaki08@gmail.com" className="footer-link">Contact</a>
           </div>
 
           <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.22)" }}>
-            © 2025 IntrinsicFinEd. Open source. Not financial advice.
+            © 2026 IntrinsicFinEd. Free for everyone. Not financial advice.
           </p>
         </div>
       </footer>

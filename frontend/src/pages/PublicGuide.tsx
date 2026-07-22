@@ -55,7 +55,7 @@ export function PublicGuide() {
 
       <footer className="border-t border-white/[0.06] px-6 py-10 text-center">
         <p className="text-xs text-white/50">
-          © 2025 IntrinsicFinEd. Open source. Not financial advice.
+          © 2026 IntrinsicFinEd. Free for everyone. Not financial advice.
         </p>
       </footer>
     </div>

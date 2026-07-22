@@ -73,7 +73,7 @@ export function SignInForm({ onBack }: SignInFormProps) {
         <p className="text-white/50 mt-3 text-sm leading-relaxed max-w-sm">
           {flow === "signIn"
             ? "Sign in to resume your in-progress analyses and final reports."
-            : "Free, open source, and built around the same valuation framework professional analysts use."}
+            : "Free for everyone, and built around the same valuation framework professional analysts use."}
         </p>
       </div>
 
