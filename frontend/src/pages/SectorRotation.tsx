@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { RotateCcw, ChevronDown } from "lucide-react";
+import { RotateCcw, ChevronDown, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { SectionHeader } from "../components/SectionHeader";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
 import { HelpBadge } from "../components/onboarding/HelpBadge";
 import { cn } from "../lib/cn";
-import { fetchEconomic } from "../lib/api";
+import { fetchEconomicResult } from "../lib/api";
 import type { SectionData } from "../lib/types";
+import { autoFillReadings, sameReadings } from "../lib/rotationAutoFill";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { MetricTerm } from "../components/individual/DefinitionsBlock";
 import { buildEconomicMetricBlocks } from "../lib/economicSeries";
@@ -67,14 +69,19 @@ export function SectorRotation() {
   const [dirs, setDirs] = useState<Record<string, Reading>>(loadDirections);
   const [weights, setWeights] = useState<Record<string, number>>(loadWeights);
   const [econData, setEconData] = useState<SectionData | null>(null);
+  const [econLive, setEconLive] = useState(false);
   const [howTo, setHowTo] = useState(false);
 
-  // Economic payload drives the sidebar's historical graphs (definitions render
-  // from the bundled markdown regardless; this just adds the live chart).
+  // Economic payload drives the sidebar's historical graphs and Fill from
+  // data. Liveness matters here: auto-filling readings from the offline mock
+  // would fabricate an economic view, so the fill button needs isLive.
   useEffect(() => {
     let active = true;
-    fetchEconomic().then((d) => {
-      if (active) setEconData(d);
+    fetchEconomicResult().then((r) => {
+      if (active) {
+        setEconData(r.data);
+        setEconLive(r.isLive);
+      }
     });
     return () => {
       active = false;
@@ -124,6 +131,35 @@ export function SectorRotation() {
       return next;
     });
 
+  // One click: derive every derivable reading from the live economic payload.
+  // Overwrites sourced rows, preserves manual readings on rows with no data
+  // feed, never touches weights. The toast's Undo restores the pre-fill state.
+  const fillFromData = () => {
+    if (!econData || !econLive) return;
+    const result = autoFillReadings(econData);
+    if (result.filled.length === 0) {
+      toast.error("No readings could be set, the economic data came back empty");
+      return;
+    }
+    const merged = { ...dirs, ...result.readings };
+    if (sameReadings(merged, dirs)) {
+      toast.message("Readings already match the latest data");
+      return;
+    }
+    const prev = dirs;
+    setDirs(merged);
+    toast.success(`Filled ${result.filled.length} of ${METRICS.length} metrics from the latest data`, {
+      description:
+        result.skipped.length === 0
+          ? undefined
+          : result.skipped.length === 1
+            ? "1 metric could not be read from the data, set that one from your own view."
+            : `${result.skipped.length} metrics could not be read from the data, set those from your own view.`,
+      duration: 10000,
+      action: { label: "Undo", onClick: () => setDirs(prev) },
+    });
+  };
+
   return (
     <div className="flex gap-0 lg:gap-6">
       <div className="flex-1 min-w-0">
@@ -135,6 +171,30 @@ export function SectorRotation() {
           <>
             <PageTourButton tourId="rotation" />
             <HelpBadge topic="rotationWeights" />
+            <span data-tour="rotation-autofill">
+              <button
+                type="button"
+                onClick={fillFromData}
+                disabled={!econData || !econLive}
+                title={
+                  !econData
+                    ? "Waiting for economic data to load"
+                    : !econLive
+                      ? "Live data is unavailable, fill needs real readings"
+                      : "Set each row from the latest economic readings. Rows without a data feed are left unchanged."
+                }
+                className="btn-ghost text-sm inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-white/55"
+              >
+                <Zap className="w-3.5 h-3.5" /> Fill from data
+              </button>
+              {(!econData || !econLive) && (
+                <span role="status" className="sr-only">
+                  {!econData
+                    ? "Fill from data is waiting for economic data to load"
+                    : "Fill from data is unavailable because live data is offline"}
+                </span>
+              )}
+            </span>
             <button
               onClick={() => {
                 setDirs({});

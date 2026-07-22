@@ -104,7 +104,7 @@ export const ECONOMIC_TOUR: Tour = {
 
 export const ROTATION_TOUR: Tour = {
   id: "page-rotation",
-  version: 2,
+  version: 3,
   steps: [
     {
       id: "intro",
@@ -132,6 +132,15 @@ export const ROTATION_TOUR: Tour = {
       onMissing: "center",
       waitTimeout: 6000,
       ...demoDef(ECON_PANEL_OFFSET + 13),
+    },
+    {
+      id: "autofill",
+      route: "/app/rotation",
+      target: '[data-tour="rotation-autofill"]',
+      title: "Start from the data",
+      body: "Fill from data sets most rows to what the latest readings show. It is a starting point, not an answer. Change any row you read differently, and set the few rows that have no data feed yourself.",
+      onMissing: "center",
+      waitTimeout: 6000,
     },
     {
       id: "weights",
