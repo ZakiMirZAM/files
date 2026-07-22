@@ -155,6 +155,7 @@ export default function LandingReviews() {
                   </blockquote>
                   <figcaption style={{ marginTop: "1.6rem" }}>
                     <div className="font-display" style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.1 }}>{r.name}</div>
+                    <div style={{ fontSize: "0.66rem", color: GOLD, letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 4 }}>Student</div>
                   </figcaption>
                 </figure>
               </div>
