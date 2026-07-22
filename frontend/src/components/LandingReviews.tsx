@@ -81,7 +81,7 @@ export default function LandingReviews() {
   };
 
   return (
-    <section id="reviews" className="py-24 px-6 relative" aria-label="Tester reviews">
+    <section id="reviews" className="py-24 px-6 relative" aria-label="Reviews">
       <style>{`
         .reviews-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         .reviews-track::-webkit-scrollbar { display: none; }
@@ -95,11 +95,10 @@ export default function LandingReviews() {
       <div ref={sectionRef} className="max-w-6xl mx-auto">
         <div className={`fade-up mb-12 text-center ${inView ? "in" : ""}`}>
           <p style={{ fontSize: "0.72rem", color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.75rem" }}>
-            The First Cohort
+            Reviews
           </p>
           <h2 className="font-display" style={{ fontSize: "clamp(1.8rem, 3.5vw, 2.5rem)", fontWeight: 700, lineHeight: 1.18, maxWidth: 640, marginInline: "auto" }}>
-            Our first testers were students, twelve to eighteen. All five came away{" "}
-            <span style={{ color: GOLD, fontStyle: "italic" }}>understanding</span>.
+            In their own <span style={{ color: GOLD, fontStyle: "italic" }}>words</span>.
           </h2>
         </div>
 
@@ -156,7 +155,6 @@ export default function LandingReviews() {
                   </blockquote>
                   <figcaption style={{ marginTop: "1.6rem" }}>
                     <div className="font-display" style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.1 }}>{r.name}</div>
-                    <div style={{ fontSize: "0.66rem", color: GOLD, letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 4 }}>Beta Tester</div>
                   </figcaption>
                 </figure>
               </div>
