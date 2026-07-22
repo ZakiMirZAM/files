@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import Logo from "./components/Logo";
 import HeroLiveData from "./components/HeroLiveData";
+import LandingReviews from "./components/LandingReviews";
 
 /* ─────────────────────────────────────────────────────────────────────────
    Palette, gold/ink luxury identity. The supporting accents (emerald for a
@@ -357,6 +358,14 @@ export default function LandingPage({ onGetStarted }: { onGetStarted?: () => voi
           </div>
         </div>
       </section>
+
+      {/* DIVIDER */}
+      <div className="max-w-6xl mx-auto px-6">
+        <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,76,0.2), transparent)" }} />
+      </div>
+
+      {/* REVIEWS */}
+      <LandingReviews />
 
       {/* DIVIDER */}
       <div className="max-w-6xl mx-auto px-6">
