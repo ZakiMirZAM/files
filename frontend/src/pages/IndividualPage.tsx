@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchIndividual, searchTickers, tickerExists, type IndividualResult, type TickerHit } from "../lib/api";
+import { fetchIndividual, fetchIndividualBenchmarks, searchTickers, tickerExists, type IndividualResult, type TickerHit } from "../lib/api";
 import { SectionHeader } from "../components/SectionHeader";
 import { QualitativeBlock } from "../components/QualitativeBlock";
 import { buildDataContext } from "../lib/aiDataContext";
@@ -40,7 +40,8 @@ import { ChecklistBlock } from "../components/individual/ChecklistBlock";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { DefinitionLink } from "../components/individual/DefinitionsBlock";
 import { DataStatusBanner } from "../components/DataStatusBanner";
-import { buildSeriesIndex } from "../lib/individualSeries";
+import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
+import type { IndividualBenchmarks } from "../lib/types";
 import { AlertTriangle, ChevronLeft, Search } from "lucide-react";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
 import { HelpBadge } from "../components/onboarding/HelpBadge";
@@ -85,6 +86,21 @@ export function IndividualPage() {
     };
   }, [ticker]);
 
+  // Industry + sector averages for the definition sidebar's comparison block.
+  // Best effort: null (backend down, unknown ticker) just hides the block.
+  const [benchmarks, setBenchmarks] = useState<IndividualBenchmarks | null>(null);
+  useEffect(() => {
+    if (!ticker) return;
+    setBenchmarks(null);
+    let active = true;
+    fetchIndividualBenchmarks(ticker).then((b) => {
+      if (active) setBenchmarks(b);
+    });
+    return () => {
+      active = false;
+    };
+  }, [ticker]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const t = input.trim().toUpperCase();
@@ -114,6 +130,16 @@ export function IndividualPage() {
                    : result?.status === "api_down" ? result.mock
                    : null;
   const seriesIndex = useMemo(() => buildSeriesIndex(detailData), [detailData]);
+  // Benchmarks only pair with LIVE data: against the offline mock the numbers
+  // would compare fabricated figures with real group averages.
+  const benchmarkIndex = useMemo(
+    () =>
+      buildBenchmarkIndex(
+        result?.status === "ok" ? benchmarks : null,
+        detailData?.analysis?.metricMeta ?? null,
+      ),
+    [result, benchmarks, detailData],
+  );
 
   // Publish this company's live figures so the "Explain using AI" question + highlight
   // buttons can answer about it specifically. Computed here (before early returns) to
@@ -538,7 +564,7 @@ export function IndividualPage() {
         </div>
       </div>
       </div>
-      <DefinitionPanel seriesIndex={seriesIndex} />
+      <DefinitionPanel seriesIndex={seriesIndex} benchmarks={benchmarkIndex} />
     </div>
   );
 }

@@ -1187,3 +1187,23 @@ export interface SectorMetricsData {
   /** Single-industry scorecard only: sibling count behind the score rank. */
   scorePeers?: number | null;
 }
+
+// ── Individual benchmarks: company vs industry vs sector ───────────────────
+// /api/individual/{ticker}/benchmarks. Values are in the scorecard matrices'
+// display units (percents already ×100), keyed by the individual page's
+// metric keys (metricMeta.key).
+
+export interface BenchmarkMetric {
+  label: string;
+  unit: SectorMetricUnit;
+  company: number | null;
+  industry: number | null;
+  sector: number | null;
+}
+
+export interface IndividualBenchmarks {
+  ticker: string;
+  sector: string | null;
+  industry: string | null;
+  metrics: Record<string, BenchmarkMetric>;
+}

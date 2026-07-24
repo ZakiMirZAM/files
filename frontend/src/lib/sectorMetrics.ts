@@ -283,3 +283,48 @@ export function withRoicWaccSpread(data: SectorMetricsData): SectorMetricsData {
 
   return { ...data, metrics, data: nextData };
 }
+
+// ── Ranking ──────────────────────────────────────────────────────────────────
+
+export interface MatrixSort {
+  /** The metric key driving the order. */
+  key: string;
+  dir: "desc" | "asc";
+}
+
+/**
+ * Reorder a matrix's variable axis (`data.sectors`: the columns of the
+ * sector/industry matrix, the company rows of the transposed scorecard) by one
+ * metric's value. Pure: returns a new object with only the `sectors` array
+ * reordered, so every column payload (values, `_history`, `_integrity`, the
+ * smuggled underscore fields) rides along untouched and the definitions +
+ * clickable cells behave exactly as before. Missing / non-finite values sort
+ * last in either direction; ties keep the API's original order (stable).
+ */
+export function sortMatrixData(data: SectorMetricsData, sort: MatrixSort | null): SectorMetricsData {
+  if (!sort) return data;
+  const indexed = data.sectors.map((name, i) => ({
+    name,
+    i,
+    v: data.data[name]?.[sort.key],
+  }));
+  indexed.sort((a, b) => {
+    const aOk = a.v != null && Number.isFinite(a.v);
+    const bOk = b.v != null && Number.isFinite(b.v);
+    if (aOk && bOk) {
+      const diff = sort.dir === "desc" ? (b.v as number) - (a.v as number) : (a.v as number) - (b.v as number);
+      return diff !== 0 ? diff : a.i - b.i;
+    }
+    if (aOk) return -1;
+    if (bOk) return 1;
+    return a.i - b.i;
+  });
+  return { ...data, sectors: indexed.map((x) => x.name) };
+}
+
+/** The next sort state when the user clicks a metric's rank control:
+ *  high to low, then low to high, then back to the source order. */
+export function cycleMatrixSort(current: MatrixSort | null, key: string): MatrixSort | null {
+  if (current?.key !== key) return { key, dir: "desc" };
+  return current.dir === "desc" ? { key, dir: "asc" } : null;
+}

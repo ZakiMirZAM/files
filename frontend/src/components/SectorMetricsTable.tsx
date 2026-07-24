@@ -1,5 +1,6 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { SectorMetricsData } from "../lib/types";
 import {
   formatSectorValue,
@@ -7,6 +8,9 @@ import {
   cellTint,
   colHistory,
   openMetricHistory,
+  sortMatrixData,
+  cycleMatrixSort,
+  type MatrixSort,
   type RowStats,
 } from "../lib/sectorMetrics";
 import { cn } from "../lib/cn";
@@ -35,6 +39,12 @@ export function SectorMetricsTable({
     return m;
   }, [data]);
 
+  // Rank the columns by one metric row: high to low, low to high, source order.
+  // A pure reorder of `data.sectors`, so cells, heatmap, definitions, and the
+  // clickable histories are untouched.
+  const [sort, setSort] = useState<MatrixSort | null>(null);
+  const view = useMemo(() => sortMatrixData(data, sort), [data, sort]);
+
   return (
     <div className="rounded-md border border-gold/20 bg-ink-800 overflow-hidden">
       <div className="overflow-x-auto">
@@ -50,7 +60,7 @@ export function SectorMetricsTable({
               >
                 <span className="label">Metric</span>
               </th>
-              {data.sectors.map((s) => {
+              {view.sectors.map((s) => {
                 const col = data.data[s];
                 return (
                   <th
@@ -103,13 +113,42 @@ export function SectorMetricsTable({
                       scope="row"
                       className="sticky left-0 z-20 bg-ink-800 text-left px-4 py-2.5 border-b border-r border-white/[0.06] font-normal"
                     >
-                      <MetricTerm
-                        metric={met.label}
-                        resolve={resolveDef}
-                        className="text-[0.85rem] text-white/80 leading-snug"
-                      />
+                      <span className="flex items-center justify-between gap-1.5">
+                        <MetricTerm
+                          metric={met.label}
+                          resolve={resolveDef}
+                          className="text-[0.85rem] text-white/80 leading-snug"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSort((s) => cycleMatrixSort(s, met.key))}
+                          aria-pressed={sort?.key === met.key}
+                          aria-label={`Rank columns by ${met.label}`}
+                          title={
+                            sort?.key !== met.key
+                              ? `Rank columns by ${met.label}, high to low`
+                              : sort.dir === "desc"
+                                ? "Ranked high to low, click for low to high"
+                                : "Ranked low to high, click to restore the source order"
+                          }
+                          className={cn(
+                            "shrink-0 p-0.5 rounded-sm transition-colors",
+                            sort?.key === met.key ? "text-gold" : "text-white/25 hover:text-white/70",
+                          )}
+                        >
+                          {sort?.key === met.key ? (
+                            sort.dir === "desc" ? (
+                              <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUp className="w-3 h-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      </span>
                     </th>
-                    {data.sectors.map((s) => {
+                    {view.sectors.map((s) => {
                       const col = data.data[s];
                       const v = col?.[met.key];
                       const tint = cellTint(v, met.key, stats[met.key]);

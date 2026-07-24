@@ -1,4 +1,4 @@
-import type { IndustryEntry, SectionData, SectorEtfData, SectorMetricsData, StrategicGroups } from "./types";
+import type { IndividualBenchmarks, IndustryEntry, SectionData, SectorEtfData, SectorMetricsData, StrategicGroups } from "./types";
 import {
   ECONOMIC_DATA,
   INDUSTRIES,
@@ -234,6 +234,15 @@ export type IndividualResult =
   | { status: "ok"; data: SectionData }
   | { status: "not_found"; ticker: string }
   | { status: "api_down"; mock: SectionData };
+
+/** Industry + sector averages for one company's metrics, for the definition
+ *  sidebar's comparison block. Null when the backend is offline (the sidebar
+ *  simply omits the block; mock benchmarks would be fabricated context). */
+export async function fetchIndividualBenchmarks(ticker: string): Promise<IndividualBenchmarks | null> {
+  return fetchJson<IndividualBenchmarks>(
+    `/api/individual/${encodeURIComponent(ticker.toUpperCase())}/benchmarks`,
+  );
+}
 
 export async function fetchIndividual(ticker: string): Promise<IndividualResult> {
   const t = ticker.toUpperCase();

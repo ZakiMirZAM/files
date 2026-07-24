@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BookOpen, Maximize2, Minimize2, X } from "lucide-react";
 import { anyDefByNumber } from "../../lib/allDefinitions";
-import type { DefinitionSeries } from "../../lib/individualSeries";
+import type { DefinitionBenchmark, DefinitionSeries } from "../../lib/individualSeries";
 import type { Metric, RecessionBand } from "../../lib/types";
 import { formatPercent } from "../../lib/format";
+import { formatSectorValue } from "../../lib/sectorMetrics";
 import {
   closeDefinition,
   getOpenDefinition,
@@ -27,6 +28,52 @@ interface DefinitionPanelProps {
    */
   metricBlocks?: Map<number, Metric>;
   recessionBands?: RecessionBand[];
+  /**
+   * definition number -> this company's value beside its industry and sector
+   * averages (individual page only). Rendered as a small comparison block
+   * between the historical chart and the definition text.
+   */
+  benchmarks?: Map<number, DefinitionBenchmark>;
+}
+
+function BenchmarkRow({
+  name,
+  value,
+  unit,
+  max,
+  accent,
+}: {
+  name: string;
+  value: number | null;
+  unit: DefinitionBenchmark["unit"];
+  max: number;
+  accent?: boolean;
+}) {
+  const width = value != null && max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="w-28 shrink-0 text-[0.7rem] text-white/55 truncate" title={name}>
+        {name}
+      </span>
+      <span className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+        <span
+          className={cn(
+            "block h-full rounded-full",
+            accent ? "bg-gold/80" : value != null && value < 0 ? "bg-loss/60" : "bg-white/25",
+          )}
+          style={{ width: `${width}%` }}
+        />
+      </span>
+      <span
+        className={cn(
+          "w-[4.5rem] shrink-0 text-right font-mono text-[0.75rem] tabular-nums",
+          accent ? "text-gold" : "text-white/70",
+        )}
+      >
+        {formatSectorValue(value, unit)}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -37,7 +84,7 @@ interface DefinitionPanelProps {
  * an override series (one company's trend, opened from the comparative matrix),
  * else a full economic MetricBlock, else the lean per-metric DefinitionChart.
  */
-export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = [] }: DefinitionPanelProps) {
+export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = [], benchmarks }: DefinitionPanelProps) {
   const openState = useSyncExternalStore(subscribeDefinition, getOpenDefinition);
   const open = openState != null;
   const openNumber = openState?.number ?? null;
@@ -49,6 +96,15 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
   const block = !overrideSeries && openNumber != null ? metricBlocks?.get(openNumber) : undefined;
   const series =
     overrideSeries ?? (openNumber != null && !block ? seriesIndex?.get(openNumber) : undefined);
+  const bench = openNumber != null && openNumber > 0 ? benchmarks?.get(openNumber) : undefined;
+  const benchMax = bench
+    ? Math.max(
+        ...[bench.company, bench.industry, bench.sector]
+          .filter((v): v is number => v != null && Number.isFinite(v))
+          .map((v) => Math.abs(v)),
+        0,
+      )
+    : 0;
 
   const title = overrideTitle ?? def?.title ?? "Definition";
   const hasContent = open && (def != null || overrideDescription != null || overrideSeries != null);
@@ -204,6 +260,36 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                         }}
                       />
                     )}
+                  </div>
+                )}
+                {bench && (
+                  <div className="mb-5 pb-5 border-b border-gold/10">
+                    <p className="label mb-2.5">Against its industry and sector</p>
+                    <div className="space-y-2">
+                      <BenchmarkRow
+                        name="This company"
+                        value={bench.company}
+                        unit={bench.unit}
+                        max={benchMax}
+                        accent
+                      />
+                      <BenchmarkRow
+                        name={bench.industryName ?? "Industry"}
+                        value={bench.industry}
+                        unit={bench.unit}
+                        max={benchMax}
+                      />
+                      <BenchmarkRow
+                        name={bench.sectorName ?? "Sector"}
+                        value={bench.sector}
+                        unit={bench.unit}
+                        max={benchMax}
+                      />
+                    </div>
+                    <p className="mt-2.5 text-[0.65rem] leading-relaxed text-white/35">
+                      Group values are market-cap-weighted averages of each company's most
+                      recent fiscal year, from the sector and industry scorecards.
+                    </p>
                   </div>
                 )}
                 {overrideDescription != null ? (

@@ -1,7 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { SectorColumn, SectorCellPoint, SectorMetricDef, SectorMetricsData } from "../lib/types";
-import { formatSectorValue, rowStats, cellTint, type RowStats } from "../lib/sectorMetrics";
+import {
+  formatSectorValue,
+  rowStats,
+  cellTint,
+  sortMatrixData,
+  cycleMatrixSort,
+  type MatrixSort,
+  type RowStats,
+} from "../lib/sectorMetrics";
 import { cn } from "../lib/cn";
 import { MetricTerm } from "./individual/DefinitionsBlock";
 import { openDefinitionSeries } from "../lib/definitionPanelStore";
@@ -36,6 +45,12 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
     for (const met of data.metrics) m[met.key] = rowStats(data, met.key);
     return m;
   }, [data]);
+
+  // Rank the company rows by one metric column: high to low, low to high,
+  // source order. A pure reorder of `data.sectors` (the row tickers), so cells,
+  // heatmap, definitions, and the clickable histories are untouched.
+  const [sort, setSort] = useState<MatrixSort | null>(null);
+  const view = useMemo(() => sortMatrixData(data, sort), [data, sort]);
 
   // Contiguous metric groups → spans for the top header row.
   const groups = useMemo(() => {
@@ -122,12 +137,39 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                       {met.label}
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setSort((s) => cycleMatrixSort(s, met.key))}
+                    aria-pressed={sort?.key === met.key}
+                    aria-label={`Rank companies by ${met.label}`}
+                    title={
+                      sort?.key !== met.key
+                        ? `Rank companies by ${met.label}, high to low`
+                        : sort.dir === "desc"
+                          ? "Ranked high to low, click for low to high"
+                          : "Ranked low to high, click to restore the source order"
+                    }
+                    className={cn(
+                      "mt-1 inline-flex p-0.5 rounded-sm transition-colors",
+                      sort?.key === met.key ? "text-gold" : "text-white/25 hover:text-white/70",
+                    )}
+                  >
+                    {sort?.key === met.key ? (
+                      sort.dir === "desc" ? (
+                        <ArrowDown className="w-3 h-3" />
+                      ) : (
+                        <ArrowUp className="w-3 h-3" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3" />
+                    )}
+                  </button>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {data.sectors.map((ticker) => {
+            {view.sectors.map((ticker) => {
               const row = data.data[ticker];
               return (
                 <tr key={ticker} className="hover:bg-white/[0.015]">

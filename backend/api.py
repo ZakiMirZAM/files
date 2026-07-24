@@ -5472,6 +5472,140 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
     }
 
 
+# ── /api/individual/{ticker}/benchmarks ─ industry + sector peer averages ────
+# The definition sidebar's "you vs industry vs sector" block. Reuses the two
+# cached scorecard matrices (the same market-cap-weighted, FX-weighted columns
+# the Sector and Industry pages show) re-keyed onto the individual page's
+# metric keys. The company's own latest-year value runs through the SAME
+# _company_metrics path the matrices use, so all three numbers share units
+# (percents already ×100) and methodology.
+_BENCHMARK_KEY_MAP: dict[str, str] = {
+    # individual DISPLAY_METRICS key -> matrix _SECTOR_METRIC_DEFS key
+    "roic": "roic",
+    "wacc": "wacc",
+    "roic_wacc_spread": "roicWaccSpread",
+    "eva_margin": "evaMargin",
+    "roe": "roeEquity",
+    "cost_of_equity": "costOfEquity",
+    "excess_return": "excessReturnEquity",
+    "justified_pb": "justifiedPB",
+    "pb": "actualPB",
+    "pe": "peRatio",
+    "net_interest_margin": "netInterestMargin",
+    "dupont_tax_burden": "dupontTaxBurden",
+    "dupont_interest_burden": "dupontInterestBurden",
+    "dupont_ebit_margin": "dupontEbitMargin",
+    "net_margin": "netMargin",
+    "asset_turnover": "dupontAssetTurnover",
+    "equity_multiplier": "dupontEquityMultiplier",
+    "operating_margin": "operatingMargin",
+    "revenue_growth": "revenueGrowth",
+    "net_income_growth": "netIncomeGrowth",
+    "operating_leverage": "operatingLeverage",
+    "capex_depreciation": "capexToDepreciation",
+    "sales_invested_capital": "salesToInvestedCapital",
+    "fcf_net_income": "fcfToNetIncome",
+    "net_debt_ocf": "netDebtToOcf",
+    "liabilities_equity": "liabilitiesToEquity",
+}
+
+
+def _bench_num(col: dict[str, Any], key: str) -> float | None:
+    v = col.get(key)
+    if not isinstance(v, (int, float)):
+        return None
+    f = float(v)
+    return f if f == f and abs(f) != float("inf") else None
+
+
+def _benchmark_payload(ticker: str, sector: str | None, industry: str | None,
+                       company_col: dict[str, Any], industry_col: dict[str, Any],
+                       sector_col: dict[str, Any]) -> dict[str, Any]:
+    """Pure projection of the three matrix columns onto individual metric keys.
+    Only metrics with at least one group benchmark are emitted; the company's
+    own value may be None (the sidebar still shows the group context)."""
+    defs = {k: (lbl, unit) for k, lbl, unit, _grp, _d in _SECTOR_METRIC_DEFS}
+    metrics: dict[str, dict[str, Any]] = {}
+    for ind_key, mx_key in _BENCHMARK_KEY_MAP.items():
+        if mx_key not in defs:
+            continue
+        label, unit = defs[mx_key]
+        ind_v = _bench_num(industry_col, mx_key)
+        sec_v = _bench_num(sector_col, mx_key)
+        if ind_v is None and sec_v is None:
+            continue
+        metrics[ind_key] = {
+            "label": label,
+            "unit": unit,
+            "company": _bench_num(company_col, mx_key),
+            "industry": ind_v,
+            "sector": sec_v,
+        }
+    return {"ticker": ticker, "sector": sector, "industry": industry, "metrics": metrics}
+
+
+def _company_benchmark_metrics(ticker: str) -> dict[str, Any]:
+    """The company's own latest-year metric column, computed by the SAME
+    _company_metrics path the matrices use so units and method match the
+    group columns. Best effort: {} on any failure."""
+    try:
+        sel = ", ".join(f'f."{c}"' for c in _SECTOR_NEEDED_COLS)
+        sql = (
+            f"SELECT f.Ticker, t.sector AS sec, {_cb_beta('t')}, "
+            'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
+            " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
+            " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
+            " WHERE UPPER(f.Ticker) = ?"
+            " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
+        )
+        with db_conn() as conn:
+            rows = conn.execute(sql, (ticker,)).fetchall()
+        rs = [r for r in rows if _sector_row_plausible(r)]
+        if not rs:
+            return {}
+        rs.sort(key=lambda x: int(x["yr"]), reverse=True)
+        latest = _latest_or_ttm(rs, ticker)
+        prior = rs[1] if len(rs) > 1 else None
+        return _company_metrics(latest, prior)
+    except Exception as exc:  # noqa: BLE001 — the company column is a nicety
+        log.warning("[api] company benchmark column for %s failed: %s", ticker, exc)
+        return {}
+
+
+@app.get("/api/individual/{ticker}/benchmarks")
+@limiter.limit("20/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def individual_benchmarks_endpoint(request: Request,
+                                   ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    tk = _resolve_symbol(ticker)
+    with db_conn() as conn:
+        meta = conn.execute(
+            "SELECT sector, industry FROM tickers WHERE UPPER(ticker) = ?", (tk,),
+        ).fetchone()
+    sector = meta["sector"] if meta else None
+    industry = meta["industry"] if meta else None
+
+    industry_col: dict[str, Any] = {}
+    sector_col: dict[str, Any] = {}
+    if sector:
+        # Both helpers are @cached for 30 min; after any sector/industry page
+        # view (or a prior call here) these are dictionary lookups.
+        try:
+            if industry:
+                matrix = _industry_metrics_for_sector(sector)
+                industry_col = (matrix.get("data") or {}).get(industry) or {}
+        except Exception as exc:  # noqa: BLE001 — a missing lens must not 500
+            log.warning("[api] industry benchmark for %s (%s) failed: %s", tk, sector, exc)
+        try:
+            smatrix = _sector_current_metrics()
+            sector_col = (smatrix.get("data") or {}).get(sector) or {}
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[api] sector benchmark for %s (%s) failed: %s", tk, sector, exc)
+
+    return _benchmark_payload(tk, sector, industry,
+                              _company_benchmark_metrics(tk), industry_col, sector_col)
+
+
 @app.get("/api/individual/{ticker}")
 @limiter.limit("10/minute")
 @cached(ttl_seconds=30 * 60, key_prefix="db")

@@ -15,7 +15,7 @@
 // formatter. Definitions with no matching series (valuation models, abstract
 // scores) simply get no entry, and the panel shows the text alone.
 
-import type { Metric, MetricMeta, SectionData, VerticalTable } from "./types";
+import type { IndividualBenchmarks, Metric, MetricMeta, SectionData, SectorMetricUnit, VerticalTable } from "./types";
 import { formatCurrency, formatNumber, formatPercent } from "./format";
 import { formatMetricValue } from "./metricFormat";
 import { resolveDefNumber } from "./individualDefinitions";
@@ -173,5 +173,49 @@ export function buildSeriesIndex(data: SectionData | null | undefined): Map<numb
   addVertical(analysis.vertical?.balance, "Total Assets");
   addVertical(analysis.vertical?.cashflow, "Revenue");
 
+  return index;
+}
+
+// ── Benchmark index: definition number -> company vs industry vs sector ─────
+
+export interface DefinitionBenchmark {
+  label: string;
+  unit: SectorMetricUnit;
+  company: number | null;
+  industry: number | null;
+  sector: number | null;
+  industryName: string | null;
+  sectorName: string | null;
+}
+
+/**
+ * Key the /api/individual/{ticker}/benchmarks payload by definition number,
+ * so the sidebar can show "this company vs its industry vs its sector" under
+ * the metric the user opened. The benchmark metrics are keyed by the
+ * individual page's metricMeta keys; each resolves to its definition number
+ * through the SAME label -> number path buildSeriesIndex uses, so the
+ * comparison always lands on the definition the label opens. Pure.
+ */
+export function buildBenchmarkIndex(
+  benchmarks: IndividualBenchmarks | null | undefined,
+  meta: MetricMeta[] | null | undefined,
+): Map<number, DefinitionBenchmark> {
+  const index = new Map<number, DefinitionBenchmark>();
+  if (!benchmarks || !meta) return index;
+  for (const m of meta) {
+    const entry = benchmarks.metrics[m.key];
+    if (!entry) continue;
+    const number = resolveDefNumber(m.label);
+    if (number == null || index.has(number)) continue;
+    index.set(number, {
+      label: entry.label,
+      unit: entry.unit,
+      company: entry.company,
+      industry: entry.industry,
+      sector: entry.sector,
+      industryName: benchmarks.industry,
+      sectorName: benchmarks.sector,
+    });
+  }
   return index;
 }
