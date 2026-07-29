@@ -104,10 +104,20 @@ Five always-on local processes: **ollama** (embeddings), **backend** (`start_bac
   `/api/health` no longer leaks the DB path.
 - All RAG protection (origin pinning, per-IP rate limits, wildcard-CORS strip, body caps) is done
   at **nginx** — treat `rag/server.py` as **protected**: never change its prompt, model, or Claude
-  SDK logic without explicit owner approval. One owner-approved change exists (2026-07-17): the
-  vault search runs via `asyncio.to_thread` (blocking embed/KNN off the event loop — the fix for
-  /ask 500s under parallel load) and the three answer handlers return JSON 503 on SDK failure
-  instead of aiohttp's HTML 500. Prompts, models, tools, and budgets are unchanged.
+  SDK logic without explicit owner approval. Three owner-approved changes exist so far:
+  - **2026-07-17**: the vault search runs via `asyncio.to_thread` (blocking embed/KNN off the event
+    loop — the fix for /ask 500s under parallel load) and the three answer handlers return JSON 503
+    on SDK failure instead of aiohttp's HTML 500. Prompts, models, tools, and budgets unchanged.
+  - **2026-07-28**: `options_for` passes `setting_sources=[]` + `strict_mcp_config=True`. `None` does
+    NOT mean "load nothing" in this SDK, it omits the flag, so every request had been loading this
+    repo's `CLAUDE.md`, ~31 user skills and user hooks. `rag/eval/verify_isolation.py` asserts the
+    fix at the argv level.
+  - **2026-07-29**: **`ASK_SYSTEM` was rewritten** from `docs/prompts/metric-definitions-master-prompt-v2.md`
+    (answer-first structure, the house style rules, the verified Quality Score facts, plus new
+    CALCULATOR and WRITING FIGURES sections), and `RAG_CALC` now defaults to `on`. `EXPLAIN_SYSTEM`
+    and `DEFINE_SYSTEM` are byte-identical and still hash-locked. **The prompts are no longer
+    immutable, but they are still hash-pinned**: an edit must update `EXPECTED` in
+    `rag/test_prompts.py` in the same commit. Runtime mutation of a prompt remains banned outright.
 
 **Required prod env vars** (machine/user level so services inherit them): `ENV=production`,
 `ADMIN_TOKEN`, `ALLOWED_ORIGINS=https://intrinsicfined.org,https://www.intrinsicfined.org`,
@@ -288,6 +298,8 @@ Four cross-cutting frontend systems that span several files:
 
 ### RAG server (`rag/`)
 `index_vault.py` chunks an Obsidian "Financial Texts" vault into `vault.db` (sqlite-vec, nomic-embed-text 768-d, incremental on mtime). `server.py` exposes three answer routes plus `GET /health`: `POST /ask` (full qualitative-question answers, Sonnet), `POST /explain` (explain a highlighted selection, Haiku), and `POST /define` (term definition, Haiku, glossary-cached). Each route has its own system prompt, `max_turns` cap, and `max_budget_usd` guard. The local KNN `search_vault` tool is the vault source; `WebSearch`/`WebFetch` are also allowed. Answer priority is **vault → web → general knowledge**, and it never refuses. `/ask`, `/explain`, and `/define` accept an optional `data`/page-context block of figures already computed for the subject (company, sector, yield curve); when present, those page figures are **authoritative** and override anything a web search returns, so explanations stay tied to the app's own valuation rather than generic definitions.
+
+**Research MCP servers (`rag/research_tools.py`, flag `RAG_RESEARCH` ∈ `on|off`, default on).** Three free/keyless LOCAL stdio MCP servers extend `/ask` and `/explain`: `fetch` (`mcp-server-fetch`, full-page URL→markdown), `arxiv` (`arxiv-mcp-server`, search/abstract/download/read full papers, storage pinned to `rag/arxiv_papers/`), and `papers` (`paper-search-mcp`, multi-source paper search incl. SSRN/Semantic Scholar/OpenAlex). The 72 advertised tools are curated down to 10 (`ALLOWED_RESEARCH`); the rest — Sci-Hub, every arbitrary-path `download_*`, workflow machinery — are stripped via `disallowed_tools` AND denied by the guard. **After upgrading any of the three packages run `python rag/probe_mcp_tools.py`** — tool names are exact-matched, so a renamed tool silently becomes a denied tool. Vault-first priority for these tools is restated by a GUIDANCE block appended to the **user message** in the handlers, and it stays there deliberately: `RAG_RESEARCH` can be `off` and `_available()` drops any server whose package is missing, so the set of research tools varies per request while a system prompt cannot. `ASK_SYSTEM` only adds a conditional, name-free note that these tools may or may not be offered. `off` restores the prior tool surface exactly.
 
 ## Conventions specific to this repo
 - **DB path is overridable** via the `FINANCIALS_DB` env var; defaults to repo-root `financials.db`. `backend/api.py` injects `backend/`, `data/`, and `remediation/` onto `sys.path` so those modules import by bare name. Use `FINANCIALS_DB` to test a migration against a copy before swapping it in — that is how the remediation shipped.

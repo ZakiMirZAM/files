@@ -18,8 +18,12 @@ import asyncio
 import contextvars
 import json
 import os
+import secrets
 import sqlite3
 import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
 
 import sqlite_vec
 from aiohttp import web
@@ -27,6 +31,7 @@ from aiohttp import web
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    EffortLevel,
     PermissionResultAllow,
     PermissionResultDeny,
     ResultMessage,
@@ -37,7 +42,11 @@ from claude_agent_sdk import (
     tool,
 )
 
-from rag_embed import embed_query
+import calc_tools
+import rarr
+import research_tools
+import retrieval
+import verify
 from news_tools import NEWS_MCP, NEWS_TOOLS
 from social_tools import SOCIAL_MCP, SOCIAL_TOOLS
 
@@ -54,22 +63,60 @@ else:
 # --- config ---
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault.db")
 PORT = 3001
-ASK_MODEL = "claude-sonnet-4-6"      # stronger model writes framework answers
+# Overridable so a benchmark or an experiment can run a different model without a
+# code round-trip; the SHIPPED default is what matters and the tests pin it.
+ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-sonnet-5")  # stronger model writes framework answers
 EXPLAIN_MODEL = "claude-haiku-4-5"   # efficient model for short highlight explanations
 DEFINE_MODEL = "claude-haiku-4-5"    # efficient model for cached term tooltips
+# Reasoning effort per route, same idea as the model constants above: "max" for
+# /ask (the flagship long-form answer, vault+web+calc+research tools, the output
+# users actually read as an analysis) and "low" for /explain and /define (short
+# sidebar text and cached tooltips, where speed matters more than depth and the
+# Haiku choice already signals that). "xhigh" is Opus-4.7-only and silently falls
+# back to "high" elsewhere, so it is not used here since ASK_MODEL may not be Opus.
+ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "max")  # type: ignore[assignment]
+EXPLAIN_EFFORT: EffortLevel = "low"
+DEFINE_EFFORT: EffortLevel = "low"
+# Keyed by `label` (the string run_agent already logs with, e.g. "/ask"), not by
+# model: EXPLAIN_MODEL and DEFINE_MODEL are currently the same string, and keying
+# by model would let one route's effort silently clobber the other's in the dict.
+EFFORT_BY_LABEL: dict[str, EffortLevel] = {
+    "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
+}
 VAULT_TOOL = "mcp__vault__search_vault"
 # The agent may use the vault search plus the web (vault-first sourcing, web for
 # accuracy/recency per the user's stated answer style); everything else is denied.
-ALLOWED_TOOLS = [VAULT_TOOL, "WebSearch", "WebFetch", *NEWS_TOOLS, *SOCIAL_TOOLS]
-POOL = 24          # KNN candidates before category filter
-POOL_CATEGORY = 400  # widen the candidate pool when filtering to one book
+# calc_tools.TOOLS is EMPTY unless RAG_CALC=on (default on since 2026-07-29, when
+# ASK_SYSTEM gained a CALCULATOR section), and research_tools.TOOLS is EMPTY unless
+# RAG_RESEARCH=on (default on), so each flag's off state restores the prior
+# advertised tool set exactly.
+ALLOWED_TOOLS = [VAULT_TOOL, "WebSearch", "WebFetch", *NEWS_TOOLS, *SOCIAL_TOOLS,
+                 *calc_tools.TOOLS, *research_tools.TOOLS]
 TOP_K = 6          # chunks handed to the model
+# Candidate pools, query expansion, the distance floor and de-duplication all live
+# in retrieval.py now. Set RAG_RETRIEVAL=off to fall back to the pre-2026-07-27
+# pure-vector path.
 
-# --- Prompt A: answer a framework question (rules traced to the user's history) ---
+# --- Prompt A: answer an analysis question -----------------------------------
+# Rebuilt 2026-07-29 from docs/prompts/metric-definitions-master-prompt-v2.md, the
+# owner's house instruction set, adapted from authoring definition FILES to
+# ANSWERING questions. Everything file-shaped (the 9-part template, the compliance
+# checklist, the output folder) is deliberately dropped; the style rules, the
+# sourcing order and the app-specific facts are carried over, and the master
+# prompt's two stale claims are corrected (see WHAT THIS APP COMPUTES).
+#
+# Four things here are load-bearing for code elsewhere. Do not weaken them without
+# reading what depends on them:
+#   * the PAGE DATA clause is the whole justification for eval/graders.py grading
+#     figures deterministically rather than fact-checking them,
+#   * the "Sources:" line must stay LAST, because eval/extract.py blanks from that
+#     match to end of string (MULTILINE + DOTALL) before scanning numbers,
+#   * the literal substrings "em dash" and "vault" are asserted by test_prompts.py,
+#   * WRITING FIGURES targets the Tier 0 matcher and the Tier 1 guards in rarr.py.
 ASK_SYSTEM = """\
 You are the analysis assistant inside a stock-valuation app. The user is studying one specific
 subject (a company ticker, a sector, an industry, a comparison set, or the economy) and has asked
-one framework question about it. Write the answer to that question, about that subject.
+one analysis question about it. Write the answer to that question, about that subject.
 
 SUBJECT AND QUESTION
 The user message gives you the subject and the exact question. Answer that question about that
@@ -77,7 +124,7 @@ subject. Do not answer a generic version. If the subject is a single company, na
 about it specifically. If a fact about the subject would change the answer and you are unsure of it,
 look it up before concluding.
 
-PAGE DATA (authoritative for the figures it provides — this rule overrides the sourcing order below)
+PAGE DATA (authoritative for the figures it provides, and this rule overrides the sourcing order below)
 The message may include a "Computed data on the page" block of figures the app has already pulled from
 its own live data sources for this subject (metrics, the yield curve, valuations, ratios, and so on).
 Those are the exact numbers the user is looking at on the screen. Treat them as the AUTHORITATIVE
@@ -95,13 +142,23 @@ SOURCING ORDER (always, in this order)
    thumb, and cite the source filename. If results are thin, search again with different wording.
 2. Reputable web second. When a fact must be current or exact (a number, a date, a filing figure, a
    named entity, a price) AND it is not already given in the "Computed data on the page" block, use
-   WebSearch or WebFetch to confirm it and cite the source inline. Never web-search a different value
-   for a figure the page already provides; the page figures are final. Prefer primary and
-   authoritative sources over aggregators.
+   WebSearch or WebFetch to confirm it and cite the source inline. Investopedia, Corporate Finance
+   Institute, Wall Street Prep, CFA Institute readings and Damodaran's NYU pages are the reference
+   sources for formulas and definitions. Prefer primary and authoritative sources over aggregators.
+   Never web-search a different value for a figure the page already provides; the page figures are final.
 3. General knowledge last, only to fill what the vault and web do not cover. Never refuse and never
    leave a gap marked "not in the vault." Fill it and say plainly that the point is general knowledge.
 
-LIVE NEWS AND REAL-USER REACTION (use for questions about sentiment, news, controversy, or how people view a company)
+CALCULATOR
+Every figure you work out yourself goes through the calculator tool rather than mental arithmetic:
+ratios, spreads, growth rates, margins, per-share figures, weighted averages, percentage changes.
+Pass the whole expression in one call, with nested parentheses where needed, and set the label
+argument to the name of what the number represents. Quote the returned result exactly, at the
+precision it comes back. Do not recompute a figure the page data block already gives you, and do not
+adjust a returned result by hand afterwards. If no calculator is offered on this request, keep each
+calculation simple enough that you can state its inputs in the sentence beside it.
+
+LIVE NEWS AND REAL-USER REACTION (for questions about sentiment, news, controversy, or how people view a company)
 When the question is about what is happening with a company, how the market or the public is reacting,
 recent news, controversy, or bull versus bear views, call company_news (recent finance-news headlines,
 which include Reuters and Bloomberg coverage) and social_reactions (StockTwits retail posts) for the
@@ -111,21 +168,63 @@ clearly promotional accounts, and say when a view is a fringe or low-reach minor
 consensus. Social sentiment is retail opinion, not fact: report it as such, keep it separate from the
 news, and cite the news sources. If a source returns nothing, note it briefly and rely on the others.
 
-DEPTH AND STRUCTURE
-- Lead with the answer. The first sentence states the conclusion; support follows.
+EXTERNAL RESEARCH TOOLS (only when this request offers them)
+Some requests also carry a full-page fetch tool and academic paper search tools. The user message names
+them when they are available, so do not assume they exist. When they are offered, use the fetch tool
+where a specific page's full text matters and a summary is not enough, and use the paper tools when a
+claim rests on published research: find the paper, read the abstract, then read the part you cite. The
+vault stays the primary voice, the page figures stay authoritative over anything these tools return,
+and every source you lean on is named in the Sources line.
+
+WHAT THIS APP COMPUTES (reference real surfaces, and never promise one that is missing)
+The individual company page charts 59 metrics with full history, grouped as DuPont, Profitability and
+EVA, Capital Efficiency, Leverage and Coverage, Working Capital and Cash Conversion, Valuation
+Multiples, Earnings Quality, Growth, and Risk. Around those charts the page carries an FCFF discounted
+cash flow, a reverse DCF, EVA and residual income, dividend discount and FCFE values, earnings power
+value, Tobin's Q, owner earnings, the Graham Number and net current asset value, a five-factor DuPont
+ROE split, the leverage decomposition of ROE, a bottom-up beta and a WACC build, earnings normalization
+(operating leases treated as debt, imputed interest, one-time items), credit analysis (synthetic
+rating, debt capacity, natural capital structure), a growth reconciliation with a life-cycle stage,
+Altman Z-Score, Beneish M-Score, uses of cash, common-size statements, and answer decks for strategic
+resources, the 7 Powers, ESG, executive compensation, and catalyst versus value trap. Sector, industry
+and comparative pages carry group value scores, integrity questions, life-cycle classification and
+strategic-group maps. Every metric name on every page opens a written definition in a sidebar, so
+assume a definition exists for any metric you name. Two limits matter. The FCFF family (discounted cash
+flow, EVA, reverse DCF) is switched off for financial-sector and real-estate companies, and the
+dividend discount model is marked not applicable for a company that pays no dividend, so never state
+that the page shows one of those values unless the page data block carries it. The Graham Number is
+read from the data vendor rather than derived by the app, so describe what the number means and do not
+present the app as computing it.
+
+THE QUALITY SCORE AND THE VERDICT (state these correctly whenever the question touches them)
+The score checks up to 15 ratios against fixed thresholds and reports the percentage that pass. A ratio
+with missing data is skipped rather than failed. The thresholds are Return on Equity at or above 0.15,
+Return on Invested Capital 0.12, Return on Assets 0.07, Return on Sales 0.10, Gross Profit Ratio 0.35,
+Asset Turnover 0.50, Current Ratio 1.50, Quick Ratio 1.00, Debt Service Coverage 1.50, Interest
+Coverage 5.00, Margin of Safety 0.20, Free Cash Flow Growth 0.05 and Net Income Growth 0.05, with Debt
+to Equity at or below 1.00 and Debt to Assets at or below 0.50. The verdict bands are 75 and above for
+a strong buy, 60 to 74 for a buy, 45 to 59 for a hold, 30 to 44 for a weak hold, and below 30 for
+avoid. Say plainly what the score is: a screening shortcut over accounting ratios, not a valuation.
+Fixed thresholds penalize sectors whose ratios are structurally low and flatter sectors whose ratios
+are structurally high.
+
+ANSWER SHAPE (answer first)
+- Sentence one states the conclusion. No preamble and no restatement of the question.
+- The support follows: the evidence, the figures, and the mechanism that produces the conclusion.
+- Always give the other side, and place it after the support. State the strongest argument against the
+  conclusion and what would have to be true for that argument to win. If the answer is yes, explain
+  what could make a careful analyst say no, and how. If the answer is no, do the reverse. An answer
+  that argues only one side is incomplete, however strong the evidence looks.
 - Do not throttle length. Give the depth the question genuinely needs, with no filler.
 - Produce a real conclusion, not a list of methods. Never answer "how to analyze X" with "plot it" or
-  "compare to a benchmark." Decompose into the sub-parts where the diagnostic value lives, read
-  indicators together rather than one by one, identify the regime they point to, and tie each
+  "compare to a benchmark." Decompose the subject into the parts where the diagnostic value sits, read
+  the indicators together rather than one at a time, name the regime they point to, and tie every
   analytical move to a concrete implication for this company, sector, or industry.
 - Use concrete numbers, named mechanisms, and specific examples. State calibrated uncertainty. When
   you do not know, say so.
 - Organize a multi-part answer with ## and ### headings and pipe tables so the user can scan.
 
 CRITICAL THINKING AND SKEPTICISM
-- Always give the other side. After you reach a conclusion, state the strongest argument against it and
-  what would have to be true for that argument to win. If the answer is yes, explain what could make a
-  careful analyst say no, and how. If the answer is no, do the reverse.
 - Default to skepticism. Question the assumptions behind the data and behind the bullish or bearish
   story, look for what a headline number hides, and weigh disconfirming evidence as hard as confirming
   evidence. Do not anchor on the first read.
@@ -136,25 +235,57 @@ CRITICAL THINKING AND SKEPTICISM
   quotations. If a fact cannot be verified and it matters to the answer, say so and reason without it
   rather than fabricating it.
 
-STYLE (match the app's definition style exactly)
-- No em dashes anywhere. Use a period, a comma, or parentheses.
+WRITING FIGURES SO THEY CAN BE CHECKED
+The app reconciles every number in the answer against the page data automatically, and it matches each
+number to the words immediately before it. Write so that check can succeed.
+- Name the metric in the same clause as its figure, using the app's own name for that metric. Write
+  "ROIC of 14.20%", not "the return sits at 14.20%".
+- Keep the precision the source states. Do not trim digits from a page figure and do not add digits it
+  does not have.
+- Keep the scale and the unit the page uses. If the page says $45.6B, do not write $45,600 million. A
+  level is written with %, a change in a percentage is written in pp, and a multiple is written with x.
+- State a figure plainly the first time it appears, then compare it in the next sentence. A figure
+  whose first appearance sits inside a comparison (above, below, exceeds, versus, compared to, spread,
+  gap, premium, discount, higher than, double, times the) or inside a subtraction cannot be corrected
+  automatically, so a wrong one there survives to the screen.
+- Give a benchmark or a pass mark its own table column with a header naming it, or write it with ">=",
+  so it reads as a threshold and not as a claim about the subject.
+- Put a worked calculation on its own line as a display equation rather than inside a sentence.
+- In a table, make the first column the metric name and give every column a header that names what its
+  numbers are.
+
+STYLE (the app's house style, and these are hard rules)
+- No em dashes anywhere. Use a period, a comma, or parentheses. In a table cell that has no value,
+  write "n/a", which is what the app itself writes. Never use a dash of any kind as a placeholder for
+  a missing or not-applicable value.
 - No analogies, metaphors, or "think of it like" comparisons. Explain the finance directly.
 - Do not open a sentence with a bare "It", "This", "That", "They", or "These" when the noun is
   unclear. Name the thing.
 - Keep sentences short, one idea each. If a sentence has more than two commas, split it.
-- Define every term that is not plain English the first time it appears.
+- Define every term that is not plain English the first time it appears. The reader is learning.
 - Use common vocabulary and reuse the same word for the same concept.
-- No bullet-point lists in prose. Put example and scenario lists in pipe tables. An ordered list is
-  allowed only for a sequence of steps or questions.
+- Do not import numbers the question does not need, such as credit-rating spread tables or
+  default-probability figures, unless the question is about credit itself.
+- No bullet lists in prose. Bullets do render on screen; the app style still rejects them. Put cases,
+  levels and scenarios in a pipe table. An ordered list is allowed only for a sequence of steps or
+  questions.
 - Banned filler: dive into, unleash, game-changing, delve, landscape, crucial, realm, tapestry,
   testament, navigate (figurative), robust (as filler).
 
-OUTPUT FORMAT (the app renderer is limited)
-- Use only ATX headings (#, ##, ###), pipe tables, ordered lists, bold, italic, and inline code. A
-  line that is a single inline-code span containing "=" renders as a display equation. No links,
-  images, footnotes, or fenced code blocks.
-- End with a line beginning "Sources:" listing the vault filenames and any web sources you used. If a
-  part rests on general knowledge, say which part."""
+OUTPUT FORMAT (what the app renderer actually supports)
+- Available: ATX headings (#, ##, ###), pipe tables, ordered lists, unordered lists, horizontal rules,
+  bold, italic, and inline code.
+- Not available: links, images, footnotes, fenced code blocks, blockquotes, and raw HTML. A markdown
+  link prints its own brackets and parentheses on screen, so name a source in words. A bare URL is
+  acceptable as plain text.
+- A paragraph that is exactly one inline-code span containing "=" or "√" renders as a display equation.
+  Inside an equation use ÷ for division, × for multiplication, − for subtraction, and √(...) for a
+  square root. A plain slash prints as a slash and loses the stacked fraction.
+- End with one line beginning "Sources:" and make it the LAST line of the answer. List the vault
+  filenames and the web, news and research sources you used, and say which part rests on general
+  knowledge. No other line anywhere in the answer may begin with "Source", "Sources", or "Related
+  chapters elsewhere in the library": everything after such a line is discarded before the app checks
+  the figures."""
 
 # --- Prompt B: explain a highlighted statement ---
 EXPLAIN_SYSTEM = """\
@@ -231,33 +362,28 @@ def get_db() -> sqlite3.Connection:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
+        # Builds the exact-phrase index once (~7s) if this database predates it.
+        retrieval.ensure_fts(conn)
         _db = conn
     return _db
 
 
 def search(qtext: str, category: str | None) -> list[dict]:
-    emb = embed_query(qtext)
-    pool = POOL_CATEGORY if category else POOL
+    """Expanded, hybrid, thresholded, de-duplicated retrieval (see retrieval.py)."""
     with _db_lock:
-        # sqlite-vec requires the KNN LIMIT to apply to the vec0 scan itself, so
-        # do the nearest-neighbor search in a CTE, then join to the text rows.
-        rows = get_db().execute(
-            """
-            WITH knn AS (
-                SELECT rowid, distance FROM vec_chunks
-                WHERE embedding MATCH ? ORDER BY distance LIMIT ?
-            )
-            SELECT c.source, c.text, knn.distance
-            FROM knn JOIN chunks c ON c.id = knn.rowid
-            ORDER BY knn.distance
-            """,
-            (sqlite_vec.serialize_float32(emb), pool),
-        ).fetchall()
-    results = [{"source": s, "text": t, "distance": d} for s, t, d in rows]
-    if category:
-        cl = category.lower()
-        results = [r for r in results if cl in r["source"].lower()]
-    return results[:TOP_K]
+        return retrieval.run(get_db(), qtext, category, TOP_K)
+
+
+def see_also(sources: list[str]) -> str:
+    """A short pointer line built from the vault's own `## Related` graph, so the
+    model can follow a cross-book link with a second search_vault call instead of
+    having its six passage slots diluted by speculative neighbours."""
+    with _db_lock:
+        links = retrieval.related_notes(get_db(), sources)
+    if not links:
+        return ""
+    joined = "; ".join(f"{r['note']} ({r['book']})" for r in links if r.get("note"))
+    return f"\n\nRelated chapters elsewhere in the library: {joined}" if joined else ""
 
 
 @tool("search_vault", "Search the financial-texts library for passages relevant to a query. "
@@ -278,7 +404,8 @@ async def search_vault(args):
     if not results:
         return {"content": [{"type": "text", "text": "No matching passages found in the library."}]}
     blocks = [f"[{i}] (source: {r['source']})\n{r['text']}" for i, r in enumerate(results, 1)]
-    return {"content": [{"type": "text", "text": "\n\n".join(blocks)}]}
+    tail = await asyncio.to_thread(see_also, [r["source"] for r in results])
+    return {"content": [{"type": "text", "text": "\n\n".join(blocks) + tail}]}
 
 
 VAULT_MCP = create_sdk_mcp_server(name="vault", version="1.0.0", tools=[search_vault])
@@ -294,17 +421,39 @@ def make_guard(allowed: list[str]):
 
 
 def options_for(model: str, system_prompt: str, max_turns: int, allow_web: bool = True,
-                budget_usd: float | None = None) -> ClaudeAgentOptions:
+                budget_usd: float | None = None,
+                effort: EffortLevel | None = None) -> ClaudeAgentOptions:
     allowed = ALLOWED_TOOLS if allow_web else [VAULT_TOOL]
+    # `system_prompt` is passed straight through, unmodified, in every flag state.
+    # The calculator is taught through its TOOL DESCRIPTION, never by appending to
+    # a prompt. rag/test_prompts.py asserts this across all flag combinations.
     return ClaudeAgentOptions(
         model=model,
         system_prompt=system_prompt,
-        mcp_servers={"vault": VAULT_MCP, "news": NEWS_MCP, "social": SOCIAL_MCP},
+        mcp_servers={"vault": VAULT_MCP, "news": NEWS_MCP, "social": SOCIAL_MCP,
+                     **calc_tools.servers(), **research_tools.servers()},
+        # The research servers advertise 72 tools; only the curated subset in
+        # research_tools.ALLOWED_RESEARCH is usable. Stripping the rest here keeps
+        # their schemas out of every request; the exact-match guard denies them
+        # regardless.
+        disallowed_tools=research_tools.disallowed(),
         allowed_tools=allowed,
         can_use_tool=make_guard(allowed),
         max_turns=max_turns,             # the agentic-loop cap; high enough for vault + web research
         max_budget_usd=budget_usd,       # secondary guard: stop the loop past this per-request spend
-        setting_sources=None,            # ignore project CLAUDE.md / settings / hooks
+        effort=effort,                   # None -> SDK default ("high"); see EFFORT_BY_LABEL above
+        # [] is isolation mode, NOT None. `None` omits the --setting-sources flag
+        # entirely (see _apply_skills_defaults + the `is not None` guard in the SDK's
+        # subprocess_cli.py), so the CLI falls back to its default and loads user +
+        # project settings, the repo's 53 KB CLAUDE.md, and user hooks into every
+        # request. `[]` emits `--setting-sources=`, which is what this line always
+        # intended: the answer is built from ASK_SYSTEM + the vault + the curated
+        # tools below, and nothing else on the filesystem.
+        setting_sources=[],
+        # Only the mcp_servers dict above is live; ignore the repo's .mcp.json and
+        # any MCP entries in settings, so the advertised tool surface is exactly
+        # what ALLOWED_TOOLS declares.
+        strict_mcp_config=True,
         cwd=os.path.dirname(os.path.abspath(__file__)),
     )
 
@@ -323,8 +472,13 @@ async def run_agent(prompt: str, model: str, system_prompt: str, max_turns: int,
     final: str | None = None
     tool_calls: list[str] = []
     try:
+        # effort is looked up by `label`, not passed as a run_agent parameter:
+        # run_agent's own signature is pinned by test_verify.py, so this lookup
+        # lives in the call body instead of adding a new parameter.
+        effort = EFFORT_BY_LABEL.get(label)
         async for msg in query(prompt=_stream_prompt(prompt),
-                               options=options_for(model, system_prompt, max_turns, allow_web, budget_usd)):
+                               options=options_for(model, system_prompt, max_turns, allow_web,
+                                                   budget_usd, effort)):
             if isinstance(msg, AssistantMessage):
                 for b in msg.content:
                     if isinstance(b, TextBlock):
@@ -343,6 +497,60 @@ async def run_agent(prompt: str, model: str, system_prompt: str, max_turns: int,
     answer = (final or "".join(answer_parts)).strip()
     sources = list(dict.fromkeys(box))  # unique, retrieval order
     return answer, sources
+
+
+# --- Tier 1 hand-off (POST /verify) ---
+# Tier 0 runs inline and returns its report with the answer. Tier 1 (rarr.py) hits
+# the app's own endpoints, so it must not sit inside the answer's latency. The
+# answer is therefore parked here under an opaque token and the client asks for the
+# revision separately.
+#
+# In process, on purpose. The store is a cache, not a record: a restart losing it
+# costs the user one "expired" and a re-ask, whereas persisting answers would put
+# every user's prose on disk for a feature that is only ever read seconds later.
+VERIFY_TTL_S = 15 * 60
+VERIFY_MAX_TOKENS = 256          # LRU cap; bounds the memory an abusive caller can pin
+TIER1_TIMEOUT_S = 45             # hard ceiling on the whole Tier 1 pass
+
+
+@dataclass(frozen=True)
+class Pending:
+    answer: str
+    data_context: str
+    context: str
+    section: str
+    report: dict
+    expires: float
+
+
+_pending: "OrderedDict[str, Pending]" = OrderedDict()
+
+
+def issue_verify_token(answer: str, data_context: str, context: str, section: str,
+                       report: dict) -> str:
+    now = time.monotonic()
+    for key in [k for k, v in _pending.items() if v.expires <= now]:
+        _pending.pop(key, None)
+    while len(_pending) >= VERIFY_MAX_TOKENS:
+        _pending.popitem(last=False)           # oldest first
+    token = secrets.token_urlsafe(18)
+    _pending[token] = Pending(answer, data_context, context, section, report,
+                              now + VERIFY_TTL_S)
+    return token
+
+
+def take_pending(token: str) -> Pending | None:
+    """The parked answer for a token, or None when it never existed or has aged
+    out. Not single-use: a client whose first attempt came back `partial` must be
+    able to try again inside the TTL."""
+    entry = _pending.get(token)
+    if entry is None:
+        return None
+    if entry.expires <= time.monotonic():
+        _pending.pop(token, None)
+        return None
+    _pending.move_to_end(token)
+    return entry
 
 
 # --- HTTP ---
@@ -382,18 +590,43 @@ async def handle_ask(request: web.Request) -> web.Response:
             "You may still use the web freely for facts, events, history, and anything NOT shown above."
         )
     prompt += f"\n\nQuestion: {question}"
+    # Research-tool guidance rides in the USER message: the system prompts are
+    # immutable, and the external packages own their tool descriptions, so this is
+    # the only place the vault-first priority can be restated for the new tools.
+    if research_tools.MODE == "on":
+        prompt += research_tools.GUIDANCE
     # Web stays available (for facts the page does not show); the prompt above keeps
     # the page figures authoritative over any conflicting web value.
+    ledger_token = calc_tools.begin()
     try:
+        # 4.00, raised from 2.00 on 2026-07-29. The rewritten ASK_SYSTEM asks for
+        # more work per answer (a calculator call per derived figure, named
+        # reference sources, the research tools), and a measured CAT run spent
+        # $2.598 across 20 turns. Hitting the cap is the worst possible outcome:
+        # the SDK stops the loop and the handler 503s, so the full spend is paid
+        # and NO answer is delivered. The cap is a runaway guard, not a target.
         answer, sources = await run_agent(
-            prompt, ASK_MODEL, ASK_SYSTEM, max_turns=28, label="/ask", budget_usd=2.0)
+            prompt, ASK_MODEL, ASK_SYSTEM, max_turns=28, label="/ask", budget_usd=4.0)
     except Exception as exc:
         # A transient SDK failure (control-request timeout, ProcessError, rate
         # limit) must come back as parseable JSON, not aiohttp's HTML 500 page.
         print(f"[/ask] agent failed: {type(exc).__name__}: {exc}", flush=True)
         return web.json_response(
             {"answer": "", "sources": [], "error": "AI backend temporarily unavailable"}, status=503)
-    return web.json_response({"answer": answer, "sources": sources})
+    finally:
+        ledger = calc_tools.end(ledger_token)
+    payload = {"answer": answer, "sources": sources}
+    report = verify.tier0(answer, data_context, ledger)
+    verify.log_line("/ask", report)
+    if report:
+        payload["verification"] = verify.public(report)
+        # Only `on` issues a token, and only for an answer Tier 0 actually flagged.
+        # In `shadow` the per-claim detail is withheld, so there is nothing for
+        # Tier 1 to act on and no token to hand out.
+        if verify.MODE == "on" and report.get("status") == "flagged":
+            payload["verifyToken"] = issue_verify_token(
+                answer, data_context, context, section, report)
+    return web.json_response(payload)
 
 
 async def handle_explain(request: web.Request) -> web.Response:
@@ -416,6 +649,11 @@ async def handle_explain(request: web.Request) -> web.Response:
             + "\n\nUse these exact figures where they relate to the highlighted text; do not replace them "
             "with a different web value."
         )
+    # Same user-message guidance as /ask: system prompts are immutable, so the
+    # research tools' vault-first priority is restated here.
+    if research_tools.MODE == "on":
+        prompt += research_tools.GUIDANCE
+    ledger_token = calc_tools.begin()
     try:
         explanation, sources = await run_agent(
             prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=0.75)
@@ -423,7 +661,14 @@ async def handle_explain(request: web.Request) -> web.Response:
         print(f"[/explain] agent failed: {type(exc).__name__}: {exc}", flush=True)
         return web.json_response(
             {"explanation": "", "sources": [], "error": "AI backend temporarily unavailable"}, status=503)
-    return web.json_response({"explanation": explanation, "sources": sources})
+    finally:
+        ledger = calc_tools.end(ledger_token)
+    payload = {"explanation": explanation, "sources": sources}
+    report = verify.tier0(explanation, data_context, ledger)
+    verify.log_line("/explain", report)
+    if report:
+        payload["verification"] = verify.public(report)
+    return web.json_response(payload)
 
 
 async def handle_define(request: web.Request) -> web.Response:
@@ -450,6 +695,7 @@ async def handle_define(request: web.Request) -> web.Response:
             "\n\nComputed data on the page (AUTHORITATIVE — use these exact figures where relevant, do not "
             "replace with a web value):\n" + data_context
         )
+    ledger_token = calc_tools.begin()
     try:
         definition, _used = await run_agent(
             prompt, DEFINE_MODEL, DEFINE_SYSTEM, max_turns=10, label="/define", budget_usd=0.5)
@@ -458,17 +704,73 @@ async def handle_define(request: web.Request) -> web.Response:
         print(f"[/define] agent failed: {type(exc).__name__}: {exc}", flush=True)
         return web.json_response(
             {"term": term, "definition": "", "error": "AI backend temporarily unavailable"}, status=503)
+    finally:
+        ledger = calc_tools.end(ledger_token)
+    # An empty definition must never enter the glossary. run_agent returns "" (not
+    # an exception) when the agent exhausts max_turns or its budget calling tools
+    # without ever emitting a final answer; the exception branch above already
+    # refuses to cache, and a successful-but-empty return needs the same refusal,
+    # or one transient hiccup blanks that term's tooltip for every user forever.
+    if not definition.strip():
+        print("[/define] empty definition, not caching", flush=True)
+        return web.json_response(
+            {"term": term, "definition": "", "error": "AI backend temporarily unavailable"}, status=503)
+    report = verify.tier0(definition, data_context, ledger)
+    verify.log_line("/define", report)
     with _db_lock:
         db = get_db()
         db.execute("INSERT OR REPLACE INTO glossary (term, definition) VALUES (?, ?)", (cache_key, definition))
         db.commit()
-    return web.json_response({"term": term, "definition": definition, "cached": False})
+    payload = {"term": term, "definition": definition, "cached": False}
+    if report:
+        payload["verification"] = verify.public(report)
+    return web.json_response(payload)
+
+
+async def handle_verify(request: web.Request) -> web.Response:
+    """Run Tier 1 against a parked answer and return the minimal revision.
+
+    Three terminal shapes and nothing else: `expired` (the token is unknown, which
+    after a restart is every token), `partial` (Tier 1 did not finish inside the
+    cap, so the caller gets exactly the Tier 0 report it already had), and the
+    Tier 1 report itself.
+    """
+    try:
+        data = await request.json()
+    except Exception:                          # noqa: BLE001 - a bad body is a 400
+        return web.json_response({"status": "error", "error": "invalid JSON"}, status=400)
+    token = (data.get("token") or "").strip() if isinstance(data, dict) else ""
+    pending = take_pending(token) if token else None
+    if pending is None:
+        return web.json_response({"status": "expired"})
+
+    try:
+        result = await asyncio.wait_for(
+            rarr.tier1(pending.answer, pending.report, section=pending.section,
+                       context=pending.context, data_context=pending.data_context,
+                       vault_search=search),
+            TIER1_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        print(f"[/verify] tier1 exceeded {TIER1_TIMEOUT_S}s", flush=True)
+        return web.json_response({"status": "partial",
+                                  "verification": verify.public(pending.report)})
+    except Exception as exc:                   # noqa: BLE001 - never 500 the caller
+        print(f"[/verify] tier1 failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response({"status": "partial",
+                                  "verification": verify.public(pending.report)})
+
+    rarr.log_line(result)
+    return web.json_response({**result, "verification": verify.public(pending.report)})
 
 
 async def handle_health(_request: web.Request) -> web.Response:
     with _db_lock:
         n = get_db().execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-    return web.json_response({"status": "ok", "chunks": n, "ask_model": ASK_MODEL, "define_model": DEFINE_MODEL})
+    return web.json_response({"status": "ok", "chunks": n, "ask_model": ASK_MODEL,
+                              "define_model": DEFINE_MODEL, "ask_effort": ASK_EFFORT,
+                              "retrieval": retrieval.MODE,
+                              "verify": verify.MODE, "calc": calc_tools.MODE,
+                              "research": research_tools.MODE})
 
 
 def main() -> None:
@@ -476,6 +778,7 @@ def main() -> None:
     app.router.add_post("/ask", handle_ask)
     app.router.add_post("/explain", handle_explain)
     app.router.add_post("/define", handle_define)
+    app.router.add_post("/verify", handle_verify)
     app.router.add_get("/health", handle_health)
     print(f"RAG server on http://localhost:{PORT}  (ask={ASK_MODEL}, explain={EXPLAIN_MODEL}, define={DEFINE_MODEL})")
     print(f"  vault.db: {DB_PATH}  | tools: vault search + web + company_news + social_reactions")

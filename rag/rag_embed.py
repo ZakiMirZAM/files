@@ -44,11 +44,16 @@ def _embed(inputs: list[str], prefix: str) -> list[list[float]]:
         return []
     try:
         return _post(inputs, prefix)
-    except requests.HTTPError:
+    # HTTPError is a pathological chunk; RuntimeError is Ollama returning 200 with a
+    # short/mismatched embeddings array. Both are per-batch and recoverable by
+    # bisecting. A connection/timeout error is NOT caught here on purpose: index_vault
+    # commits per note and resumes cleanly, so crashing on a down Ollama is correct,
+    # whereas zero-vectoring the whole remaining run would silently corrupt the index.
+    except (requests.HTTPError, RuntimeError):
         if len(inputs) == 1:
             try:
                 return _post([inputs[0][:_MAX_DOC_CHARS]], prefix)
-            except requests.HTTPError:
+            except (requests.HTTPError, RuntimeError):
                 print(f"  [embed] skipping un-embeddable chunk (len={len(inputs[0])}): "
                       f"{inputs[0][:80]!r}", flush=True)
                 return [[0.0] * DIM]

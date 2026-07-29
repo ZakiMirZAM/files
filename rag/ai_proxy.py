@@ -27,7 +27,7 @@ UPSTREAM = "http://127.0.0.1:3001"
 PORT = 3002
 HEARTBEAT_INTERVAL = 8          # seconds between keep-alive bytes
 UPSTREAM_TIMEOUT = 600          # generous ceiling; server.py has its own budget caps
-STREAM_PATHS = {"/ask", "/explain", "/define"}   # POST answer routes
+STREAM_PATHS = {"/ask", "/explain", "/define", "/verify"}   # POST answer routes
 
 
 async def _call_upstream(session, method, url, body, headers):
@@ -40,6 +40,7 @@ async def handle(request: web.Request) -> web.StreamResponse:
     path = request.path
     body = await request.read()
     session = ClientSession(timeout=ClientTimeout(total=UPSTREAM_TIMEOUT))
+    task: asyncio.Task | None = None
     try:
         # GET (health) — simple pass-through, always fast.
         if request.method == "GET" or path not in STREAM_PATHS:
@@ -63,11 +64,39 @@ async def handle(request: web.Request) -> web.StreamResponse:
             except asyncio.TimeoutError:
                 # keep Cloudflare's connection alive; a space is valid JSON leading trivia
                 await resp.write(b" ")
+            except Exception as exc:
+                # The upstream (RAG on :3001) refused the connection or died mid-call
+                # (e.g. it is still starting after a restart). The 200 status line is
+                # already committed, so we cannot send a real error code, but leading
+                # whitespace already flushed keeps the body valid JSON: append the same
+                # graceful error object server.py itself returns on failure, so the
+                # browser parses a clean {"error": ...} instead of a torn connection.
+                print(f"[ai_proxy] upstream {path} failed: {type(exc).__name__}: {exc}", flush=True)
+                await resp.write(
+                    b'{"answer":"","explanation":"","definition":"",'
+                    b'"sources":[],"error":"AI backend temporarily unavailable"}')
+                await resp.write_eof()
+                return resp
 
         await resp.write(data)
         await resp.write_eof()
         return resp
     finally:
+        # If the client disconnected mid-heartbeat, `task` is still running the full
+        # metered upstream call for a response nobody will read. Cancel it before
+        # closing the session, or it raises later against a torn-down connector and
+        # asyncio logs an unretrieved-task-exception.
+        # `task is not None`, NOT `"task" in dir()`. dir() lists local NAMES, and
+        # `task` is bound to None at the top of this function, so the old check was
+        # always True. On the GET path (which returns before a task exists) that
+        # made this line raise AttributeError inside `finally`, which replaces the
+        # response with a 500. Every GET through the proxy failed that way.
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         await session.close()
 
 

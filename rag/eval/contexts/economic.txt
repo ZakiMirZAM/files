@@ -1,0 +1,5 @@
+Treasury yield curve: 3M=3.96%, 1Y=4.14%, 2Y=4.33%, 10Y=4.69%; 10Y-2Y spread = +0.36pp (upward sloping)
+Fed model: earnings yield 3.57%, 1Y treasury 4.14%, spread -0.57pp, index P/E 28.0
+S&P 500 valuation: price 7561, implied ERP 3.47%, fair value 5815, growth 6.52%
+Commodities (latest): Copper=13552.04, Gold=4074.50, Silver=58.47, Wheat=199.65, WTI Crude=84.81, Brent Crude=84.49, Henry Hub NatGas=3.15, Heavy Trucks=0.43
+Metrics: Real GDP Growth = 2.10%; Unemployment Rate = 4.20%; CPI Level = 332.57; CPI YoY Inflation = 3.46%; PPI YoY Inflation = 10.11%; M2 Money Supply ($B) = $23155.20; M2 YoY % = 5.53%; 10Y - 2Y Treasury Spread = 0.34%; 10Y - 3M Treasury Spread = 0.69%; Federal Debt as % of GDP = 121.50%; Foreign-Held Federal Debt % of GDP = 29.50%; S&P 500 Level = 7413.18; S&P 500 YoY % = 16.02%; Trade-Weighted USD Index = 120.71; Trade-Weighted USD YoY % = 0.96%; Trade Balance ($M) = $-77585000000.00; Real Exports ($B) = $2756.98; Real Exports YoY % = 3.66%; Real Imports ($B) = $3758.80; Real Imports YoY % = -6.97%; M1 Money Supply ($B) = $19831.50; M1 YoY % = 5.79%; Real M2 ($B, inflation-adjusted) = $6962.50; Real M2 YoY % = 1.99%

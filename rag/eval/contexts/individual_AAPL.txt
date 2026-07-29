@@ -1,0 +1,6 @@
+AAPL (Apple Inc.), sector Technology
+Key ratios: Return On Assets=0.31, Return On Equity=1.52, Return On Sales=0.27, Return On Invested Capital=0.52, Asset Turnover=1.16, Gross Profit Ratio=0.47, Current Ratio=0.89, Quick Ratio=0.86, Debt Service Coverage Ratio=4.97, Debt To Equity=1.52, Debt To Assets=0.31, Dividend Yield=0.00, Net Debt To EBITDA=0.53, Income Quality=1.00, SBC To Revenue=0.03, FCF To Total Debt=0.88, EV To EBIT=29.28
+Valuation: DCF intrinsic $198.33, WACC 10.00%, margin of safety -41.13%, FCF growth assumed 11.61%
+Verdict: BUY — strong fundamentals with a few caveats worth monitoring. (quality score 71)
+Strengths: Return On Equity: 1.52 (>= 15.0%); Return On Invested Capital: 51.97% (>= 12.0%); Return On Assets: 31.18% (>= 7.0%); Return On Sales: 26.92% (>= 10.0%); Gross Profit Ratio: 46.91% (>= 35.0%)
+Weaknesses: Current Ratio: 0.89 (>= 1.50); Quick Ratio: 85.88% (>= 100.0%); Debt To Equity: 1.52 (<= 100.0%); Margin Of Safety: -41.13% (>= 20.0%)

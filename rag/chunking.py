@@ -19,6 +19,17 @@ RELATED_BLOCK_RE = re.compile(r"\n## Related\n.*?(?=\n## |\Z)", re.DOTALL)
 SOURCE_BLOCK_RE = re.compile(r"\n## Source\n.*?(?=\n## |\Z)", re.DOTALL)
 HEADING_SPLIT_RE = re.compile(r"\n(?=#{1,6}\s)")
 
+# `- [[Ch19 - The Future of Cycles]] *(sim 0.79)* — Mastering-the-Market-Cycle`
+# with an optional `*(same book)*` marker before the em-dash separator.
+RELATED_LINK_RE = re.compile(
+    r"^\s*[-*]\s*\[\[(?P<note>[^\]]+)\]\]"
+    r"(?:\s*\*\(sim\s*(?P<sim>[\d.]+)\)\*)?"
+    r"(?P<same>\s*\*\(same book\)\*)?"
+    r"(?:\s*[—–-]\s*(?P<book>.+?))?\s*$",
+    re.MULTILINE,
+)
+HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
 TARGET_CHARS = 1600   # ~400 tokens at ~4 chars/token
 OVERLAP_CHARS = 200
 MIN_CHARS = 40        # drop trivial fragments (stray headings, link stubs)
@@ -64,19 +75,73 @@ def chunk_text(
     return chunks
 
 
-def note_chunks(raw_md: str) -> list[str]:
-    """Return the list of indexable text chunks for one markdown note."""
+def parse_related(raw_md: str) -> list[dict]:
+    """Extract the note's `## Related` wikilinks before they are stripped.
+
+    The vault carries 19,449 of these across 2,850 notes, each already scored for
+    similarity by whatever built the vault. `strip_markdown_for_index` deletes the
+    block so it never reaches an embedding, which threw away the only explicit
+    concept graph in the corpus. Parsing it here makes it a queryable table.
+    """
+    match = RELATED_BLOCK_RE.search("\n" + raw_md)
+    if not match:
+        return []
+    out: list[dict] = []
+    for link in RELATED_LINK_RE.finditer(match.group(0)):
+        note = link.group("note").strip()
+        if not note:
+            continue
+        try:
+            sim = float(link.group("sim")) if link.group("sim") else None
+        except ValueError:
+            sim = None
+        out.append({
+            "note": note,
+            "book": (link.group("book") or "").strip(),
+            "sim": sim,
+            "same_book": bool(link.group("same")),
+        })
+    return out
+
+
+def _heading_of(section: str) -> str:
+    """The section's own heading text, or '' when the section is body prose."""
+    first = section.split("\n", 1)[0]
+    m = HEADING_LINE_RE.match(first.strip())
+    return m.group(2).strip() if m else ""
+
+
+def note_sections(raw_md: str) -> list[tuple[str, str]]:
+    """(heading, chunk_text) for one note, heading carried onto EVERY window.
+
+    A heading-only split leaves 97.4% of chunks as continuation windows with no
+    heading of their own, so the heading is repeated onto each window of an
+    oversized section rather than surviving only on the first.
+    """
     body = strip_markdown_for_index(raw_md)
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for section in HEADING_SPLIT_RE.split(body):
         section = section.strip()
         if not section:
             continue
-        if len(section) <= TARGET_CHARS:
-            if len(section) >= MIN_CHARS:
-                out.append(section)
-        else:
-            for piece in chunk_text(section):
-                if len(piece) >= MIN_CHARS:
-                    out.append(piece)
+        heading = _heading_of(section)
+        pieces = [section] if len(section) <= TARGET_CHARS else chunk_text(section)
+        for piece in pieces:
+            if len(piece) >= MIN_CHARS:
+                out.append((heading, piece))
     return out
+
+
+def note_chunks(raw_md: str) -> list[str]:
+    """Return the list of indexable text chunks for one markdown note."""
+    return [text for _heading, text in note_sections(raw_md)]
+
+
+def embed_text(context: str, heading: str, text: str) -> str:
+    """The string actually handed to the embedding model.
+
+    The stored/displayed text stays untouched; only the vector sees the prefix, so
+    a continuation window still carries which book and chapter it came from.
+    """
+    trail = " > ".join(p for p in (context, heading) if p)
+    return f"{trail}\n\n{text}" if trail else text
