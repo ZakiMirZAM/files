@@ -158,7 +158,7 @@ function ScoreCard({ score }: { score: ForensicScore }) {
             className="text-sm font-medium text-white/90 leading-tight"
           />
           <p className="text-2xl font-mono font-semibold text-white mt-1.5 tabular-nums">
-            {score.applicable && score.value !== null ? score.value.toFixed(2) : "n/a"}
+            {score.applicable && score.value !== null ? score.value.toFixed(3) : "n/a"}
           </p>
         </div>
         <span
@@ -207,7 +207,7 @@ function ScoreCard({ score }: { score: ForensicScore }) {
                     </span>
                     <span className="font-mono text-white/50 tabular-nums flex-shrink-0">
                       {c.value === null ? "n/a" : c.value.toFixed(3)}
-                      <span className="text-white/30"> · {c.contribution >= 0 ? "+" : ""}{c.contribution.toFixed(2)}</span>
+                      <span className="text-white/30"> · {c.contribution >= 0 ? "+" : ""}{c.contribution.toFixed(3)}</span>
                     </span>
                   </div>
                   <div className="h-1 mt-1 rounded-full bg-white/[0.06] overflow-hidden">

@@ -105,7 +105,7 @@ function CommodityCard({ commodity }: { commodity: Commodity }) {
             "text-[0.65rem] font-mono",
             change >= 0 ? "text-gain" : "text-loss",
           )}>
-            {change >= 0 ? "▲" : "▼"} {Math.abs(change).toFixed(1)}%
+            {change >= 0 ? "▲" : "▼"} {Math.abs(change).toFixed(3)}%
           </p>
         </div>
       </header>
@@ -119,7 +119,7 @@ function CommodityCard({ commodity }: { commodity: Commodity }) {
               <YAxis yAxisId="vol" hide orientation="right" domain={[0, "dataMax"]} />
               <Tooltip
                 formatter={(v, name) => [
-                  name === "price" ? fmt(Number(v)) : `${Number(v).toFixed(1)}% vol`,
+                  name === "price" ? fmt(Number(v)) : `${Number(v).toFixed(3)}% vol`,
                   name === "price" ? commodity.label : "12M Vol",
                 ]}
                 labelFormatter={(p) => String(p ?? "").slice(0, 7)}
@@ -149,7 +149,7 @@ function CommodityCard({ commodity }: { commodity: Commodity }) {
 
       <footer className="flex items-center justify-between mt-2 pt-2 border-t border-gold/5">
         <span className="text-[0.65rem] font-mono text-white/40">
-          {latestVol ? `vol₁₂ₘ ${latestVol.value.toFixed(1)}%` : ""}
+          {latestVol ? `vol₁₂ₘ ${latestVol.value.toFixed(3)}%` : ""}
         </span>
         <button
           onClick={() => setShowVol(!showVol)}
@@ -163,7 +163,7 @@ function CommodityCard({ commodity }: { commodity: Commodity }) {
 }
 
 function fmt(v: number): string {
-  if (Math.abs(v) >= 1000) return v.toFixed(0);
-  if (Math.abs(v) >= 10) return v.toFixed(2);
-  return v.toFixed(2);
+  if (Math.abs(v) >= 1000) return v.toFixed(3);
+  if (Math.abs(v) >= 10) return v.toFixed(3);
+  return v.toFixed(3);
 }

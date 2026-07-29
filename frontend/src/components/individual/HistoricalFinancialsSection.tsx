@@ -21,7 +21,7 @@ interface HistoricalFinancialsSectionProps {
 function formatValue(v: number, unit: Metric["unit"]): string {
   if (unit === "$") return formatCurrency(v);
   if (unit === "%") return formatPercent(v);
-  if (unit === "x") return `${v.toFixed(2)}x`;
+  if (unit === "x") return `${v.toFixed(3)}x`;
   return formatNumber(v);
 }
 
@@ -32,7 +32,7 @@ function deltaSinceStart(m: Metric): { text: string; positive: boolean } | null 
   const last = m.trend[m.trend.length - 1].value;
   if (m.unit === "%") {
     const pp = last - first;
-    return { text: `${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`, positive: pp >= 0 };
+    return { text: `${pp >= 0 ? "+" : ""}${pp.toFixed(3)}pp`, positive: pp >= 0 };
   }
   if (first === 0) return null;
   const pct = ((last - first) / Math.abs(first)) * 100;

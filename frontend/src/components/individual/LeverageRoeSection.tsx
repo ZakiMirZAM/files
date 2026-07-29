@@ -9,9 +9,9 @@ interface LeverageRoeSectionProps {
   ticker: string;
 }
 
-const pct = (v: number | null | undefined, d = 2): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
-const signedPct = (v: number | null | undefined, d = 2): string =>
+const signedPct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
 
 /**
@@ -196,7 +196,7 @@ export function LeverageRoeSection({ leverageRoe: d, ticker }: LeverageRoeSectio
                 From leverage
               </p>
               <p className="font-mono text-lg text-white/90 leading-tight mt-0.5">
-                {d.leverageShare == null ? "n/a" : `${(d.leverageShare * 100).toFixed(1)}%`}
+                {d.leverageShare == null ? "n/a" : `${(d.leverageShare * 100).toFixed(3)}%`}
               </p>
               <p className="text-[0.65rem] font-mono text-white/35 mt-0.5">share of ROE</p>
             </div>
@@ -275,7 +275,7 @@ export function LeverageRoeSection({ leverageRoe: d, ticker }: LeverageRoeSectio
                               isRoe ? "text-gold" : negative ? "text-loss-strong" : "text-white/80",
                             )}
                           >
-                            {v == null ? "n/a" : `${(v * 100).toFixed(2)}%`}
+                            {v == null ? "n/a" : `${(v * 100).toFixed(3)}%`}
                           </td>
                         );
                       })}

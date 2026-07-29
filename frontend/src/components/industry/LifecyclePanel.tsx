@@ -32,7 +32,7 @@ const STAGE_META: Record<
   },
 };
 
-const pct = (v: number | null | undefined, d = 1): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
 /**

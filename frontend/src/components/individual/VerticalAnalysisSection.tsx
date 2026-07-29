@@ -12,7 +12,7 @@ interface VerticalAnalysisSectionProps {
 
 function pct(v: number | undefined): string {
   if (v === undefined || v === null || !Number.isFinite(v)) return "n/a";
-  return `${(v * 100).toFixed(1)}%`;
+  return `${(v * 100).toFixed(3)}%`;
 }
 
 function CommonSizeTable({ caption, base, table, years, defScope }: { caption: string; base: string; table: VerticalTable; years: number[]; defScope?: string }) {

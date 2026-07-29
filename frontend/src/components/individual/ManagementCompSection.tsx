@@ -13,7 +13,7 @@ interface ManagementCompSectionProps {
 const money = (v: number | null | undefined): string =>
   v == null ? "n/a" : formatCurrency(v, { compact: true });
 const pct = (v: number | null | undefined): string =>
-  v == null ? "n/a" : `${(v * 100).toFixed(1)}%`;
+  v == null ? "n/a" : `${(v * 100).toFixed(3)}%`;
 
 /**
  * How managers are paid and who watches them. Links the latest DEF 14A proxy

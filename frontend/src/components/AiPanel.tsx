@@ -4,7 +4,20 @@ import { Sparkles, X, Copy, Check, RefreshCw, BookText, Save, Maximize2, Minimiz
 import { api } from "../../convex/_generated/api";
 import { cn } from "../lib/cn";
 import { Markdown } from "./Markdown";
-import { askQuestion, explainSelection, type AiResult } from "../lib/aiApi";
+import {
+  askQuestion,
+  explainSelection,
+  parseVerification,
+  verifyAnswer,
+  type AiResult,
+  type VerificationReport,
+} from "../lib/aiApi";
+import {
+  AI_VERIFY_UI,
+  AiVerificationDetail,
+  AiVerificationStrip,
+  reviewCount,
+} from "./AiVerification";
 import { closeAi, getOpenAi, subscribeAi } from "../lib/aiPanelStore";
 
 type Status = "loading" | "done" | "error";
@@ -37,6 +50,7 @@ export function AiPanel() {
       : ("skip" as const);
   const cached = useQuery(api.aiAnswers.getAiAnswer, cacheArgs);
   const saveAiAnswer = useMutation(api.aiAnswers.saveAiAnswer);
+  const saveVerification = useMutation(api.aiAnswers.saveVerification);
 
   const [status, setStatus] = useState<Status>("loading");
   const [result, setResult] = useState<AiResult | null>(null);
@@ -44,12 +58,17 @@ export function AiPanel() {
   const [fromCache, setFromCache] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  // The answer as first written, kept when a verification pass revises it so the
+  // reader can put the two side by side.
+  const [answerOriginal, setAnswerOriginal] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
   // Widen the panel for long AI answers (off by default so it matches the
   // definition sidebar's collapsed width).
   const [expanded, setExpanded] = useState(false);
   const [regenStamp, setRegenStamp] = useState(0);
   const regenForReqId = useRef<number | null>(null);
   const handledRef = useRef<string>("");
+  const verifiedRef = useRef<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const canCache = !!(req?.questionId && req.section && req.context);
@@ -76,7 +95,13 @@ export function AiPanel() {
       if (cached) {
         if (handledRef.current === gen) return;
         handledRef.current = gen;
-        setResult({ text: cached.answer, sources: parseSources(cached.sources) });
+        setResult({
+          text: cached.answer,
+          sources: parseSources(cached.sources),
+          verification: parseVerification(cached.verification),
+        });
+        setAnswerOriginal(cached.answerOriginal ?? null);
+        setShowOriginal(false);
         setFromCache(true);
         setSavedAt(cached.generatedAt);
         setStatus("done");
@@ -99,6 +124,8 @@ export function AiPanel() {
     setFromCache(false);
     setSavedAt(null);
     setCopied(false);
+    setAnswerOriginal(null);
+    setShowOriginal(false);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     const reqId = req.id;
 
@@ -131,6 +158,11 @@ export function AiPanel() {
             answer: r.text,
             sources: JSON.stringify(r.sources),
             model: ASK_MODEL,
+            // Strip the token: it is a one-shot handle on the live request, and a
+            // stale one in the cache would re-fire /verify on every reload.
+            verification: r.verification
+              ? JSON.stringify({ ...r.verification, token: undefined })
+              : undefined,
           }).catch((err: unknown) => {
             // Non-blocking: the answer still rendered; only the Convex cache write failed.
             console.error(
@@ -147,6 +179,73 @@ export function AiPanel() {
       },
     );
   }
+
+  // Second verification pass, for an answer the first pass flagged. The token is
+  // only issued when the server runs verification in `on` mode, so a shadow-mode
+  // answer never reaches the network here. Gated on the badge flag too: with the
+  // UI off there is nothing to show, so there is no reason to spend the call.
+  useEffect(() => {
+    if (!AI_VERIFY_UI) return;
+    if (status !== "done" || !result || !req) return;
+    const report = result.verification;
+    if (!report || report.status !== "flagged" || report.revised) return;
+    const token = report.token;
+    if (!token) return;
+
+    const reqId = req.id;
+    const key = `${reqId}:${token}`;
+    if (verifiedRef.current === key) return;
+    verifiedRef.current = key;
+
+    const canPersist = req.mode === "answer" && canCache;
+    const section = req.section;
+    const scopeKey = req.context;
+    const questionId = req.questionId;
+    const priorText = result.text;
+    const priorReview = reviewCount(report);
+
+    verifyAnswer(token).then(
+      (v) => {
+        if (getOpenAi()?.id !== reqId) return; // a newer request opened; ignore
+        const after = v.verification ?? report;
+        const revisedText = v.revisedAnswer?.trim();
+        const didRevise = !!revisedText && revisedText !== priorText;
+        const corrected = v.correctedCount ?? Math.max(1, priorReview - reviewCount(after));
+        const merged: VerificationReport = {
+          ...after,
+          token: undefined, // spent
+          revised: didRevise,
+          revisedCount: didRevise ? corrected : undefined,
+        };
+
+        if (didRevise && revisedText) {
+          setAnswerOriginal(priorText);
+          setResult((prev) => (prev ? { ...prev, text: revisedText, verification: merged } : prev));
+        } else {
+          setResult((prev) => (prev ? { ...prev, verification: merged } : prev));
+        }
+
+        if (canPersist && section && scopeKey && questionId) {
+          saveVerification({
+            section,
+            scopeKey,
+            questionId,
+            verification: JSON.stringify(merged),
+            revisedAnswer: didRevise ? revisedText : undefined,
+          }).catch((err: unknown) => {
+            // Non-blocking: the report still rendered, only the Convex write failed.
+            console.error(`[AiPanel] failed to save verification (question=${questionId}):`, err);
+          });
+        }
+      },
+      (err: unknown) => {
+        if (getOpenAi()?.id !== reqId) return;
+        // Verification is commentary on the answer, never a reason to fail it.
+        console.error(`[AiPanel] verification pass failed (question=${questionId}):`, err);
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, result, req?.id]);
 
   // Close on Escape.
   useEffect(() => {
@@ -239,14 +338,31 @@ export function AiPanel() {
 
             {status === "done" && result && (
               <div className="space-y-5">
-                {fromCache && savedAt != null && (
-                  <div className="flex items-center gap-1.5 text-[0.7rem] font-mono text-white/35">
-                    <Save className="w-3 h-3 text-gold/50" />
-                    Saved · {new Date(savedAt).toLocaleString()}
+                {((fromCache && savedAt != null) || (AI_VERIFY_UI && !!result.verification)) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.7rem] font-mono text-white/35">
+                    {fromCache && savedAt != null && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Save className="w-3 h-3 text-gold/50" />
+                        Saved · {new Date(savedAt).toLocaleString()}
+                      </span>
+                    )}
+                    <AiVerificationStrip
+                      report={result.verification}
+                      revised={result.verification?.revised}
+                      correctedCount={result.verification?.revisedCount}
+                      showingOriginal={showOriginal}
+                      onToggleOriginal={
+                        answerOriginal && result.verification?.revised
+                          ? () => setShowOriginal((v) => !v)
+                          : undefined
+                      }
+                    />
                   </div>
                 )}
 
-                <Markdown content={result.text} />
+                <Markdown content={showOriginal && answerOriginal ? answerOriginal : result.text} />
+
+                <AiVerificationDetail report={result.verification} />
 
                 {result.sources.length > 0 && (
                   <div className="pt-4 border-t border-gold/10">

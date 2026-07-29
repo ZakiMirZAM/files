@@ -6,9 +6,9 @@ interface ResidualIncomeSectionProps {
   residualIncome?: ResidualIncome | null;
 }
 
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(2)}`);
-const rate = (v: number | null | undefined, d = 1): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
-const x = (v: number | null | undefined): string => (v == null ? "n/a" : `${v.toFixed(2)}x`);
+const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const rate = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
+const x = (v: number | null | undefined): string => (v == null ? "n/a" : `${v.toFixed(3)}x`);
 
 /**
  * Residual-income (excess-return) equity valuation + justified P/B-vs-ROE anchor.
@@ -65,7 +65,7 @@ export function ResidualIncomeSection({ residualIncome: ri }: ResidualIncomeSect
               <div className="flex items-baseline justify-between">
                 <span className="text-white/55 text-xs">Margin of safety</span>
                 <span className={cn("font-mono text-base", mosColor)}>
-                  {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(1)}%`}
+                  {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(3)}%`}
                 </span>
               </div>
             </dl>

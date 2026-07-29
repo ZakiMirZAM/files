@@ -9,8 +9,8 @@ interface ValuationExtrasSectionProps {
   rnd?: RndAdjusted | null;
 }
 
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(2)}`);
-const pct = (v: number | null | undefined, d = 1): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
+const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const pct = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
 
 /**
  * Two compact cards: Graham deep-value asset floors, and the Damodaran R&D-
@@ -40,7 +40,7 @@ export function ValuationExtrasSection({ anchors, rnd }: ValuationExtrasSectionP
 function AnchorsCard({ a }: { a: ValuationAnchors }) {
   const upColor = (u: number | null) =>
     u == null ? "text-white/50" : u >= 0 ? "text-gain-strong" : "text-loss-strong";
-  const upTxt = (u: number | null) => (u == null ? "n/a" : `${u >= 0 ? "+" : ""}${(u * 100).toFixed(0)}%`);
+  const upTxt = (u: number | null) => (u == null ? "n/a" : `${u >= 0 ? "+" : ""}${(u * 100).toFixed(3)}%`);
 
   return (
     <div className="panel-soft p-5">
@@ -104,7 +104,7 @@ function RndCard({ r }: { r: RndAdjusted }) {
             <span className="text-gold">{pct(r.roicAdjusted)}</span>
             {roicDelta != null && (
               <span className={cn("ml-1.5 text-[0.7rem]", roicDelta >= 0 ? "text-gain-strong" : "text-loss-strong")}>
-                ({roicDelta >= 0 ? "+" : ""}{(roicDelta * 100).toFixed(1)}pp)
+                ({roicDelta >= 0 ? "+" : ""}{(roicDelta * 100).toFixed(3)}pp)
               </span>
             )}
           </p>
@@ -121,7 +121,7 @@ function RndCard({ r }: { r: RndAdjusted }) {
 
 function Compare({ label, rep, adj, money }: { label: string; rep: number | null | undefined; adj: number | null | undefined; money?: boolean }) {
   const f = (v: number | null | undefined) =>
-    v == null ? "n/a" : money ? formatCurrency(v, { compact: true }) : v.toFixed(2);
+    v == null ? "n/a" : money ? formatCurrency(v, { compact: true }) : v.toFixed(3);
   return (
     <div>
       <p className="text-[0.65rem] uppercase tracking-wider text-white/40">{label} rep → adj</p>

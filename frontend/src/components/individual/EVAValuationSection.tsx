@@ -13,8 +13,8 @@ interface EVAValuationSectionProps {
 }
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
-const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(2)}`);
-const rate = (v: number | null | undefined, d = 1): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
+const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const rate = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
 
 /** Build a DefinitionSeries from a {year: value} history map, oldest → newest. */
 function spreadSeriesFrom(history: Record<string, number> | undefined): DefinitionSeries | null {
@@ -114,7 +114,7 @@ export function EVAValuationSection({ forecast: f, metricHistory }: EVAValuation
               <div className="flex items-baseline justify-between">
                 <span className="text-white/55 text-xs"><MetricTerm metric="Margin of safety" asSpan /></span>
                 <span className={cn("font-mono text-base", mosColor)}>
-                  {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(1)}%`}
+                  {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(3)}%`}
                 </span>
               </div>
             </dl>

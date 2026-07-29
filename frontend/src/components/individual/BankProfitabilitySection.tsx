@@ -4,7 +4,7 @@ interface BankProfitabilitySectionProps {
   bankProfitability?: BankProfitability | null;
 }
 
-const rate = (v: number | null | undefined, d = 2): string =>
+const rate = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
 const bn = (v: number | null | undefined): string => {
@@ -56,11 +56,11 @@ export function BankProfitabilitySection({ bankProfitability: bp }: BankProfitab
             <div className="flex items-end gap-1.5 h-40">
               {trend.map((r) => (
                 <div key={r.year} className="flex-1 flex flex-col items-center justify-end h-full">
-                  <span className="text-[0.65rem] font-mono text-white/70 mb-1">{(r.nim * 100).toFixed(1)}</span>
+                  <span className="text-[0.65rem] font-mono text-white/70 mb-1">{(r.nim * 100).toFixed(3)}</span>
                   <div
                     className="w-full bg-gold/70 rounded-t-sm transition-all"
                     style={{ height: `${Math.max(2, (r.nim / maxNim) * 100)}%` }}
-                    title={`${r.year}: NIM ${(r.nim * 100).toFixed(2)}% · yield ${(r.assetYield * 100).toFixed(2)}% · cost ${(r.fundingCost * 100).toFixed(2)}%`}
+                    title={`${r.year}: NIM ${(r.nim * 100).toFixed(3)}% · yield ${(r.assetYield * 100).toFixed(3)}% · cost ${(r.fundingCost * 100).toFixed(3)}%`}
                   />
                   <span className="text-[0.65rem] font-mono text-white/40 mt-1">{`'${String(r.year).slice(2)}`}</span>
                 </div>

@@ -91,19 +91,19 @@ export function formatSectorValue(value: number | null | undefined, unit: Sector
     // Sub-million: keep cents for per-share / small-dollar values instead of
     // rounding to whole dollars (so $13.67 stays $13.67 and $0.45 stays $0.45,
     // not $14 and $0).
-    if (a >= 100) return `${sign}$${a.toFixed(0)}`;
-    if (a >= 1) return `${sign}$${a.toFixed(2)}`;
-    if (a > 0) return `${sign}$${a.toFixed(a < 0.01 ? 4 : 2)}`;
+    if (a >= 100) return `${sign}$${a.toFixed(3)}`;
+    if (a >= 1) return `${sign}$${a.toFixed(3)}`;
+    if (a > 0) return `${sign}$${a.toFixed(a < 0.01 ? 4 : 3)}`;
     return "$0";
   }
   // Small percentages and ratios keep more precision (e.g. 0.45% not 0.5%).
-  if (unit === "%") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(Math.abs(value) < 1 ? 2 : 1)}%`;
+  if (unit === "%") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(3)}%`;
   if (unit === "d") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(0)}d`;
   if (unit === "yrs") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)} yrs`;
-  if (unit === "b") return value.toFixed(2); // beta, a plain coefficient, ~1.0
+  if (unit === "b") return value.toFixed(3); // beta, a plain coefficient, ~1.0
   if (unit === "#") return value.toFixed(0); // rank, a whole number
-  if (unit === "n") return value.toFixed(Math.abs(value) < 1 ? 2 : 1); // plain number, e.g. the value score
-  return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}×`;
+  if (unit === "n") return value.toFixed(3); // plain number, e.g. the value score
+  return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(3)}×`;
 }
 
 /** A column's per-metric 5-year history, if the API attached one (smuggled

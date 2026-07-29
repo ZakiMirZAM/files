@@ -11,8 +11,8 @@ import { formatCurrency, formatNumber } from "./format";
 
 function metricFormatter(unit: Metric["unit"]): (v: number) => string {
   if (unit === "$") return (v) => formatCurrency(v);
-  if (unit === "%") return (v) => `${v.toFixed(1)}%`;
-  if (unit === "x") return (v) => `${v.toFixed(2)}×`;
+  if (unit === "%") return (v) => `${v.toFixed(3)}%`;
+  if (unit === "x") return (v) => `${v.toFixed(3)}×`;
   return (v) => formatNumber(v);
 }
 

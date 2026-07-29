@@ -9,8 +9,8 @@ interface ForecastSectionProps {
 }
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
-const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(2)}`);
-const rate = (v: number | null | undefined, digits = 1): string => (v == null ? "n/a" : `${(v * 100).toFixed(digits)}%`);
+const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const rate = (v: number | null | undefined, digits = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(digits)}%`);
 
 /** Heat tint for a sensitivity cell relative to today's price (or intrinsic). */
 function tint(value: number | null, ref: number | null): string | undefined {
@@ -23,7 +23,7 @@ function tint(value: number | null, ref: number | null): string | undefined {
 
 const STATEMENT_ROWS: Array<{ label: string; get: (r: IndividualForecast["rows"][number]) => string }> = [
   { label: "Revenue", get: (r) => formatCurrency(r.revenue) },
-  { label: "Operating margin", get: (r) => `${(r.operatingMargin * 100).toFixed(1)}%` },
+  { label: "Operating margin", get: (r) => `${(r.operatingMargin * 100).toFixed(3)}%` },
   { label: "EBIT", get: (r) => formatCurrency(r.ebit) },
   { label: "EBIT × (1 − tax)", get: (r) => formatCurrency(r.ebitAfterTax) },
   { label: "− Reinvestment", get: (r) => formatCurrency(r.reinvestment) },
@@ -66,8 +66,8 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
     { k: "WACC", v: rate(a.wacc) },
     { k: "Net debt", v: money(a.netDebt) },
     { k: "Diluted shares", v: a.dilutedShares == null ? "n/a" : formatNumber(a.dilutedShares) },
-    { k: "Exit P/FCF", v: a.exitPfcfMultiple == null ? "n/a" : `${a.exitPfcfMultiple.toFixed(1)}x` },
-    { k: "Exit EV/EBITDA", v: a.evEbitdaMultiple == null ? "n/a" : `${a.evEbitdaMultiple.toFixed(1)}x` },
+    { k: "Exit P/FCF", v: a.exitPfcfMultiple == null ? "n/a" : `${a.exitPfcfMultiple.toFixed(3)}x` },
+    { k: "Exit EV/EBITDA", v: a.evEbitdaMultiple == null ? "n/a" : `${a.evEbitdaMultiple.toFixed(3)}x` },
   ];
 
   return (
@@ -111,7 +111,7 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
             <div className="flex items-baseline justify-between">
               <span className="text-white/55 text-xs"><MetricTerm metric="Margin of safety" asSpan /></span>
               <span className={cn("font-mono text-base", mosColor)}>
-                {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(1)}%`}
+                {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(3)}%`}
               </span>
             </div>
             <div className="pt-1 mt-3 space-y-2">
@@ -173,7 +173,7 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
                 </th>
                 {f.sensitivity.growthAxis.map((g, gi) => (
                   <th key={gi} className={cn("px-3 py-2 text-right border-b border-gold/10 min-w-[78px]", gi === 2 && "bg-gold/5")}>
-                    <span className="text-[0.7rem] font-mono text-white/60">{(g * 100).toFixed(1)}%</span>
+                    <span className="text-[0.7rem] font-mono text-white/60">{(g * 100).toFixed(3)}%</span>
                   </th>
                 ))}
               </tr>
@@ -182,7 +182,7 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
               {f.sensitivity.matrix.map((row, wi) => (
                 <tr key={wi}>
                   <th scope="row" className={cn("px-3 py-2 text-left border-b border-r border-gold/10", wi === 2 && "bg-gold/5")}>
-                    <span className="text-[0.7rem] font-mono text-white/60">{(f.sensitivity.waccAxis[wi] * 100).toFixed(2)}%</span>
+                    <span className="text-[0.7rem] font-mono text-white/60">{(f.sensitivity.waccAxis[wi] * 100).toFixed(3)}%</span>
                   </th>
                   {row.map((cell, gi) => (
                     <td
@@ -194,7 +194,7 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
                       )}
                       style={{ backgroundColor: tint(cell, ref) }}
                     >
-                      {cell == null ? "n/a" : `$${cell.toFixed(0)}`}
+                      {cell == null ? "n/a" : `$${cell.toFixed(3)}`}
                     </td>
                   ))}
                 </tr>
@@ -217,13 +217,13 @@ function WaccBuildPanel({ build: b }: { build: WaccBuild }) {
       ? "Equity risk premium (anchor)"
       : "Equity risk premium";
   const tiles: { k: string; v: string; hi?: boolean }[] = [
-    { k: betaLabel, v: b.beta == null ? "n/a" : b.beta.toFixed(2) },
+    { k: betaLabel, v: b.beta == null ? "n/a" : b.beta.toFixed(3) },
     { k: "Risk-free (10Y)", v: rate(b.riskFreeRate) },
     { k: erpLabel, v: rate(b.equityRiskPremium) },
     { k: "Cost of equity", v: rate(b.costOfEquity) },
     { k: "Cost of debt (pre→after)", v: `${rate(b.costOfDebtPretax)} → ${rate(b.costOfDebtAfterTax)}` },
-    { k: "Interest coverage", v: b.interestCoverage == null ? "n/a" : `${b.interestCoverage.toFixed(1)}x` },
-    { k: "Weights (E / D)", v: `${(b.weightEquity * 100).toFixed(0)}% / ${(b.weightDebt * 100).toFixed(0)}%` },
+    { k: "Interest coverage", v: b.interestCoverage == null ? "n/a" : `${b.interestCoverage.toFixed(3)}x` },
+    { k: "Weights (E / D)", v: `${(b.weightEquity * 100).toFixed(3)}% / ${(b.weightDebt * 100).toFixed(3)}%` },
     { k: "WACC", v: rate(b.wacc), hi: true },
   ];
   return (

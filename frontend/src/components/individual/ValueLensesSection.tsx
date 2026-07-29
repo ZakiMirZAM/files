@@ -12,7 +12,7 @@ interface ValueLensesSectionProps {
 
 const money = (v: number | null | undefined): string =>
   v == null ? "n/a" : formatCurrency(v, { compact: true });
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(2)}`);
+const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
 
 function CardShell({
   icon,
@@ -70,11 +70,11 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
             {epv.applicable ? (
               <div className="grid grid-cols-2 gap-2">
                 <Tile label="EPV per share" value={ps(epv.epvPerShare)} hi />
-                <Tile label="Price / EPV" value={epv.priceToEpv == null ? "n/a" : `${epv.priceToEpv.toFixed(2)}x`} />
+                <Tile label="Price / EPV" value={epv.priceToEpv == null ? "n/a" : `${epv.priceToEpv.toFixed(3)}x`} />
                 <Tile label="DCF intrinsic" value={ps(epv.dcfIntrinsicPerShare)} />
                 <Tile label="Growth premium /sh" value={ps(epv.growthPremiumPerShare)} />
                 <Tile label="Sustainable EBIT" value={money(epv.sustainableEbit)} />
-                <Tile label="Capitalized at WACC" value={epv.wacc == null ? "n/a" : `${(epv.wacc * 100).toFixed(2)}%`} />
+                <Tile label="Capitalized at WACC" value={epv.wacc == null ? "n/a" : `${(epv.wacc * 100).toFixed(3)}%`} />
               </div>
             ) : (
               <p className="text-sm text-white/55">{epv.reason}</p>
@@ -87,7 +87,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
             {tobinsQ.applicable ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <Tile label="Q today" value={tobinsQ.latest == null ? "n/a" : `${tobinsQ.latest.toFixed(2)}x`} hi />
+                  <Tile label="Q today" value={tobinsQ.latest == null ? "n/a" : `${tobinsQ.latest.toFixed(3)}x`} hi />
                   <Tile
                     label="Reading"
                     value={tobinsQ.latest == null ? "n/a" : tobinsQ.latest >= 1 ? "above asset base" : "below asset base"}
@@ -100,7 +100,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
                       {tobinsQ.trend.slice(-10).map((t) => {
                         const max = Math.max(...tobinsQ.trend!.slice(-10).map((x) => x.q), 1);
                         return (
-                          <div key={t.year} className="flex-1 flex flex-col items-center gap-1" title={`${t.year}: ${t.q.toFixed(2)}x`}>
+                          <div key={t.year} className="flex-1 flex flex-col items-center gap-1" title={`${t.year}: ${t.q.toFixed(3)}x`}>
                             <div
                               className="w-full rounded-sm bg-gold/50"
                               style={{ height: `${Math.max(6, (t.q / max) * 100)}%` }}

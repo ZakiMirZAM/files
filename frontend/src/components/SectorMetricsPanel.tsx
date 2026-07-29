@@ -75,7 +75,7 @@ export function SectorMetricsPanel({
             )}
           >
             {spread >= 0 ? "+" : "−"}
-            {Math.abs(spread).toFixed(1)} pp
+            {Math.abs(spread).toFixed(3)} pp
           </p>
         </div>
       )}

@@ -8,7 +8,7 @@ export function formatMetricValue(v: number | null | undefined, unit: MetricUnit
   if (v === null || v === undefined || !Number.isFinite(v)) return "n/a";
   if (unit === "%") {
     const p = v * 100;
-    return `${p.toFixed(Math.abs(p) < 1 ? 2 : 1)}%`;
+    return `${p.toFixed(3)}%`;
   }
   if (unit === "d") return `${Math.round(v)}d`;
   if (unit === "$") {
@@ -18,13 +18,13 @@ export function formatMetricValue(v: number | null | undefined, unit: MetricUnit
     if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
     if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`;
     if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
-    // Keep cents for per-share / small-dollar values instead of rounding to $0.
-    if (a >= 100) return `${s}$${a.toFixed(0)}`;
-    if (a >= 1) return `${s}$${a.toFixed(2)}`;
-    if (a > 0) return `${s}$${a.toFixed(a < 0.01 ? 4 : 2)}`;
+    // Per-share / small-dollar values get full 3-decimal precision instead of rounding to $0.
+    if (a >= 100) return `${s}$${a.toFixed(3)}`;
+    if (a >= 1) return `${s}$${a.toFixed(3)}`;
+    if (a > 0) return `${s}$${a.toFixed(a < 0.001 ? 4 : 3)}`;
     return "$0";
   }
-  return `${v.toFixed(2)}x`;
+  return `${v.toFixed(3)}x`;
 }
 
 /** Change since the first point, percentage-points for %, days for d, % change for x. */
@@ -38,7 +38,7 @@ export function metricDelta(
   const last = clean[clean.length - 1];
   if (unit === "%") {
     const pp = (last - first) * 100;
-    return { text: `${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`, positive: pp >= 0 };
+    return { text: `${pp >= 0 ? "+" : ""}${pp.toFixed(3)}pp`, positive: pp >= 0 };
   }
   if (unit === "d") {
     const dd = last - first;

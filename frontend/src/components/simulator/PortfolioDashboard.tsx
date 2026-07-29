@@ -330,7 +330,7 @@ function HoldingsTable({
                     {p.priced ? formatLocalPrice(p.priceLocal, p.currency) : "n/a"}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-white/90">{formatUsd(p.marketValueUsd)}</td>
-                  <td className="px-3 py-3 text-right font-mono text-white/55">{weight.toFixed(1)}%</td>
+                  <td className="px-3 py-3 text-right font-mono text-white/55">{weight.toFixed(3)}%</td>
                   <td className={cn("px-3 py-3 text-right font-mono", gainLossClass(p.unrealizedUsd))}>
                     {p.unrealizedUsd != null ? (
                       <>
@@ -409,7 +409,7 @@ function AllocationCard({ valuation }: { valuation: ReturnType<typeof valuePortf
                   />
                   <span className="text-white/70">{slice.label}</span>
                 </span>
-                <span className="font-mono text-white/50">{(slice.weight * 100).toFixed(1)}%</span>
+                <span className="font-mono text-white/50">{(slice.weight * 100).toFixed(3)}%</span>
               </li>
             ))}
           </ul>

@@ -33,12 +33,12 @@ const BAND_STYLE: Record<string, string> = {
 
 function fmt(value: number | null, unit: string): string {
   if (value === null || value === undefined) return "n/a";
-  if (unit === "x") return `${value.toFixed(2)}x`;
+  if (unit === "x") return `${value.toFixed(3)}x`;
   return `${value}`;
 }
 
 function pct(v: number | null | undefined): string {
-  return v === null || v === undefined ? "n/a" : `${(v * 100).toFixed(1)}%`;
+  return v === null || v === undefined ? "n/a" : `${(v * 100).toFixed(3)}%`;
 }
 
 /**
@@ -182,7 +182,7 @@ function ForensicChip({ score }: { score: ForensicScore }) {
     <div className="rounded-sm border border-white/10 bg-white/[0.03] px-3 py-2 text-[0.78rem]">
       <span className="text-white/80 font-medium"><MetricTerm metric={score.label} asSpan />: </span>
       <span className="text-white/60">
-        {score.applicable && score.value !== null ? score.value.toFixed(2) : "n/a"} · {score.headline}
+        {score.applicable && score.value !== null ? score.value.toFixed(3) : "n/a"} · {score.headline}
       </span>
     </div>
   );

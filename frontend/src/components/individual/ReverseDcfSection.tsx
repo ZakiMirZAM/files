@@ -7,7 +7,7 @@ interface ReverseDcfSectionProps {
   data?: ReverseDcf | null;
 }
 
-const pct = (v: number | null | undefined, d = 1): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
 /**
@@ -29,7 +29,7 @@ export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
     <section className="animate-fade-up">
       <header className="mb-5">
         <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">Reverse DCF</h2>
-        <p className="text-[0.7rem] font-mono text-white/40 mt-1.5">Price used: ${data.priceUsed.toFixed(2)}</p>
+        <p className="text-[0.7rem] font-mono text-white/40 mt-1.5">Price used: ${data.priceUsed.toFixed(3)}</p>
         <DefinitionLink number={193} prominent className="mt-3">How market-implied growth works</DefinitionLink>
       </header>
 
@@ -57,7 +57,7 @@ export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
                     gap == null ? "text-white/50" : demanding ? "text-loss-strong" : "text-gain-strong",
                   )}
                 >
-                  {gap == null ? "n/a" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}pp`}
+                  {gap == null ? "n/a" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(3)}pp`}
                 </p>
               </div>
             </div>
@@ -69,7 +69,7 @@ export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
             )}
             {data.multipleRoots && data.roots && (
               <p className="text-[0.72rem] font-mono text-white/45 mt-2">
-                Other roots: {data.roots.map((r) => pct(r, 0)).join(", ")}
+                Other roots: {data.roots.map((r) => pct(r, 3)).join(", ")}
               </p>
             )}
           </>

@@ -47,7 +47,7 @@ export function StrategicResourcesSection({ analysis, ticker, companyName }: Str
           )}
           {rd.rdIntensity != null && (
             <span className="px-2 py-0.5 rounded-sm border border-white/10">
-              <MetricTerm metric="R&D / revenue" asSpan /> {(rd.rdIntensity * 100).toFixed(1)}%
+              <MetricTerm metric="R&D / revenue" asSpan /> {(rd.rdIntensity * 100).toFixed(3)}%
             </span>
           )}
         </div>

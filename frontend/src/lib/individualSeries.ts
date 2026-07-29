@@ -44,7 +44,7 @@ export interface DefinitionSeries {
 function metricFormatter(unit: Metric["unit"]): (v: number) => string {
   if (unit === "$") return (v) => formatCurrency(v);
   if (unit === "%") return (v) => formatPercent(v);
-  if (unit === "x") return (v) => `${v.toFixed(2)}x`;
+  if (unit === "x") return (v) => `${v.toFixed(3)}x`;
   return (v) => formatNumber(v);
 }
 

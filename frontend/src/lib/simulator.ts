@@ -165,7 +165,8 @@ export function valuePortfolio(
 const usdFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  maximumFractionDigits: 2,
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
 });
 
 const usdCompactFmt = new Intl.NumberFormat("en-US", {
@@ -189,7 +190,7 @@ export function formatUsdCompact(value: number | null | undefined): string {
 export function formatSignedPct(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+  return `${sign}${value.toFixed(3)}%`;
 }
 
 /** Signed USD with a leading + on gains. */
@@ -206,11 +207,12 @@ export function formatLocalPrice(value: number | null | undefined, currency: str
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
     }).format(value);
   } catch {
     // Unknown/invalid ISO currency code, fall back to a plain number + code.
-    return `${value.toFixed(2)} ${currency}`;
+    return `${value.toFixed(3)} ${currency}`;
   }
 }
 

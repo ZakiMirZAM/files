@@ -321,7 +321,7 @@ export function TradeTicket({
                 } />
                 <Stat
                   label="Day"
-                  value={liveQuote?.dayChangePct != null ? `${liveQuote.dayChangePct.toFixed(2)}%` : "n/a"}
+                  value={liveQuote?.dayChangePct != null ? `${liveQuote.dayChangePct.toFixed(3)}%` : "n/a"}
                 />
               </div>
             )}

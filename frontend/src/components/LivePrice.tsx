@@ -134,17 +134,17 @@ export function LivePrice({ ticker }: LivePriceProps) {
           <p className="label mb-2">Last price</p>
           <div className="flex items-baseline gap-3">
             <p className="font-display text-5xl md:text-6xl font-semibold text-white tracking-tight">
-              ${quote.price?.toFixed(2)}
+              ${quote.price?.toFixed(3)}
             </p>
             <span className={cn("inline-flex items-center gap-1.5 text-sm font-mono", trendColor)}>
               {trendIcon}
               {positive ? "+" : ""}
-              {quote.dayChange?.toFixed(2)} ({positive ? "+" : ""}
-              {quote.dayChangePct?.toFixed(2)}%)
+              {quote.dayChange?.toFixed(3)} ({positive ? "+" : ""}
+              {quote.dayChangePct?.toFixed(3)}%)
             </span>
           </div>
           <p className="text-xs text-white/45 mt-2 font-mono">
-            prev close ${quote.previousClose?.toFixed(2)}
+            prev close ${quote.previousClose?.toFixed(3)}
           </p>
         </div>
 
@@ -170,10 +170,10 @@ export function LivePrice({ ticker }: LivePriceProps) {
           quote.volume !== null ? quote.volume.toLocaleString() : "n/a"
         } />
         <Stat label="Day high" value={
-          quote.dayHigh !== null ? `$${quote.dayHigh.toFixed(2)}` : "n/a"
+          quote.dayHigh !== null ? `$${quote.dayHigh.toFixed(3)}` : "n/a"
         } />
         <Stat label="Day low" value={
-          quote.dayLow !== null ? `$${quote.dayLow.toFixed(2)}` : "n/a"
+          quote.dayLow !== null ? `$${quote.dayLow.toFixed(3)}` : "n/a"
         } />
       </div>
     </article>
@@ -198,8 +198,8 @@ function Range({
         />
       </div>
       <div className="flex items-center justify-between mt-2 text-xs font-mono">
-        <span className="text-white/55">${low.toFixed(2)}</span>
-        <span className="text-white/55">${high.toFixed(2)}</span>
+        <span className="text-white/55">${low.toFixed(3)}</span>
+        <span className="text-white/55">${high.toFixed(3)}</span>
       </div>
     </div>
   );

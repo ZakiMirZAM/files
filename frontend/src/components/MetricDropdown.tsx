@@ -30,7 +30,7 @@ interface MetricDropdownProps {
 function formatValue(v: number, unit: Metric["unit"]): string {
   if (unit === "$") return formatCurrency(v);
   if (unit === "%") return formatPercent(v);
-  if (unit === "x") return `${v.toFixed(2)}x`;
+  if (unit === "x") return `${v.toFixed(3)}x`;
   return formatNumber(v);
 }
 

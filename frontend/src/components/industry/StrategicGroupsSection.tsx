@@ -45,7 +45,7 @@ function PointTooltip({ active, payload }: { active?: boolean; payload?: { paylo
   return (
     <div className="rounded-md border border-gold/25 bg-[#10131f] px-3 py-2 text-xs shadow-lg">
       <p className="font-mono font-semibold text-white/90">{p.ticker}</p>
-      <p className="text-white/60 mt-0.5">Operating margin {p.operatingMargin.toFixed(1)}%</p>
+      <p className="text-white/60 mt-0.5">Operating margin {p.operatingMargin.toFixed(3)}%</p>
       <p className="text-white/60">Market value {money(p.marketCapUsd)}</p>
       {p.badges && p.badges.length > 0 && (
         <p className="text-gold/80 mt-0.5">{p.badges.join(" · ")}</p>

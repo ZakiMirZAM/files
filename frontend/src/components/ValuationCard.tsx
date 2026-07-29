@@ -149,24 +149,24 @@ function DcfPanel({
       <div className="space-y-2.5 text-sm">
         <Row label="Intrinsic / share" value={
           valuation.dcfIntrinsicPerShare !== null
-            ? `$${valuation.dcfIntrinsicPerShare.toFixed(2)}`
+            ? `$${valuation.dcfIntrinsicPerShare.toFixed(3)}`
             : "n/a"
         } />
         <Row label="Implied price" value={
-          valuation.impliedPrice !== null ? `$${valuation.impliedPrice.toFixed(2)}` : "n/a"
+          valuation.impliedPrice !== null ? `$${valuation.impliedPrice.toFixed(3)}` : "n/a"
         } />
         <Row label="Margin of safety" value={
           mosPct !== null
-            ? <span className={cn("font-mono", mosColor)}>{mosPct >= 0 ? "+" : ""}{mosPct.toFixed(1)}%</span>
+            ? <span className={cn("font-mono", mosColor)}>{mosPct >= 0 ? "+" : ""}{mosPct.toFixed(3)}%</span>
             : "n/a"
         } />
         <Row label="FCF growth used" value={
           valuation.fcfGrowthUsed !== null
-            ? `${(valuation.fcfGrowthUsed * 100).toFixed(1)}%`
+            ? `${(valuation.fcfGrowthUsed * 100).toFixed(3)}%`
             : "n/a"
         } />
         <div className="pt-3 mt-3 border-t border-gold/10 text-[0.7rem] text-white/35 font-mono">
-          WACC {(valuation.wacc * 100).toFixed(0)}% · Terminal {(valuation.terminalGrowth * 100).toFixed(0)}% · {valuation.projectionYears}yr proj
+          WACC {(valuation.wacc * 100).toFixed(3)}% · Terminal {(valuation.terminalGrowth * 100).toFixed(3)}% · {valuation.projectionYears}yr proj
         </div>
       </div>
     </div>
@@ -208,7 +208,7 @@ function RatiosPanel({ ratios }: { ratios: Record<string, number | null> }) {
           const v = ratios[key];
           let display = "n/a";
           if (v !== null && v !== undefined) {
-            display = pct ? formatPercent(v * 100) : v.toFixed(2);
+            display = pct ? formatPercent(v * 100) : v.toFixed(3);
           }
           return (
             <div key={key} className="flex justify-between gap-2">

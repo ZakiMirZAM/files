@@ -16,12 +16,12 @@ interface ReturnsQualitySectionProps {
   ticker: string;
 }
 
-const pct = (v: number | null | undefined, d = 1): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 // A gap between two percentages is percentage POINTS, not a percentage change.
-const pp = (v: number | null | undefined, d = 1): string =>
+const pp = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(d)}pp`;
-const mult = (v: number | null | undefined, d = 2): string =>
+const mult = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${v.toFixed(d)}×`;
 
 const gapTone = (v: number | null | undefined): string =>
@@ -296,7 +296,7 @@ function GrowthBlock({ d, ticker }: { d: GrowthComparison; ticker: string }) {
           v={pct(d.expectedFiveYearAverage)}
           tone={gapTone(d.expectedFiveYearAverage)}
         />
-        <Tile k="Divergence" v={d.divergence == null ? "n/a" : `${(d.divergence * 100).toFixed(1)}pp`} />
+        <Tile k="Divergence" v={d.divergence == null ? "n/a" : `${(d.divergence * 100).toFixed(3)}pp`} />
       </Tiles>
 
       <div className="panel-soft p-5 mb-4">

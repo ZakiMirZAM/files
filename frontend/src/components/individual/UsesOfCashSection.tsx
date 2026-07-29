@@ -47,7 +47,7 @@ function usd(v: number | null | undefined): string {
 
 function pct(v: number | null | undefined): string {
   if (v === null || v === undefined) return "not reported";
-  return `${(v * 100).toFixed(1)}%`;
+  return `${(v * 100).toFixed(3)}%`;
 }
 
 /** Rows for the share chart. A year with no positive operating cash flow has no
@@ -79,7 +79,7 @@ function ChartTooltip({ active, payload, label, unit }: {
 }) {
   if (!active || !payload?.length) return null;
   const fmt = unit === "pct"
-    ? (v: number) => `${v.toFixed(1)}%`
+    ? (v: number) => `${v.toFixed(3)}%`
     : (v: number) => usd(v);
   return (
     <div className="panel-soft px-3 py-2 text-xs">

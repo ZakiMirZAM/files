@@ -52,7 +52,7 @@ export function DefinitionChart({ series, title }: DefinitionChartProps) {
   const showYoY = view === "yoy" && canToggle;
 
   const points = showYoY ? yoyPoints : series.points;
-  const fmt = showYoY ? (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` : series.format;
+  const fmt = showYoY ? (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}%` : series.format;
 
   const rows = points.map((p) => ({ year: yearLabel(p.period), value: p.value }));
 

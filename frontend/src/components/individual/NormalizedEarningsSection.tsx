@@ -16,7 +16,7 @@ interface NormalizedEarningsSectionProps {
 
 const money = (v: number | null | undefined): string =>
   v == null ? "n/a" : formatCurrency(v, { compact: true });
-const pct = (v: number | null | undefined, d = 1): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
 const LBL = "text-[0.65rem] uppercase tracking-wider text-white/40";
@@ -190,7 +190,7 @@ function OneTimeCard({ o }: { o: NormalizedOneTime }) {
             {dev != null && Math.abs(dev) > 0.001 && (
               <span className={cn("ml-1.5 text-[0.7rem]", dev >= 0 ? "text-gain-strong" : "text-loss-strong")}>
                 ({dev >= 0 ? "+" : ""}
-                {(dev * 100).toFixed(1)}pp)
+                {(dev * 100).toFixed(3)}pp)
               </span>
             )}
           </p>
@@ -200,7 +200,7 @@ function OneTimeCard({ o }: { o: NormalizedOneTime }) {
         <p className="text-[0.72rem] font-mono text-white/55 mt-3">
           Flagged years:{" "}
           {o.flaggedYears
-            .map((f) => `${f.year} (${f.deviation >= 0 ? "+" : ""}${(f.deviation * 100).toFixed(0)}pp)`)
+            .map((f) => `${f.year} (${f.deviation >= 0 ? "+" : ""}${(f.deviation * 100).toFixed(3)}pp)`)
             .join(", ")}
         </p>
       )}

@@ -7,9 +7,9 @@ interface DupontSectionProps {
   dupont?: Dupont | null;
 }
 
-const pct = (v: number | null | undefined, d = 1): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
-const mult = (v: number | null | undefined, d = 2): string =>
+const mult = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${v.toFixed(d)}×`;
 
 // The five levers, in decomposition order. `kind` drives formatting (ratio vs %).

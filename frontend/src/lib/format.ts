@@ -9,24 +9,23 @@ export function formatCurrency(value: number, opts: { compact?: boolean } = {}):
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
   }).format(value);
 }
 
-export function formatPercent(value: number, fractionDigits = 1): string {
-  // Keep more precision for sub-1% values so 0.45% doesn't collapse to 0.5%.
-  const digits = Math.abs(value) < 1 ? Math.max(fractionDigits, 2) : fractionDigits;
-  return `${value.toFixed(digits)}%`;
+export function formatPercent(value: number, fractionDigits = 3): string {
+  return `${value.toFixed(fractionDigits)}%`;
 }
 
-export function formatNumber(value: number, fractionDigits = 1): string {
+export function formatNumber(value: number, fractionDigits = 3): string {
   const abs = Math.abs(value);
   if (abs >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
   if (abs >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
-  // Sub-1 values keep at least 2 decimals (0.08 stays 0.08, not 0.1).
-  if (abs > 0 && abs < 1) return value.toFixed(Math.max(fractionDigits, abs < 0.01 ? 4 : 2));
+  // Sub-1 values keep at least fractionDigits decimals (0.08 stays 0.080, not 0.1).
+  if (abs > 0 && abs < 1) return value.toFixed(Math.max(fractionDigits, abs < 0.001 ? 4 : 3));
   return value.toFixed(fractionDigits);
 }
 

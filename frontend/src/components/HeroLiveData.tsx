@@ -94,7 +94,7 @@ function LineChart({ points, suffix, reference, active }: LineChartProps) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", height: 230 }} role="img"
-      aria-label={`${points.length} observations, latest ${fmt(points[points.length - 1].value, 2)}${suffix}`}>
+      aria-label={`${points.length} observations, latest ${fmt(points[points.length - 1].value, 3)}${suffix}`}>
       <defs>
         <linearGradient id="hld-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={GOLD} stopOpacity={0.26} />
@@ -170,7 +170,7 @@ function SectorBars({ bars, active }: { bars: SectorBar[]; active: boolean }) {
             <text x={b.spread >= 0 ? axisX + w + 6 : axisX - w - 6} y={yTop + h / 2 + 3.5}
               textAnchor={b.spread >= 0 ? "start" : "end"}
               className="hld-val" fill={positive ? GOLD_SOFT : CLAY}>
-              {b.spread > 0 ? "+" : ""}{fmt(b.spread, 1)}
+              {b.spread > 0 ? "+" : ""}{fmt(b.spread, 3)}
             </text>
           </g>
         );
@@ -343,7 +343,7 @@ export default function HeroLiveData({ active }: { active: boolean }) {
         <>
           <LineChart points={sample(state.curve.trend)} suffix="%" reference={{ value: 0, label: "inversion" }} active={active} />
           <div className="hld-reading" style={{ marginTop: "0.9rem" }}>
-            <span className="hld-value">{fmt(state.curve.latestValue, 2)}%</span>
+            <span className="hld-value">{fmt(state.curve.latestValue, 3)}%</span>
             <span className="hld-metric">10Y minus 2Y Treasury spread</span>
           </div>
           <p className="hld-note">
@@ -380,7 +380,7 @@ export default function HeroLiveData({ active }: { active: boolean }) {
             active={active}
           />
           <div className="hld-reading" style={{ marginTop: "0.9rem" }}>
-            <span className="hld-value">{fmt(state.cape.latestValue, 1)}x</span>
+            <span className="hld-value">{fmt(state.cape.latestValue, 3)}x</span>
             <span className="hld-metric">Shiller CAPE (PE10)</span>
           </div>
           <p className="hld-note">

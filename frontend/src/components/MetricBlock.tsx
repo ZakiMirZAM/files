@@ -40,7 +40,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 function formatValue(v: number, unit: Metric["unit"]): string {
   if (unit === "$") return formatCurrency(v);
   if (unit === "%") return formatPercent(v);
-  if (unit === "x") return `${v.toFixed(2)}x`;
+  if (unit === "x") return `${v.toFixed(3)}x`;
   return formatNumber(v);
 }
 
@@ -331,7 +331,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                 overallChange >= 0 ? "text-gain-strong" : "text-loss-strong",
               )}
             >
-              {overallChange >= 0 ? "▲" : "▼"} {Math.abs(overallChange).toFixed(1)}% since {startPeriodLabel}
+              {overallChange >= 0 ? "▲" : "▼"} {Math.abs(overallChange).toFixed(3)}% since {startPeriodLabel}
             </p>
           )}
         </div>
@@ -631,7 +631,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                       !material && "text-white/65",
                     )}
                   >
-                    {positive ? "+" : ""}{change.toFixed(1)}%
+                    {positive ? "+" : ""}{change.toFixed(3)}%
                   </p>
                 </div>
               );
@@ -672,7 +672,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                       !material && "text-white/80",
                     )}
                   >
-                    {positive ? "+" : ""}{change.toFixed(1)}{isPp ? "pp" : "%"}
+                    {positive ? "+" : ""}{change.toFixed(3)}{isPp ? "pp" : "%"}
                   </p>
                 </div>
               );
@@ -746,8 +746,8 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                 )}
               >
                 {isRateOfChange
-                  ? `${trend.length > 1 ? (trend.at(-1)!.value - trend[0]!.value >= 0 ? "+" : "") + (trend.at(-1)!.value - trend[0]!.value).toFixed(1) + "pp" : "n/a"}`
-                  : `${overallChange >= 0 ? "+" : ""}${overallChange.toFixed(1)}%`}
+                  ? `${trend.length > 1 ? (trend.at(-1)!.value - trend[0]!.value >= 0 ? "+" : "") + (trend.at(-1)!.value - trend[0]!.value).toFixed(3) + "pp" : "n/a"}`
+                  : `${overallChange >= 0 ? "+" : ""}${overallChange.toFixed(3)}%`}
               </dd>
             </div>
           </dl>
@@ -774,12 +774,12 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                     <span className="text-sm text-white/65 leading-snug">{row.label}</span>
                     <span className="font-mono text-sm text-gold whitespace-nowrap">
                       {row.unit === "%"
-                        ? `${row.value > 0 ? "+" : ""}${row.value.toFixed(1)}%`
+                        ? `${row.value > 0 ? "+" : ""}${row.value.toFixed(3)}%`
                         : row.unit === "$"
                         ? formatCurrency(row.value)
                         : row.unit === "x"
-                        ? `${row.value.toFixed(2)}x`
-                        : row.value.toFixed(2)}
+                        ? `${row.value.toFixed(3)}x`
+                        : row.value.toFixed(3)}
                     </span>
                   </div>
                 ))}

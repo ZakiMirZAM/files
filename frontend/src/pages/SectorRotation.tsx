@@ -274,7 +274,7 @@ export function SectorRotation() {
                         <td className="px-4 py-3 text-white/80">{g.group}</td>
                         <td className="px-4 py-3 text-center font-mono text-white/55">{g.count}</td>
                         <td className="px-4 py-3 text-center font-mono text-white/55">{g.weightSum}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gold tabular-nums">{g.pct.toFixed(1)}%</td>
+                        <td className="px-4 py-3 text-right font-mono text-gold tabular-nums">{g.pct.toFixed(3)}%</td>
                       </tr>
                     ))}
                   </tbody>

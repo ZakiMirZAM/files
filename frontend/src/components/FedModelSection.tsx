@@ -25,7 +25,7 @@ const GOLD = "#c9a84c";
 const GOLD_SOFT = "#d9b85c";
 const TREASURY = "#7c9fd6";
 
-const pct = (v: number | null | undefined, d = 2): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null || !Number.isFinite(v) ? "n/a" : `${v.toFixed(d)}%`;
 const yr = (period: string): string => (period.length >= 4 ? period.slice(0, 4) : period);
 
@@ -82,7 +82,7 @@ export function FedModelSection({ fedModel, recessionBands = [] }: FedModelSecti
     spread == null ? "text-white/50" : spread >= 0 ? "text-gain-strong" : "text-loss-strong";
 
   const spreadSummary =
-    spread == null ? null : `${spread >= 0 ? "+" : ""}${spread.toFixed(2)}pp spread`;
+    spread == null ? null : `${spread >= 0 ? "+" : ""}${spread.toFixed(3)}pp spread`;
 
   return (
     <article className="panel overflow-hidden animate-fade-up">
@@ -132,16 +132,16 @@ export function FedModelSection({ fedModel, recessionBands = [] }: FedModelSecti
           <Stat label="1Y Treasury (DGS1)" value={pct(snap.treasuryYield)} />
           <Stat
             label="Spread (trailing)"
-            value={spread == null ? "n/a" : `${spread >= 0 ? "+" : ""}${spread.toFixed(2)}pp`}
+            value={spread == null ? "n/a" : `${spread >= 0 ? "+" : ""}${spread.toFixed(3)}pp`}
             className={spreadColor}
           />
-          <Stat label="S&P 500 PE (price/EPS)" value={snap.marketPe != null ? `${snap.marketPe.toFixed(1)}×` : "n/a"} />
+          <Stat label="S&P 500 PE (price/EPS)" value={snap.marketPe != null ? `${snap.marketPe.toFixed(3)}×` : "n/a"} />
           <Stat
             label={`S&P 500 EPS (trailing)${snap.asOf ? ` · ${snap.asOf}` : ""}`}
             value={snap.sp500Eps != null ? snap.sp500Eps.toLocaleString() : "n/a"}
           />
           <Stat
-            label={`S&P 500 EPS (projected${snap.analystGrowth != null ? ` · +${(snap.analystGrowth * 100).toFixed(1)}%` : ""})`}
+            label={`S&P 500 EPS (projected${snap.analystGrowth != null ? ` · +${(snap.analystGrowth * 100).toFixed(3)}%` : ""})`}
             value={snap.sp500ForwardEps != null ? snap.sp500ForwardEps.toLocaleString() : "n/a"}
           />
         </div>
@@ -166,7 +166,7 @@ export function FedModelSection({ fedModel, recessionBands = [] }: FedModelSecti
             />
             <Tooltip
               contentStyle={{ background: "#15161a", border: "1px solid rgba(201,168,76,0.25)", borderRadius: 4, fontSize: 12 }}
-              formatter={(value, name) => [`${Number(value).toFixed(2)}%`, String(name)]}
+              formatter={(value, name) => [`${Number(value).toFixed(3)}%`, String(name)]}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             {recessionEls}

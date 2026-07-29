@@ -9,10 +9,10 @@ interface Sp500ValuationPanelProps {
   valuation?: Sp500Valuation | null;
 }
 
-const pct = (v: number | null | undefined, d = 2): string =>
+const pct = (v: number | null | undefined, d = 3): string =>
   v == null || !Number.isFinite(v) ? "n/a" : `${(v * 100).toFixed(d)}%`;
 const num = (v: number | null | undefined, d = 0): string =>
-  v == null || !Number.isFinite(v) ? "n/a" : v.toLocaleString(undefined, { maximumFractionDigits: d });
+  v == null || !Number.isFinite(v) ? "n/a" : v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /**
  * S&P 500 valuation panel, Damodaran's two-stage DCF on the index. Discounts the
@@ -28,7 +28,7 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
   const ou = valuation.overUnderValuationPct;
   const ouColor =
     ou == null ? "text-white/50" : ou >= 0 ? "text-gain-strong" : "text-loss-strong";
-  const ouSummary = ou == null ? null : `${ou >= 0 ? "+" : ""}${ou.toFixed(1)}% vs fair value`;
+  const ouSummary = ou == null ? null : `${ou >= 0 ? "+" : ""}${ou.toFixed(3)}% vs fair value`;
   const proj = valuation.projection ?? [];
 
   return (
@@ -73,8 +73,8 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
       {open && (
         <div className="px-6 md:px-8 pb-8 pt-1 border-t border-gold/10">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-6">
-            <Stat label="Index price" value={num(valuation.price, 0)} />
-            <Stat label="S&P 500 earnings (trailing)" value={num(valuation.earnings, 1)} />
+            <Stat label="Index price" value={num(valuation.price, 3)} />
+            <Stat label="S&P 500 earnings (trailing)" value={num(valuation.earnings, 3)} />
             <Stat label="Implied return" value={pct(valuation.impliedReturn)} accent />
             <Stat label="Implied ERP" value={pct(valuation.impliedERP)} accent />
             <Stat label="Risk-free (DGS10)" value={pct(valuation.riskFree)} />
@@ -83,11 +83,11 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
             <Stat label="Terminal growth" value={pct(valuation.terminalGrowth)} />
             <Stat
               label={`Fair value @ ${pct(valuation.baselineERP)} ERP`}
-              value={num(valuation.fairValueAtBaseline, 0)}
+              value={num(valuation.fairValueAtBaseline, 3)}
             />
             <Stat
               label="Over / under vs price"
-              value={ou == null ? "n/a" : `${ou >= 0 ? "+" : ""}${ou.toFixed(1)}%`}
+              value={ou == null ? "n/a" : `${ou >= 0 ? "+" : ""}${ou.toFixed(3)}%`}
               className={ouColor}
             />
           </div>
@@ -111,9 +111,9 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
                     {proj.map((row) => (
                       <tr key={row.year} className="border-b border-white/[0.06]">
                         <td className="py-2 pr-4 text-white/60">Year {row.year}</td>
-                        <td className="py-2 pr-4 text-right text-gold">{num(row.projectedEarnings, 1)}</td>
-                        <td className="py-2 pr-4 text-right">{num(row.cashFlow, 1)}</td>
-                        <td className="py-2 text-right text-white/70">{num(row.pvAtImpliedReturn, 1)}</td>
+                        <td className="py-2 pr-4 text-right text-gold">{num(row.projectedEarnings, 3)}</td>
+                        <td className="py-2 pr-4 text-right">{num(row.cashFlow, 3)}</td>
+                        <td className="py-2 text-right text-white/70">{num(row.pvAtImpliedReturn, 3)}</td>
                       </tr>
                     ))}
                     {valuation.terminalCashFlow != null && (
@@ -121,7 +121,7 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
                         <td className="py-2 pr-4">Terminal</td>
                         <td className="py-2 pr-4 text-right">n/a</td>
                         <td className="py-2 pr-4 text-right">
-                          {num(valuation.terminalCashFlow, 1)} → perpetuity @ {pct(valuation.terminalGrowth)}
+                          {num(valuation.terminalCashFlow, 3)} → perpetuity @ {pct(valuation.terminalGrowth)}
                         </td>
                         <td className="py-2 text-right">n/a</td>
                       </tr>
@@ -138,13 +138,13 @@ export function Sp500ValuationPanel({ valuation }: Sp500ValuationPanelProps) {
             ) : ou >= 0 ? (
               <>
                 At a baseline {pct(valuation.baselineERP)} equity risk premium, the index's fair value sits{" "}
-                <span className="text-gain-strong">{Math.abs(ou).toFixed(1)}% above</span> its current
+                <span className="text-gain-strong">{Math.abs(ou).toFixed(3)}% above</span> its current
                 price, the market looks <span className="text-gain-strong">cheap</span> versus that baseline.
               </>
             ) : (
               <>
                 At a baseline {pct(valuation.baselineERP)} equity risk premium, the index's fair value sits{" "}
-                <span className="text-loss-strong">{Math.abs(ou).toFixed(1)}% below</span> its current
+                <span className="text-loss-strong">{Math.abs(ou).toFixed(3)}% below</span> its current
                 price, the market looks <span className="text-loss-strong">expensive</span> versus that baseline.
               </>
             )}
