@@ -99,12 +99,25 @@ export interface ExplainParams {
 }
 
 async function postAi(path: string, body: unknown, timeoutMs: number): Promise<unknown> {
-  const res = await fetch(`${AI_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${AI_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    // AbortSignal.timeout fires an AbortError, which most browsers word as "The
+    // user aborted a request." That reads as though the user cancelled, when in
+    // fact the client gave up while the server was still working. Name it.
+    if (err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      throw new Error(
+        `The answer took longer than ${Math.round(timeoutMs / 1000)} seconds and the page stopped waiting. The server may still have finished it, so retry and it will usually come back from the cache.`,
+      );
+    }
+    throw err;
+  }
   if (!res.ok) {
     let detail = "";
     try {
@@ -235,7 +248,11 @@ export async function askQuestion(params: AskParams): Promise<AiResult> {
   };
   // 300s: the heartbeat proxy keeps the connection alive past Cloudflare's 100s
   // edge limit, so a long Sonnet answer (web searches, many turns) can complete.
-  const data = (await postAi("/ask", body, 300_000)) as {
+  // 600s, matching nginx's proxy_read_timeout and ai_proxy's UPSTREAM_TIMEOUT.
+  // It used to be 300s, which was under the ceiling the rest of the stack allows:
+  // the richer ASK_SYSTEM spends more turns, so a full answer can run past five
+  // minutes and the client was aborting a request the server went on to finish.
+  const data = (await postAi("/ask", body, 600_000)) as {
     answer?: string;
     sources?: string[];
     verification?: unknown;
@@ -272,7 +289,7 @@ export async function explainSelection(params: ExplainParams): Promise<AiResult>
     subject: params.subject,
     data: params.dataContext, // server reads the subject's figures from `data`
   };
-  const data = (await postAi("/explain", body, 240_000)) as {
+  const data = (await postAi("/explain", body, 420_000)) as {
     explanation?: string;
     sources?: string[];
     verification?: unknown;

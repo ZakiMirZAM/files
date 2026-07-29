@@ -65,16 +65,21 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault.db")
 PORT = 3001
 # Overridable so a benchmark or an experiment can run a different model without a
 # code round-trip; the SHIPPED default is what matters and the tests pin it.
-ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-sonnet-5")  # stronger model writes framework answers
+ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5")  # deepest reasoning writes the analysis
 EXPLAIN_MODEL = "claude-haiku-4-5"   # efficient model for short highlight explanations
 DEFINE_MODEL = "claude-haiku-4-5"    # efficient model for cached term tooltips
-# Reasoning effort per route, same idea as the model constants above: "max" for
-# /ask (the flagship long-form answer, vault+web+calc+research tools, the output
-# users actually read as an analysis) and "low" for /explain and /define (short
-# sidebar text and cached tooltips, where speed matters more than depth and the
-# Haiku choice already signals that). "xhigh" is Opus-4.7-only and silently falls
-# back to "high" elsewhere, so it is not used here since ASK_MODEL may not be Opus.
-ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "max")  # type: ignore[assignment]
+# Reasoning effort per route. "high" for /ask and "low" for /explain and /define
+# (short sidebar text and cached tooltips, where speed matters more than depth and
+# the Haiku choice already signals that).
+#
+# /ask was "max" until 2026-07-29 and it was the wrong call. A real answer logged
+# 15 turns at $2.09 and ran past the client's 300 second ceiling, so the browser
+# threw away work the server had finished. "max" is the top tier and it is spent on
+# EVERY turn, which is the whole compounding problem. Owner's decision: Opus 5 at
+# "high" rather than Sonnet 5 at "max", buying depth from the model instead of from
+# the reasoning tier. Note "xhigh" exists but is Opus-4.7-only and silently degrades
+# to "high" elsewhere, so it is deliberately not used.
+ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "high")  # type: ignore[assignment]
 EXPLAIN_EFFORT: EffortLevel = "low"
 DEFINE_EFFORT: EffortLevel = "low"
 # Keyed by `label` (the string run_agent already logs with, e.g. "/ask"), not by

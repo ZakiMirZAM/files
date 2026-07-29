@@ -214,9 +214,22 @@ def test_effort_is_keyed_by_label_not_model():
 
 def test_ask_is_the_highest_effort_route():
     """/ask is the flagship long-form answer; /explain and /define are short
-    sidebar text where the existing Haiku choice already signals speed over depth."""
-    assert server.ASK_EFFORT == "max"
+    sidebar text where the existing Haiku choice already signals speed over depth.
+
+    /ask is "high", NOT "max". "max" was shipped briefly and measured 15 turns at
+    $2.09 on one answer, overrunning the client's timeout so finished work was
+    discarded. Depth now comes from the model (Opus 5) rather than from spending
+    the top reasoning tier on every turn. Raising this back to "max" without
+    re-measuring latency is the mistake this line exists to prevent.
+    """
+    assert server.ASK_EFFORT == "high"
     assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "low"
+
+
+def test_ask_runs_the_deepest_model():
+    """The two short routes stay on Haiku; /ask is the one users read as analysis."""
+    assert server.ASK_MODEL == "claude-opus-5"
+    assert server.EXPLAIN_MODEL == server.DEFINE_MODEL == "claude-haiku-4-5"
 
 
 def test_run_agent_looks_up_effort_by_label_internally():
