@@ -23,7 +23,33 @@ if %ERRORLEVEL% EQU 0 (
     exit /b 1
 )
 
-python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --workers 1 --log-level info --proxy-headers --forwarded-allow-ips=127.0.0.1
+REM Resolve a REAL interpreter. Bare `python` is NOT on PATH on this machine, and
+REM where it is present it is usually the Windows Store alias stub, which prints
+REM "'python' is not recognized" and exits without running anything. The Store
+REM package ships the genuine interpreter one directory down, under
+REM PythonSoftwareFoundation.Python.<version>. Glob for it rather than hardcoding a
+REM version, so a Python upgrade does not silently break the launcher.
+set "PY="
+for /d %%D in ("%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.*") do (
+    if exist "%%D\python.exe" set "PY=%%D\python.exe"
+)
+if not defined PY (
+    for /f "delims=" %%P in ('where py 2^>nul') do set "PY=py -3"
+)
+if not defined PY (
+    echo.
+    echo ============================================================
+    echo  No Python interpreter found. Looked for:
+    echo    %LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.*\python.exe
+    echo    the py launcher
+    echo  Install Python 3.11+, or edit this script with a full path.
+    echo ============================================================
+    pause
+    exit /b 1
+)
+echo Using %PY%
+
+"%PY%" -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --workers 1 --log-level info --proxy-headers --forwarded-allow-ips=127.0.0.1
 
 REM If uvicorn exits (crash, or you close it), keep the window open so any
 REM error message is readable instead of vanishing instantly.
