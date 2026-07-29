@@ -118,6 +118,21 @@ Five always-on local processes: **ollama** (embeddings), **backend** (`start_bac
     and `DEFINE_SYSTEM` are byte-identical and still hash-locked. **The prompts are no longer
     immutable, but they are still hash-pinned**: an edit must update `EXPECTED` in
     `rag/test_prompts.py` in the same commit. Runtime mutation of a prompt remains banned outright.
+    A second 2026-07-29 edit added the owner's analytical method: **THE EIGHT ANALYTICAL FRAMES**
+    (5W1H + significance + assumptions, limitations, tradeoffs/incentives/scarcity/geography as a
+    *menu* rather than a checklist, best industry or company, pros against cons, how it can be
+    analyzed, long against short term, and possible/plausible/probable as three separate tests),
+    **ECONOMIC AND MACRO QUESTIONS** (classify all eleven GICS sectors as favored / not favored /
+    not affected, then give the per-sector earnings link, mirroring `economic/00-INDEX.md` parts 3
+    and 4; the mechanism must be an earnings or discount-rate channel, never a correlation, and the
+    CAUSE of a move changes the answer), and the **humanizer anti-patterns** folded into STYLE (no
+    vague attribution, no knowledge-cutoff disclaimers, no negative parallelism, no superficial
+    `-ing` clauses, no copula avoidance, straight quotes, sentence-case headings, no conversational
+    artifacts, no generic positive closing). The humanizer's PERSONALITY AND SOUL half is
+    deliberately NOT imported: it tells the writer to use "I", state opinions and leave in
+    half-formed thoughts, which fights the house voice. `/ask` also moved to **Opus 5 at `high`
+    effort** (from Sonnet 5 at `max`, which measured 15 turns and overran the client timeout);
+    on the same request that cut 115s to 33.7s and numeric fidelity 0.73 to 1.00.
 
 **Required prod env vars** (machine/user level so services inherit them): `ENV=production`,
 `ADMIN_TOKEN`, `ALLOWED_ORIGINS=https://intrinsicfined.org,https://www.intrinsicfined.org`,

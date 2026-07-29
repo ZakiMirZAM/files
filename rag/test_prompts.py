@@ -53,7 +53,7 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # FIGURES sections). The other two were recorded 2026-07-28 and are UNCHANGED by
 # that rewrite, which is itself part of the guarantee: only /ask was in scope.
 EXPECTED = {
-    "ASK_SYSTEM": "a351efbb3ac4f4ac2749c673859639b50d399d87a464f008c168e14385035802",
+    "ASK_SYSTEM": "063e2343170e3574ad12344ab3e29872719989e6c2789bd3519e8028adb0313a",
     "EXPLAIN_SYSTEM": "76c271377fbdfe24fdb4772f437038a3ae42a24e27fb4eee93eddc124837d4d9",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
@@ -144,6 +144,88 @@ def test_ask_still_declares_the_page_data_authoritative():
     text = server.ASK_SYSTEM
     assert "AUTHORITATIVE" in text
     assert "Computed data on the page" in text
+
+
+# --- the owner's analytical method (added 2026-07-29) ------------------------
+def test_ask_carries_all_eight_analytical_frames():
+    """The eight frames the owner uses for investment and economic decisions.
+
+    Asserted one at a time so a failure names the frame that went missing rather
+    than just reporting that the prompt changed. Every one of these already exists
+    somewhere in the product (questions.ts asks most of them verbatim); the prompt
+    is what makes an ANSWER carry them.
+    """
+    text = server.ASK_SYSTEM
+    frames = {
+        "5W1H + significance": "Who, what, where, when, why and how",
+        "assumptions named": "ASSUMPTIONS the",
+        "limitations": "LIMITATIONS",
+        "frame 3 is a menu, not a checklist": "MENU, not a checklist",
+        "tradeoffs and incentives": "Tradeoffs, inefficiencies, incentives",
+        "geography and politics": "political landscape",
+        "best industry or company": "best industry or the best company",
+        "pros against cons": "pros against the cons",
+        "how it can be analyzed": "Show the method by PERFORMING it",
+        "long against short term": "Long term against short term",
+        "possible/plausible/probable": "possible, plausible, and probable",
+    }
+    for label, needle in frames.items():
+        assert needle in text, f"ASK_SYSTEM lost the {label} frame"
+
+
+def test_ask_carries_the_house_sector_analysis_for_economic_questions():
+    """Economic answers must name which sectors benefit and why, in the format the
+    app's own 51 economic definition files use (00-INDEX.md parts 3 and 4).
+
+    The eleven GICS sectors are asserted individually: a prompt that names ten of
+    them produces an answer that silently drops one, which is exactly the failure
+    the "account for all eleven" instruction exists to prevent.
+    """
+    text = server.ASK_SYSTEM
+    for sector in ("Communication Services", "Consumer Discretionary", "Consumer Staples",
+                   "Energy", "Financials", "Health Care", "Industrials",
+                   "Information Technology", "Materials", "Real Estate", "Utilities"):
+        assert sector in text, f"ASK_SYSTEM lost the {sector} sector from the classification list"
+    # The rule that makes the "why" an explanation rather than an observation.
+    assert "EARNINGS channel" in text and "never a correlation" in text, \
+        "ASK_SYSTEM lost the rule that the mechanism must be an earnings or discount-rate channel"
+    # The cause of a move changes which sectors benefit; this is the subtlest rule
+    # in the economic files and the easiest to drop in an edit.
+    assert "CAUSE of the move changes the answer" in text
+    assert "(none)" in text, "ASK_SYSTEM lost the instruction to fill an empty sector column"
+
+
+def test_ask_carries_the_humanizer_anti_patterns():
+    """The anti-pattern half of the humanizer skill.
+
+    Deliberately NOT the PERSONALITY AND SOUL half, which tells the writer to use
+    "I", state opinions and leave in half-formed thoughts. That fights the house
+    voice (short sentences, one idea each, define every term) and would turn a
+    valuation answer into a blog post. Owner's decision, recorded here so a future
+    reader does not "complete" the import.
+    """
+    text = server.ASK_SYSTEM
+    for label, needle in {
+        "vague attribution": "No vague attribution",
+        "knowledge-cutoff disclaimer": "No knowledge-cutoff disclaimers",
+        "negative parallelism": "No negative parallelism",
+        "superficial -ing clause": 'superficial clauses ending in "-ing"',
+        "copula avoidance": 'Write "is"',
+        "curly quotes and emoji": "Straight quotes only",
+        "conversational artifacts": "No conversational artifacts",
+        "generic positive closing": "No generic positive closing",
+    }.items():
+        assert needle in text, f"ASK_SYSTEM lost the {label} rule"
+
+
+def test_ask_prompt_obeys_its_own_typography_rules():
+    """The prompt bans em dashes, en dashes and curly quotes. It must not contain
+    them itself, or it is teaching by counter-example."""
+    text = server.ASK_SYSTEM
+    assert "—" not in text, "ASK_SYSTEM contains an em dash"
+    assert "–" not in text, "ASK_SYSTEM contains an en dash"
+    for ch in ("“", "”", "‘", "’"):
+        assert ch not in text, "ASK_SYSTEM contains a curly quotation mark"
 
 
 def test_ask_puts_the_sources_line_last():
