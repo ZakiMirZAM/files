@@ -66,11 +66,16 @@ PORT = 3001
 # Overridable so a benchmark or an experiment can run a different model without a
 # code round-trip; the SHIPPED default is what matters and the tests pin it.
 ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5")  # deepest reasoning writes the analysis
-EXPLAIN_MODEL = "claude-haiku-4-5"   # efficient model for short highlight explanations
-DEFINE_MODEL = "claude-haiku-4-5"    # efficient model for cached term tooltips
-# Reasoning effort per route. "high" for /ask and "low" for /explain and /define
-# (short sidebar text and cached tooltips, where speed matters more than depth and
-# the Haiku choice already signals that).
+# Both short routes moved off Haiku 4.5 on 2026-08-07 (owner decision): Haiku was
+# ignoring the prompt's hard style rules (em dashes throughout) and under-using
+# the page-data block, answering "the page does not show X" for figures the
+# dataContext carried. /explain runs Opus 5 (same as /ask; explanations are read
+# as analysis) and /define runs Sonnet 5 (tooltip definitions are glossary-cached
+# one-paragraph text, so the extra Opus depth would be wasted there).
+EXPLAIN_MODEL = "claude-opus-5"      # follows house style + page data; explains highlights
+DEFINE_MODEL = "claude-sonnet-5"     # cached term tooltips
+# Reasoning effort per route: "high" everywhere as of 2026-08-07 (owner decision;
+# /explain and /define were "low" while they ran Haiku).
 #
 # /ask was "max" until 2026-07-29 and it was the wrong call. A real answer logged
 # 15 turns at $2.09 and ran past the client's 300 second ceiling, so the browser
@@ -80,11 +85,11 @@ DEFINE_MODEL = "claude-haiku-4-5"    # efficient model for cached term tooltips
 # the reasoning tier. Note "xhigh" exists but is Opus-4.7-only and silently degrades
 # to "high" elsewhere, so it is deliberately not used.
 ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "high")  # type: ignore[assignment]
-EXPLAIN_EFFORT: EffortLevel = "low"
-DEFINE_EFFORT: EffortLevel = "low"
+EXPLAIN_EFFORT: EffortLevel = "high"
+DEFINE_EFFORT: EffortLevel = "high"
 # Keyed by `label` (the string run_agent already logs with, e.g. "/ask"), not by
-# model: EXPLAIN_MODEL and DEFINE_MODEL are currently the same string, and keying
-# by model would let one route's effort silently clobber the other's in the dict.
+# model: two routes sharing one model string (as /explain and /define did until
+# 2026-08-07) would let one route's effort silently clobber the other's in the dict.
 EFFORT_BY_LABEL: dict[str, EffortLevel] = {
     "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
 }
@@ -297,6 +302,43 @@ CRITICAL THINKING AND SKEPTICISM
 - Never hallucinate or make anything up. Do not invent figures, sources, events, history, or
   quotations. If a fact cannot be verified and it matters to the answer, say so and reason without it
   rather than fabricating it.
+
+QUALITATIVE ANALYSIS MUST BE CAUSAL AND SPECIFIC
+Numbers confirm, they do not explain.
+- A ratio is a result, not a reason. It is the thing being explained, never the explanation.
+- Write the causal answer before any metric appears. State what is physically, contractually, or
+  organizationally true about the business that forces the outcome. Use no numbers in that part.
+- Every metric must name what produced it: a management decision, contract structure, asset type,
+  customer behavior, supplier relationship, or regulatory condition. Name the cause specifically.
+- The cause must be external to the metric. Restating the metric in words is not a cause. "Capital
+  intensity is high because the business is capital intensive" is circular and fails. The cause must
+  be a fact you could have learned without ever seeing the ratio.
+- A verdict followed only by supporting figures is a failed answer, even if every figure is correct.
+- Do not cite a score, rating, or index value as a reason. Say who produced it and what underlying
+  facts drove it, or leave it out.
+- Do not attribute a company result to industry conditions without first showing how this company
+  differs from the industry.
+- Every verdict states what fact would flip it, and one observable signal that it is happening.
+Specificity floor.
+- Every causal claim must name at least one of: a company, supplier, customer, product, contract,
+  filing, date, transaction, or person. A claim naming none of these is not an answer.
+- Prefer what a company did over what it said. Purchases, hires, write-offs, exits, renegotiations,
+  disclosure changes. Actions are dated and checkable. Positioning language is not.
+- Banned as standalone reasons, because they describe every company in every industry: established
+  relationships, brand reputation, technical expertise, economies of scale, high switching costs,
+  regulatory complexity, capital requirements, network effects, first mover advantage. Each is only
+  usable if you say what specifically creates it here and why a rival cannot copy it.
+- No sentence may survive a name swap. If it would read the same with a competitor substituted in,
+  it says nothing and gets deleted.
+- No disclaimers, no hedging preambles, no closing reminders about what matters.
+- Length follows evidence. Never expand to fill space. A short section backed by real evidence beats
+  a long one padded with generic causes.
+Check before output.
+- Delete every number. Does the argument still stand on its own?
+- Does each metric have a cause stated in the same paragraph?
+- Is that cause independent of the metric, or just a restatement?
+- Does every paragraph contain a proper noun or a date?
+- Is any reason on the banned list carrying weight without a named mechanism under it?
 
 WRITING FIGURES SO THEY CAN BE CHECKED
 The app reconciles every number in the answer against the page data automatically, and it matches each
@@ -738,8 +780,11 @@ async def handle_explain(request: web.Request) -> web.Response:
         prompt += research_tools.GUIDANCE
     ledger_token = calc_tools.begin()
     try:
+        # 2.50: the 0.75 guard was sized for Haiku pricing; /explain now runs
+        # Opus 5 at high effort, and a budget stop mid-loop truncates the
+        # explanation. Half of /ask's 4.0 because the output is sidebar-length.
         explanation, sources = await run_agent(
-            prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=0.75)
+            prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=2.50)
     except Exception as exc:
         print(f"[/explain] agent failed: {type(exc).__name__}: {exc}", flush=True)
         return web.json_response(
@@ -780,8 +825,10 @@ async def handle_define(request: web.Request) -> web.Response:
         )
     ledger_token = calc_tools.begin()
     try:
+        # 1.00: the 0.5 guard was sized for Haiku pricing; /define now runs
+        # Sonnet 5 at high effort.
         definition, _used = await run_agent(
-            prompt, DEFINE_MODEL, DEFINE_SYSTEM, max_turns=10, label="/define", budget_usd=0.5)
+            prompt, DEFINE_MODEL, DEFINE_SYSTEM, max_turns=10, label="/define", budget_usd=1.0)
     except Exception as exc:
         # Do not cache on failure — an empty definition must never enter the glossary.
         print(f"[/define] agent failed: {type(exc).__name__}: {exc}", flush=True)

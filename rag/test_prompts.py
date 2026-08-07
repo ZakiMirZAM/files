@@ -52,8 +52,14 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # house style rules, the Quality Score facts, and new CALCULATOR and WRITING
 # FIGURES sections). The other two were recorded 2026-07-28 and are UNCHANGED by
 # that rewrite, which is itself part of the guarantee: only /ask was in scope.
+#
+# ASK_SYSTEM re-recorded 2026-08-07: owner-approved ADDITIVE section
+# "QUALITATIVE ANALYSIS MUST BE CAUSAL AND SPECIFIC" (causes before metrics,
+# specificity floor, banned generic reasons, name-swap test, verdict flip
+# conditions), inserted between the skepticism and WRITING FIGURES sections.
+# EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "063e2343170e3574ad12344ab3e29872719989e6c2789bd3519e8028adb0313a",
+    "ASK_SYSTEM": "6fa7e5c88b8e35bbdc74adedd0dac96e5744f88dbc59a9d894be2ed8fbbc910f",
     "EXPLAIN_SYSTEM": "76c271377fbdfe24fdb4772f437038a3ae42a24e27fb4eee93eddc124837d4d9",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
@@ -287,31 +293,37 @@ def test_options_for_passes_through_an_explicit_effort():
 
 
 def test_effort_is_keyed_by_label_not_model():
-    """EXPLAIN_MODEL and DEFINE_MODEL are the same string today; if the lookup
-    were keyed by model, one route's effort would silently clobber the other's."""
-    assert server.EXPLAIN_MODEL == server.DEFINE_MODEL
+    """The effort lookup is keyed by route label, never by model. The two short
+    routes shared one model string until 2026-08-07 (when /explain moved to
+    Sonnet 5), which is why keying by model was a live clobbering hazard; the
+    label keying must survive any future model reshuffle the same way."""
     assert server.EFFORT_BY_LABEL["/explain"] == server.EXPLAIN_EFFORT
     assert server.EFFORT_BY_LABEL["/define"] == server.DEFINE_EFFORT
 
 
-def test_ask_is_the_highest_effort_route():
-    """/ask is the flagship long-form answer; /explain and /define are short
-    sidebar text where the existing Haiku choice already signals speed over depth.
+def test_every_route_runs_high_effort():
+    """All three routes run "high" effort as of 2026-08-07 (owner decision;
+    /explain and /define were "low" while they ran Haiku).
 
-    /ask is "high", NOT "max". "max" was shipped briefly and measured 15 turns at
+    "high", NOT "max". "max" was shipped briefly on /ask and measured 15 turns at
     $2.09 on one answer, overrunning the client's timeout so finished work was
-    discarded. Depth now comes from the model (Opus 5) rather than from spending
-    the top reasoning tier on every turn. Raising this back to "max" without
-    re-measuring latency is the mistake this line exists to prevent.
+    discarded. Depth comes from the model rather than from spending the top
+    reasoning tier on every turn. Raising any of these to "max" without
+    re-measuring latency is the mistake this test exists to prevent.
     """
     assert server.ASK_EFFORT == "high"
-    assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "low"
+    assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "high"
 
 
-def test_ask_runs_the_deepest_model():
-    """The two short routes stay on Haiku; /ask is the one users read as analysis."""
+def test_route_models_are_the_owner_pinned_set():
+    """Both short routes moved off Haiku 4.5 on 2026-08-07 (owner decision):
+    Haiku ignored the prompt's no-em-dash style rules and under-used the
+    page-data block. /ask and /explain run Opus 5 (both are read as analysis);
+    /define runs Sonnet 5 because tooltip definitions are one cached paragraph
+    where Opus depth would be wasted."""
     assert server.ASK_MODEL == "claude-opus-5"
-    assert server.EXPLAIN_MODEL == server.DEFINE_MODEL == "claude-haiku-4-5"
+    assert server.EXPLAIN_MODEL == "claude-opus-5"
+    assert server.DEFINE_MODEL == "claude-sonnet-5"
 
 
 def test_run_agent_looks_up_effort_by_label_internally():
