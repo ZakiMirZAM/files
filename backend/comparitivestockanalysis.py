@@ -219,14 +219,6 @@ NEG_PROFIT_CAP = 30.0
 # negative economic profit (eva_margin / roic_wacc_spread), or negative ROE.
 NEG_PROFIT_TRIGGERS = ("net_margin", "eva_margin", "roic_wacc_spread", "roe")
 
-# DCF assumptions — kept conservative so per-ticker valuations are comparable.
-DCF_WACC = 0.10
-DCF_TERMINAL_GROWTH = 0.03
-DCF_PROJECTION_YEARS = 5
-DCF_GROWTH_FLOOR = -0.15
-DCF_GROWTH_CAP = 0.20
-
-
 @dataclass(frozen=True)
 class TickerSnapshot:
     """All numbers needed to rank a single ticker in its industry."""
@@ -411,84 +403,6 @@ def _compute_metric_horizontal(rows: list[sqlite3.Row]) -> dict[str, dict[int, O
     return out
 
 
-def _historical_fcf_growth(rows: list[sqlite3.Row]) -> Optional[float]:
-    """Average YoY FCF/share growth over available history, capped for DCF use."""
-    growths: list[float] = []
-    prev: Optional[float] = None
-    for row in rows:
-        val = row["Free Cash Flow Per Share"] if "Free Cash Flow Per Share" in row.keys() else None
-        val_f = float(val) if val is not None else None
-        g = _yoy_pct(val_f, prev)
-        if g is not None:
-            growths.append(g)
-        prev = val_f
-    if not growths:
-        return None
-    # Geometric (compounded) mean, not arithmetic: Damodaran, *Investment
-    # Valuation* Ch.11 — "the geometric average is a much more accurate measure
-    # of true growth," and the arithmetic mean overstates it most for the volatile
-    # series typical of FCF. Skip sign-crossing years (compounding undefined when
-    # 1+g <= 0) and fall back to the arithmetic mean only if none remain.
-    compoundable = [g for g in growths if (1.0 + g) > 0.0]
-    if compoundable:
-        prod = 1.0
-        for g in compoundable:
-            prod *= (1.0 + g)
-        raw = prod ** (1.0 / len(compoundable)) - 1.0
-    else:
-        raw = sum(growths) / len(growths)
-    return max(DCF_GROWTH_FLOOR, min(raw, DCF_GROWTH_CAP))
-
-
-def _compute_dcf(
-    rows: list[sqlite3.Row],
-    beta: float | None = None,
-    price: float | None = None,
-) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
-    """
-    Per-ticker simplified DCF using FCF/share. Returns
-    (intrinsic_per_share, implied_price, margin_of_safety, growth_used).
-
-    When ``beta`` is provided, the discount rate is derived from CAPM
-    (Rf + beta * ERP). Otherwise the fixed DCF_WACC default is used.
-    ``price`` is the live market price for the margin-of-safety comparison;
-    when None it falls back to Market Cap / shares (stale filing-date price).
-    """
-    if not rows:
-        return None, None, None, None
-
-    latest = rows[-1]
-    fcf_ps = latest["Free Cash Flow Per Share"] if "Free Cash Flow Per Share" in latest.keys() else None
-    shares = latest["Weighted Average Shs Out Dil"] if "Weighted Average Shs Out Dil" in latest.keys() else None
-    market_cap = latest["Market Cap"] if "Market Cap" in latest.keys() else None
-
-    if fcf_ps is None or fcf_ps <= 0 or not shares or not market_cap or shares <= 0:
-        return None, None, None, None
-
-    growth = _historical_fcf_growth(rows)
-    if growth is None:
-        growth = 0.05
-
-    wacc = capm_discount_rate(beta) if beta is not None else DCF_WACC
-
-    pv_fcf = 0.0
-    fcf = float(fcf_ps)
-    for yr in range(1, DCF_PROJECTION_YEARS + 1):
-        fcf = fcf * (1 + growth)
-        pv_fcf += fcf / (1 + wacc) ** yr
-
-    if wacc <= DCF_TERMINAL_GROWTH:
-        return None, None, None, None
-    terminal_fcf = fcf * (1 + DCF_TERMINAL_GROWTH)
-    terminal_value = terminal_fcf / (wacc - DCF_TERMINAL_GROWTH)
-    pv_terminal = terminal_value / (1 + wacc) ** DCF_PROJECTION_YEARS
-
-    intrinsic = pv_fcf + pv_terminal
-    implied_price = price if (price is not None and price > 0) else float(market_cap) / float(shares)
-    mos = (intrinsic - implied_price) / implied_price
-    return round(intrinsic, 2), round(implied_price, 2), round(mos, 4), round(growth, 4)
-
-
 def build_snapshot(
     ticker: str,
     rows: list[sqlite3.Row],
@@ -536,7 +450,10 @@ def build_snapshot(
         growth_used = forecast.get("assumptions", {}).get("revenueGrowthInitial")
         eva_intrinsic = (forecast.get("eva") or {}).get("intrinsicPerShare")
     else:
-        intrinsic, implied_price, mos, growth_used = _compute_dcf(rows, beta=beta, price=live_price)
+        # No solvable forecast: the leaderboard shows n/a rather than a
+        # fabricated fallback valuation (the old clamped per-share DCF died
+        # with the Damodaran engine rebuild).
+        intrinsic = implied_price = mos = growth_used = None
 
     # Fundamental metric history (levels); latest year feeds the leaderboard columns.
     metric_levels = _ia.metric_history(rows, beta=beta, rf=rf, erp=erp)

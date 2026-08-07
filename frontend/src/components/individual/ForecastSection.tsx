@@ -1,11 +1,13 @@
-import type { IndividualForecast, WaccBuild } from "../../lib/types";
+import type { ForecastRow, IndividualForecast, WaccBuild } from "../../lib/types";
 import { formatCurrency, formatNumber } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
+import { StageToggle, useActiveVariant } from "./StageToggle";
 
 interface ForecastSectionProps {
   forecast: IndividualForecast;
+  ticker?: string;
 }
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
@@ -31,7 +33,9 @@ const STATEMENT_ROWS: Array<{ label: string; get: (r: IndividualForecast["rows"]
   { label: "PV of FCFF", get: (r) => formatCurrency(r.pvFcff) },
 ];
 
-export function ForecastSection({ forecast: f }: ForecastSectionProps) {
+export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionProps) {
+  const sel = f.valuationSelection ?? null;
+  const active = useActiveVariant(ticker, sel?.stageVariants, sel?.recommendedStages);
   if (f.applicable === false) {
     return (
       <article className="panel p-6 md:p-8 animate-fade-up">
@@ -48,14 +52,46 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
     );
   }
   const a = f.assumptions;
+  // The stage toggle is a lens: when the reader picks a non-recommended
+  // structure, the projection table and the valuation bridge follow it.
+  const isVariantView = active != null
+    && active.stageCount !== (sel?.recommendedStages ?? active.stageCount);
+  // Safe cast: this section only ever receives variants from the FORECAST's
+  // stageVariants, which the backend builds exclusively from the firm-side
+  // engine (ForecastRow-shaped rows); dividend-track variants never reach here.
+  const viewRows: ForecastRow[] = (isVariantView && active?.rows
+    ? (active.rows as ForecastRow[])
+    : f.rows);
+  const viewYears = viewRows === f.rows
+    ? f.years
+    : viewRows.map((r) => f.baseYear + r.year);
+  const equityAdjust = f.equityValue - f.firmValue;
+  const view = isVariantView && active
+    ? {
+        pvExplicit: active.pvExplicit ?? null,
+        pvTerminal: active.pvTerminal ?? null,
+        firmValue: (active.pvExplicit ?? 0) + (active.pvTerminal ?? 0),
+        equityValue: (active.pvExplicit ?? 0) + (active.pvTerminal ?? 0) + equityAdjust,
+        intrinsicPerShare: active.intrinsicPerShare ?? null,
+        marginOfSafety: active.marginOfSafety ?? null,
+      }
+    : {
+        pvExplicit: f.pvExplicit,
+        pvTerminal: f.pvTerminal,
+        firmValue: f.firmValue,
+        equityValue: f.equityValue,
+        intrinsicPerShare: f.intrinsicPerShare,
+        marginOfSafety: f.marginOfSafety,
+      };
   const ref = f.currentPrice ?? f.intrinsicPerShare;
-  const mos = f.marginOfSafety;
+  const mos = view.marginOfSafety;
   const mosColor =
     mos == null ? "text-white/50" :
     mos >= 0.25 ? "text-gain-strong" :
     mos >= 0 ? "text-gain" :
     mos >= -0.25 ? "text-gold" :
     "text-loss-strong";
+  const hasStageMeta = viewRows.length > 0 && viewRows[0].phase != null;
 
   const assumptions: Array<{ k: string; v: string }> = [
     { k: "Horizon", v: `${a.horizonYears} yrs` },
@@ -77,6 +113,38 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
         <DefinitionLink number={71} prominent className="mt-3">How the FCFF model and WACC work</DefinitionLink>
       </header>
 
+      {/* Model structure: selection rationale + the stage toggle + warnings */}
+      {sel && (
+        <div className="panel-soft p-5 mb-6">
+          <p className="eyebrow mb-3">Model Structure</p>
+          <StageToggle
+            ticker={ticker}
+            variants={sel.stageVariants}
+            recommended={sel.recommendedStages}
+          />
+          {sel.rationale.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {sel.rationale.map((s) => (
+                <li key={s} className="text-sm text-white/65 leading-snug">{s}</li>
+              ))}
+            </ul>
+          )}
+          {(sel.diagnostics?.length ?? 0) > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {sel.diagnostics?.map((d) => (
+                <p key={`${d.id}-${d.detail}`} className="text-xs text-gold/80 leading-snug flex gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{d.detail}</span>
+                </p>
+              ))}
+            </div>
+          )}
+          <DefinitionLink number={870} className="mt-3">
+            How the engine chooses a model
+          </DefinitionLink>
+        </div>
+      )}
+
       {/* Assumptions */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
         {assumptions.map(({ k, v }) => (
@@ -94,17 +162,17 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
         <div className="lg:col-span-2 panel-soft p-5">
           <p className="eyebrow mb-4">Valuation Bridge</p>
           <dl className="space-y-2 text-sm">
-            <BridgeRow label="PV of explicit FCFF" value={money(f.pvExplicit)} />
-            <BridgeRow label="+ PV of terminal value" value={money(f.pvTerminal)} />
-            <BridgeRow label="= Enterprise value" value={money(f.firmValue)} strong />
+            <BridgeRow label="PV of explicit FCFF" value={money(view.pvExplicit)} />
+            <BridgeRow label="+ PV of terminal value" value={money(view.pvTerminal)} />
+            <BridgeRow label="= Enterprise value" value={money(view.firmValue)} strong />
             <BridgeRow label="+ Cash & investments" value={money(f.cash)} />
             <BridgeRow label="− Gross debt" value={money(f.grossDebt)} />
             <BridgeRow label="− Minority interest" value={money(f.minorityInterest)} />
-            <BridgeRow label="= Equity value" value={money(f.equityValue)} strong />
+            <BridgeRow label="= Equity value" value={money(view.equityValue)} strong />
             <div className="pt-1 mt-2">
               <div className="flex items-baseline justify-between">
                 <span className="text-white/55 text-xs"><MetricTerm metric="Intrinsic / share" asSpan /></span>
-                <span className="font-display text-2xl font-semibold text-gold">{perShare(f.intrinsicPerShare)}</span>
+                <span className="font-display text-2xl font-semibold text-gold">{perShare(view.intrinsicPerShare)}</span>
               </div>
             </div>
             <BridgeRow label="Current price" value={perShare(f.currentPrice)} />
@@ -128,36 +196,67 @@ export function ForecastSection({ forecast: f }: ForecastSectionProps) {
         {/* Projected statements */}
         <div className="lg:col-span-3 panel-soft p-5">
           <p className="eyebrow mb-4">Projected Statements</p>
-          <div className="overflow-x-auto">
-            <table className="border-collapse text-sm w-full" style={{ minWidth: 520 }}>
-              <thead>
-                <tr>
-                  <th scope="col" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-2 border-b border-r border-gold/15 min-w-[150px]">
-                    <span className="label">Line</span>
-                  </th>
-                  {f.years.map((y) => (
-                    <th key={y} scope="col" className="px-2.5 py-2 border-b border-gold/10 text-right min-w-[72px]">
-                      <span className="text-[0.7rem] font-mono text-white/55">{y}</span>
+          {viewRows.length === 0 ? (
+            <p className="text-sm text-white/55 leading-relaxed">
+              A single-stage model has no explicit projection years: the company
+              is treated as already stable, so the whole value is the perpetuity.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-sm w-full" style={{ minWidth: 520 }}>
+                <thead>
+                  <tr>
+                    <th scope="col" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-2 border-b border-r border-gold/15 min-w-[150px]">
+                      <span className="label">Line</span>
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {STATEMENT_ROWS.map((sr) => (
-                  <tr key={sr.label}>
-                    <th scope="row" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-1.5 border-b border-r border-white/[0.06] font-normal">
-                      <span className="text-[0.8rem] text-white/75"><MetricTerm metric={sr.label} asSpan /></span>
-                    </th>
-                    {f.rows.map((r, i) => (
-                      <td key={i} className="px-2.5 py-1.5 text-right border-b border-white/[0.05] tabular-nums font-mono text-[0.76rem] text-white/80">
-                        {sr.get(r)}
-                      </td>
+                    {viewYears.map((y) => (
+                      <th key={y} scope="col" className="px-2.5 py-2 border-b border-gold/10 text-right min-w-[72px]">
+                        <span className="text-[0.7rem] font-mono text-white/55">{y}</span>
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {hasStageMeta && (
+                    <tr>
+                      <th scope="row" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-1.5 border-b border-r border-white/[0.06] font-normal">
+                        <span className="text-[0.8rem] text-white/75"><MetricTerm metric="Stage" asSpan /></span>
+                      </th>
+                      {viewRows.map((r, i) => (
+                        <td key={i} className="px-2.5 py-1.5 text-right border-b border-white/[0.05] font-mono text-[0.7rem] text-white/55">
+                          {r.phase === "high" ? "high" : "transition"}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
+                  {STATEMENT_ROWS.map((sr) => (
+                    <tr key={sr.label}>
+                      <th scope="row" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-1.5 border-b border-r border-white/[0.06] font-normal">
+                        <span className="text-[0.8rem] text-white/75"><MetricTerm metric={sr.label} asSpan /></span>
+                      </th>
+                      {viewRows.map((r, i) => (
+                        <td key={i} className="px-2.5 py-1.5 text-right border-b border-white/[0.05] tabular-nums font-mono text-[0.76rem] text-white/80">
+                          {sr.get(r)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  {hasStageMeta && viewRows[0].wacc != null && (
+                    <tr>
+                      <th scope="row" className="sticky left-0 z-10 bg-ink-800 text-left px-3 py-1.5 border-b border-r border-white/[0.06] font-normal">
+                        <span className="text-[0.8rem] text-white/75"><MetricTerm metric="Cost of capital" asSpan /></span>
+                      </th>
+                      {viewRows.map((r, i) => (
+                        <td key={i} className="px-2.5 py-1.5 text-right border-b border-white/[0.05] tabular-nums font-mono text-[0.76rem] text-white/70">
+                          {r.wacc != null ? `${(r.wacc * 100).toFixed(2)}%` : "n/a"}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

@@ -61,10 +61,12 @@ export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
                 </p>
               </div>
             </div>
-            {data.beyondModelCap && (
+            {(data.beyondDiagnosticBand ?? data.beyondModelCap) && (
               <p className="text-[0.78rem] font-mono text-loss-strong mt-3 inline-flex items-center gap-2">
-                <FlipHorizontal2 className="w-3.5 h-3.5" /> The implied rate sits above the forward
-                model's own 25% growth cap.
+                <FlipHorizontal2 className="w-3.5 h-3.5" /> The implied rate sits above
+                {data.diagnosticBandHigh != null
+                  ? ` the ${(data.diagnosticBandHigh * 100).toFixed(0)}% growth companies at this life-cycle stage typically sustain.`
+                  : " what companies at this stage typically sustain."}
               </p>
             )}
             {data.multipleRoots && data.roots && (

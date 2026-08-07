@@ -2,7 +2,7 @@
 
 ## Part 1: Definition
 
-The terminal value is the worth of all a company's cash flows beyond the explicit forecast horizon, collapsed into a single figure at the end of the horizon. The explicit forecast horizon is the set of near years the app models one at a time, roughly the next eight years. Because a company can keep operating long after those years, the model stops forecasting year by year at the end of the horizon and replaces every later year with one lump figure. The terminal value is that lump figure.
+The terminal value is the worth of all a company's cash flows beyond the explicit forecast horizon, collapsed into a single figure at the end of the horizon. The explicit forecast horizon is the set of near years the app models one at a time, up to ten years depending on the model structure the app chose. Because a company can keep operating long after those years, the model stops forecasting year by year at the end of the horizon and replaces every later year with one lump figure. The terminal value is that lump figure.
 
 The metric answers one question: what are all the years after the forecast worth, taken together, at the moment the detailed forecast ends? The app estimates the terminal value by assuming the company's free cash flow to the firm settles into a steady, modest growth rate forever. Free cash flow to the firm (FCFF) is the cash a business produces after operating costs and taxes and reinvestment, before any payment to lenders or shareholders. The steady rate is called the stable growth rate.
 
@@ -18,11 +18,11 @@ Common readings of the figure:
 
 The formula is:
 
-`Terminal Value = FCFF_terminal × (1 + g) ÷ (WACC − g)`
+`Terminal Value = EBIT_after_tax_final × (1 + g) × (1 − g ÷ ROIC_stable) ÷ (WACC_stable − g)`
 
-The top is FCFF_terminal grown by one year. FCFF_terminal is the free cash flow to the firm in the final forecast year. Multiplying by (1 + g) grows that flow one step into the first year of the stable period, because the perpetuity formula (a formula for a cash flow that repeats every year forever) values a stream that starts one year after the horizon. The letter g is the stable growth rate, the constant yearly rate at which the cash flow is assumed to grow forever.
+The top is the first stable-period cash flow, built in three parts. EBIT_after_tax_final is the after-tax operating profit of the final forecast year. Multiplying by (1 + g) grows that profit one step into the first year of the stable period, because the perpetuity formula (a formula for a cash flow that repeats every year forever) values a stream that starts one year after the horizon. The letter g is the stable growth rate, the constant yearly rate at which the cash flow is assumed to grow forever. The third part, (1 − g ÷ ROIC_stable), is the stable reinvestment charge: a firm growing at g forever must reinvest g divided by its stable return on capital forever, so growth is never free (definition 879). The stable return anchors toward the industry's own level rather than the company's peak (definition 880 explains why that choice barely moves the value when returns sit at the cost of capital).
 
-The bottom is (WACC − g). WACC is short for weighted average cost of capital, the blended yearly return the company's lenders and shareholders together require. Subtracting the growth rate from the discount rate gives the capitalization rate, the divisor that turns one growing perpetual cash flow into a value. A smaller gap between WACC and g produces a much larger terminal value, which is why g must be held in check.
+The bottom is (WACC_stable − g). WACC is short for weighted average cost of capital, the blended yearly return the company's lenders and shareholders together require, recomputed for the stable phase with the beta moved toward 1 (definition 878). Subtracting the growth rate from the discount rate gives the capitalization rate, the divisor that turns one growing perpetual cash flow into a value. A smaller gap between the stable WACC and g produces a much larger terminal value, which is why g is capped at the risk-free rate and never anything higher.
 
 The app can also value the final forecast year with a market multiple, as a separate check on the perpetuity result:
 

@@ -49,8 +49,12 @@ _ONE_TIME_MARGIN_DEV = 0.10
 # A year-over-year fall in goodwill larger than this share of total assets is
 # inferred to be an impairment (a one-time, non-operating charge).
 _GOODWILL_IMPAIR_MATERIALITY = 0.03
-# Fallback pre-tax cost of debt when the caller cannot supply one.
-_FALLBACK_PRETAX_KD = 0.061
+# Fallback default spread (~BBB) over the risk-free rate for the pre-tax cost
+# of debt when the caller cannot supply a synthetic-rating figure. Mirrors
+# individualanalysis._FALLBACK_DEBT_SPREAD; the static 4.5% rf below is only
+# the last resort when no live rate reaches this module either.
+_FALLBACK_DEBT_SPREAD = 0.016
+_FALLBACK_RF = 0.045
 
 
 # ── small self-contained helpers (no dependency on individualanalysis) ───────
@@ -332,6 +336,7 @@ def build_normalized_earnings(
     effective_tax: float = 0.21,
     total_debt: Optional[float] = None,
     lease_commitment_pv: Optional[float] = None,
+    rf: Optional[float] = None,
 ) -> Optional[dict]:
     """The full reported→adjusted normalization block (Damodaran Ch.9).
 
@@ -345,7 +350,12 @@ def build_normalized_earnings(
     latest = rows[-1]
     sector = sector if sector is not None else _str(latest, "t_sector")
     industry = industry if industry is not None else _str(latest, "t_industry")
-    kd = pretax_cost_of_debt if (pretax_cost_of_debt is not None and pretax_cost_of_debt > 0) else _FALLBACK_PRETAX_KD
+    if pretax_cost_of_debt is not None and pretax_cost_of_debt > 0:
+        kd = pretax_cost_of_debt
+    else:
+        # Live risk-free plus the ~BBB spread; static only when no live rate
+        # reached this module at all.
+        kd = (rf if (rf is not None and rf > 0) else _FALLBACK_RF) + _FALLBACK_DEBT_SPREAD
     debt = total_debt if total_debt is not None else (_val(latest, "Total Debt") or 0.0)
 
     leases = capitalize_leases(

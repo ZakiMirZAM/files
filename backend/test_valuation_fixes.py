@@ -66,22 +66,28 @@ def _fcf_rows(series):
             for i, v in enumerate(series)]
 
 
-def test_comparative_growth_is_geometric_not_arithmetic():
-    # FCF/share 1 -> 2 -> 1: YoY = +100%, -50%. Arithmetic mean = +25% (caps to 20%);
-    # geometric mean = 0%. The fix must return ~0, not the capped arithmetic value.
-    g = cmp._historical_fcf_growth(_fcf_rows([1.0, 2.0, 1.0]))
-    assert g is not None and abs(g) < 1e-9
-
-
 def test_engine_growth_is_geometric_not_arithmetic():
+    # FCF/share 1 -> 2 -> 1: YoY = +100%, -50%. Arithmetic mean = +25%;
+    # geometric mean = 0%. The measurement must return ~0. (The comparative
+    # module's duplicate helper died with the legacy-DCF retirement; the
+    # engine's helper is the single implementation.)
     g = ia._historical_fcf_growth(_fcf_rows([1.0, 2.0, 1.0]))
     assert g is not None and abs(g) < 1e-9
+    g_raw = ia._historical_fcf_growth_unclamped(_fcf_rows([1.0, 2.0, 1.0]))
+    assert g_raw is not None and abs(g_raw) < 1e-9
 
 
 def test_geometric_growth_matches_pure_compounding():
     # 100 -> 110 -> 121 is a clean 10% CAGR; geometric mean must recover 0.10.
-    g = cmp._historical_fcf_growth(_fcf_rows([100.0, 110.0, 121.0]))
+    g = ia._historical_fcf_growth(_fcf_rows([100.0, 110.0, 121.0]))
     assert g is not None and abs(g - 0.10) < 1e-9
+
+
+def test_unclamped_growth_measures_past_the_old_cap():
+    # A 30% compounder must read ~30%, not a pinned 20% (the CAT symptom).
+    g_raw = ia._historical_fcf_growth_unclamped(
+        _fcf_rows([100.0, 130.0, 169.0, 219.7]))
+    assert g_raw is not None and abs(g_raw - 0.30) < 1e-9
 
 
 # ── New value-score engine: magnitude, negative cap, sector weighting ────────
@@ -525,3 +531,58 @@ def test_strategic_groups_deterministic_and_guards():
                          ("OK2", 20, 3e9, 1, 5), ("OK3", 8, 2e9, 1, 5), ("OK4", 15, 4e9, 1, 5)])
     out = apimod._strategic_groups_from_metrics(missing)
     assert "NOMC" in out["unclassified"]
+
+
+# ── _capital_base: goodwill share of invested capital + tangible ROIC/EVA ────
+# (Investment Valuation Ch.25: the return on the operating assets vs the return
+# on the full price paid, acquisitions included.)
+
+_CB_ROW = {
+    "Calendar Year": 2025,
+    "Total Stockholders Equity": 8e9,
+    "Total Debt": 4e9,                 # invested capital 12e9, same base as ROIC
+    "Goodwill": 5e9,
+    "Intangible Assets": 1e9,
+    "Goodwill And Intangible Assets": 6e9,
+    "Operating Income": 2.5e9,
+    "Income Before Tax": 2.4e9,
+    "Income Tax Expense": 0.48e9,      # 20% effective -> NOPAT 2.0e9
+}
+
+
+def test_capital_base_reconciles_with_and_without_goodwill():
+    out = ia._capital_base(_CB_ROW, wacc=0.08)
+    assert out["applicable"]
+    assert out["investedCapital"] == 12e9
+    assert out["tangibleInvestedCapital"] == 6e9
+    assert out["goodwillPctInvestedCapital"] == round(5.0 / 12.0, 4)
+    assert out["roic"] == round(2e9 / 12e9, 4)
+    assert out["roicTangible"] == round(2e9 / 6e9, 4)
+    assert out["eva"] == round(2e9 - 0.08 * 12e9, 0)
+    assert out["evaTangible"] == round(2e9 - 0.08 * 6e9, 0)
+
+
+def test_capital_base_derives_combined_when_column_missing():
+    row = {k: v for k, v in _CB_ROW.items() if k != "Goodwill And Intangible Assets"}
+    out = ia._capital_base(row, wacc=None)
+    assert out["goodwillAndIntangibles"] == 6e9    # goodwill + other intangibles
+    assert out["eva"] is None                       # no WACC, EVA stays honest
+    assert out["roicTangible"] == round(2e9 / 6e9, 4)
+
+
+def test_capital_base_not_applicable_without_ic_or_goodwill():
+    no_ic = {"Calendar Year": 2025, "Goodwill": 5e9}
+    assert ia._capital_base(no_ic, wacc=0.08)["applicable"] is False
+    no_gw = {"Calendar Year": 2025, "Total Stockholders Equity": 8e9, "Total Debt": 4e9}
+    assert ia._capital_base(no_gw, wacc=0.08)["applicable"] is False
+
+
+def test_capital_base_negative_tangible_ic_voids_tangible_metrics():
+    # Goodwill larger than invested capital (heavily written-up acquirer with
+    # thin book equity): a negative tangible base makes NOPAT/base meaningless.
+    row = dict(_CB_ROW, **{"Total Stockholders Equity": 1e9, "Total Debt": 2e9})
+    out = ia._capital_base(row, wacc=0.08)
+    assert out["applicable"]
+    assert out["tangibleInvestedCapital"] == -3e9
+    assert out["roicTangible"] is None
+    assert out["evaTangible"] is None

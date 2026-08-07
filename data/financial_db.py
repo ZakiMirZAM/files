@@ -229,21 +229,31 @@ DEFAULT_WACC        = 0.10   # cost-of-equity fallback when beta is unavailable
 
 def capm_discount_rate(beta: float | None,
                        rf: float | None = None,
-                       erp: float | None = None) -> float:
-    """CAPM cost of equity: Rf + beta * ERP.
+                       erp: float | None = None,
+                       *,
+                       market_fallback: bool = False) -> float:
+    """CAPM cost of equity: Rf + beta * ERP. The single CAPM implementation —
+    every cost-of-equity in the app must route through here so the no-beta
+    policy is one documented decision, not four.
 
     Beta is NOT clamped (per the valuation spec — a real measured beta, however
-    extreme, is used as-is). Falls back to DEFAULT_WACC only when beta is truly
-    missing/uncomputable. ``rf``/``erp`` accept the live values; when None they
-    fall back to the module constants."""
+    extreme, is used as-is). ``rf``/``erp`` accept the live values; when None
+    they fall back to the module constants.
+
+    No-beta policy: with ``market_fallback=True`` (the Damodaran-engine policy)
+    a missing beta means the market's own cost of equity, beta = 1, so the rate
+    still moves with the live rf/erp instead of freezing at a flat constant.
+    The default (``False``) preserves the legacy flat DEFAULT_WACC fallback for
+    the pre-rebuild code paths, which must stay byte-identical under
+    VALUATION_ENGINE=legacy."""
     rf = RISK_FREE_RATE if rf is None else rf
     erp = EQUITY_RISK_PREMIUM if erp is None else erp
     if beta is None:
-        return DEFAULT_WACC
+        return (rf + erp) if market_fallback else DEFAULT_WACC
     try:
         b = float(beta)
     except (TypeError, ValueError):
-        return DEFAULT_WACC
+        return (rf + erp) if market_fallback else DEFAULT_WACC
     return rf + b * erp
 
 

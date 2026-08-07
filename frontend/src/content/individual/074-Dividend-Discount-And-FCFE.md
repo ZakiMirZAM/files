@@ -15,7 +15,7 @@ The two models are run together on purpose. Dividends are easy to observe but th
 
 ## Part 2: How it is calculated
 
-The dividend discount card runs a two-stage projection. A projection is a year-by-year forecast of future numbers. The card starts from current earnings per share and dividends per share. Earnings per share is the company's profit divided by the share count. The card then grows earnings per share at a starting rate that fades to a slower long-run rate. The payout ratio turns each year's earnings into that year's dividend. The payout ratio is the share of earnings paid out as dividends. Dividends equal earnings per share times the payout ratio.
+The dividend discount card runs a stage-structured projection. A projection is a year-by-year forecast of future numbers. The structure is chosen for the company: a single-stage perpetuity for a firm already growing at a stable pace, a two-stage path for a moderate grower, or a three-stage path with a transition for a fast one, and a toggle lets the reader view every structure. The card starts from current earnings per share and dividends per share. Earnings per share is the company's profit divided by the share count. The starting growth rate is measured, not assumed: the retained share of earnings times the return on equity, with buybacks counted as returned cash through the augmented payout ratio (definition 874). The payout ratio turns each year's earnings into that year's dividend. Dividends equal earnings per share times the payout ratio.
 
 In the long-run stage the payout ratio is no longer a free guess. The model sets the payout from the economics of growth. Growth requires keeping back some earnings to fund it. The kept-back share is growth divided by ROE. ROE is return on equity, the profit a company earns on each dollar of shareholder money. So the payout that remains is one minus that kept-back share.
 
@@ -41,7 +41,7 @@ The payout ratio links earnings to dividends. The payout ratio also carries the 
 
 ROE drives both cards. ROE converts book value into earnings in the FCFE card. ROE sets the sustainable payout in the DDM card. The level of ROE against the cost of equity decides whether keeping back earnings creates value. When ROE sits above the cost of equity, retained earnings add value. When ROE sits below it, retained earnings destroy value.
 
-Growth starts at a higher rate and fades to a long-run rate. The long-run rate is capped by the growth of the wider economy. No company can outgrow the economy forever.
+Growth starts at a measured rate and descends to a long-run rate through the chosen stage structure. On the FCFE card the measured rate prefers the equity reinvestment rate times the noncash return on equity (definitions 875 and 876), because a model built on paying out all free cash cannot also assume the retention is reinvested; the retention form stands in only when the reinvestment cannot be measured, and the card names which one ran. The long-run rate is capped by the growth of the wider economy, with the risk-free rate as its proxy. No company can outgrow the economy forever.
 
 The equity-to-assets ratio is the FCFE card's distinctive input. The ratio is the regulatory capital rule. Banks must hold equity in proportion to their assets, so growing assets forces equity to be retained. That relation makes the equity reinvestment measurable, where physical reinvestment cannot be seen from outside. The rule becomes a valuation input.
 

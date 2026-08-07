@@ -58,7 +58,11 @@ from comparitivestockanalysis import (  # shared calibration, same engine family
 # Russell 3000 percentiles. wacc is calibrated to this app's own aggregate
 # distribution (sector WACC has run ~5.5–9% under the live-ERP CAPM here; the
 # external 2026 Damodaran refresh runs 7–16% but includes size premia this
-# pipeline does not apply). netDebtToOcf follows the credit years-to-repay
+# pipeline does not apply). Checked 2026-07 after the valuation-engine rebuild:
+# the sector CAPM already ran on the live rf/implied ERP before the rebuild
+# (only the no-beta fallback route changed), so the WACC distribution these
+# anchors were calibrated against did not shift; re-anchor only if the ERP
+# methodology itself changes. netDebtToOcf follows the credit years-to-repay
 # convention (≤1x excellent, 2–5x normal band, >5x weak). pbGap anchors ±: a
 # sector trading a full multiple point below its justified P/B is cheap, a
 # point above is rich (Damodaran Ch.19/21 justified-multiple framework).

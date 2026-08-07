@@ -20,9 +20,9 @@ The app runs the model in eight steps, in this order.
 
 First, the app sets the base cash flow. Base FCFF starts from NOPAT and subtracts reinvestment. NOPAT is net operating profit after tax, the operating profit the company would keep if it had no debt. Reinvestment is the net capital spending and working capital the business consumes to keep running and to grow.
 
-Second, the app estimates growth. The growth rate comes from a log-linear regression fitted across every year of history. A log-linear regression is a line fitted through the percentage changes over all years. Using every year keeps one unusual year from setting the whole path.
+Second, the app estimates growth. For a company that earns a real return on its capital, the growth rate is measured from fundamentals: the reinvestment rate times the return on invested capital. For a young or loss-making company the revenue trend leads instead, read from a log-linear regression fitted across every year of history. The regression is always shown beside the fundamental rate as a cross-check. No rate is assumed and no rate is clamped.
 
-Third, the app projects FCFF forward. Each future year's cash flow is the prior year's flow raised by the growth rate.
+Third, the app projects FCFF forward through a stage structure chosen for the company: a single-stage perpetuity for a firm that is already stable, five high-growth years with an abrupt shift for a moderate grower, or five high-growth years plus a five-year transition for a very fast grower. Every structure is computed and shown; the recommended one drives the headline. Definition 870 explains the selection.
 
 Fourth, the app funds that growth with reinvestment. The reinvestment rate equals growth divided by ROIC. ROIC is return on invested capital, the profit earned per dollar of capital put to work. A company growing fast at a low return must plow back most of its profit, so the model never lets growth arrive for free.
 
@@ -142,7 +142,7 @@ The WACC inherits the known weaknesses of the cost-of-equity formula. Beta is un
 ## Part 9: Precise qualitative questions
 
 1. Is the base-year FCFF representative? Where were margins, the tax rate, and working capital that year against their own ten-year ranges?
-2. What growth does the log-linear regression fit? Does the company's spread, reinvestment capacity, and competitive position support that slope continuing?
+2. What growth do the fundamentals fund, and what does the log-linear regression fit? Does the company's spread, reinvestment capacity, and competitive position support that pace continuing?
 3. What fraction of the total value sits in the terminal value? What about the business justifies betting that fraction on the years after the projection ends?
 4. Is the terminal growth at or near its risk-free cap? Would the value survive a half-point cut to the terminal rate?
 5. Walk the WACC build. Is the measured beta from a representative period? Where does the equity risk premium sit in its plausible range? Does the cost of debt match the rate the company actually pays?

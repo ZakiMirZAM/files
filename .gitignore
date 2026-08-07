@@ -6,7 +6,13 @@ financials.db.backup-*
 backend/financials.db
 backend/market_data.db
 rag/vault.db
+rag/vault.db.*
+rag/vault_rebuild.db
 rag/glossary.db
+rag/*.log.err
+# Eval harness: generated run output is disposable, but goldens.jsonl is the
+# yardstick and MUST stay committed as text.
+rag/eval/runs/
 
 # Python
 __pycache__/

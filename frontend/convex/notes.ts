@@ -41,7 +41,7 @@ export const listNotes = query({
       .order("desc")
       .collect();
 
-    // Strip content — the list subscription only needs metadata.
+    // Strip content: the list subscription only needs metadata.
     return notes.map((n) => ({
       _id: n._id,
       title: n.title,
@@ -106,7 +106,7 @@ export const deleteNote = mutation({
   },
 });
 
-// NOTE: Convex cannot enforce type/size limits on generateUploadUrl uploads —
+// NOTE: Convex cannot enforce type/size limits on generateUploadUrl uploads:
 // the client validates (image/*, ≤5MB) but a direct caller could upload
 // anything. Blast radius is storage cost only; files are never served as HTML.
 export const generateUploadUrl = mutation({

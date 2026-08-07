@@ -42,11 +42,18 @@ const applicationTables = {
     sources: v.string(), // JSON array of vault source filenames
     model: v.string(),
     generatedAt: v.number(),
+    // Serialized verification report from the RAG server's reconciliation pass
+    // (counts always, per-claim detail only when the server runs in `on` mode).
+    // Optional: the table already has rows, and a required field fails deploy.
+    verification: v.optional(v.string()),
+    // The answer text as first generated, kept when a later write replaces
+    // `answer` (a Tier 1 revision, or a Regenerate) so the original survives.
+    answerOriginal: v.optional(v.string()),
   })
     .index("by_user_section_scope", ["userId", "section", "scopeKey"])
     .index("by_user_question", ["userId", "questionId"]),
 
-  // Final report — one per user (Tiptap JSON)
+  // Final report: one per user (Tiptap JSON)
   reports: defineTable({
     userId: v.id("users"),
     title: v.string(),
@@ -54,7 +61,7 @@ const applicationTables = {
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  // Investment Policy Statement — one per user (Reilly & Brown Ch.2: written
+  // Investment Policy Statement: one per user (Reilly & Brown Ch.2: written
   // objectives and constraints every thesis gets judged against).
   policy: defineTable({
     userId: v.id("users"),
@@ -71,7 +78,7 @@ const applicationTables = {
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  // Notebook notes — many per user (Tiptap JSON)
+  // Notebook notes: many per user (Tiptap JSON)
   notes: defineTable({
     userId: v.id("users"),
     title: v.string(),
@@ -80,7 +87,7 @@ const applicationTables = {
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),
 
-  // Ownership of notebook image uploads — gates file URL/byte access per user
+  // Ownership of notebook image uploads: gates file URL/byte access per user
   noteFiles: defineTable({
     userId: v.id("users"),
     storageId: v.id("_storage"),
@@ -98,7 +105,7 @@ const applicationTables = {
   }).index("by_user_kind", ["userId", "kind"]),
 
   // ── Stock simulator (paper trading) ──────────────────────────────────────
-  // Cash wallet — one row per user. Seeded to STARTING_CASH on first trade.
+  // Cash wallet: one row per user. Seeded to STARTING_CASH on first trade.
   simPortfolio: defineTable({
     userId: v.id("users"),
     cashUsd: v.number(),
@@ -107,7 +114,7 @@ const applicationTables = {
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  // Open positions — one row per held ticker. avgCostUsd is the cost basis in USD.
+  // Open positions: one row per held ticker. avgCostUsd is the cost basis in USD.
   simPositions: defineTable({
     userId: v.id("users"),
     ticker: v.string(),

@@ -81,10 +81,76 @@ export interface IndividualValuation {
   dcfIntrinsicPerShare: number | null;
   impliedPrice: number | null;
   marginOfSafety: number | null;  // decimal: 0.20 = 20% upside
-  fcfGrowthUsed: number | null;   // decimal: 0.08 = 8% growth assumed
-  wacc: number;
-  terminalGrowth: number;
-  projectionYears: number;
+  fcfGrowthUsed: number | null;   // decimal: 0.08 = 8% measured growth
+  // Under the damodaran engine these are the CHOSEN MODEL's actual values
+  // (null when no model is solvable); legacy echoes its old constants.
+  wacc: number | null;
+  terminalGrowth: number | null;
+  projectionYears: number | null;
+  model?: "fcff" | "nstage" | "ddm" | null;
+  modelLabel?: string | null;
+  stageCount?: number | null;
+  highGrowthYears?: number | null;
+  archetype?: string | null;
+  rationale?: string[] | null;
+  discountRate?: number | null;
+  notApplicableReason?: string | null;
+}
+
+// ── Stage variants (the user-switchable 1/2/3-stage structures) ──────────────
+
+export interface StageVariant {
+  applicable: boolean;
+  reason?: string;
+  intrinsicPerShare?: number;
+  marginOfSafety?: number | null;
+  stageCount?: number;
+  nHigh?: number;
+  nTransition?: number;
+  growthInitial?: number;
+  growthTerminal?: number;
+  waccStable?: number;
+  reinvestmentStable?: number | null;
+  roicStableSource?: string;
+  payoutStable?: number;
+  costOfEquityStable?: number;
+  terminalValue?: number;
+  pvExplicit?: number;
+  pvTerminal?: number;
+  pvDividends?: number;
+  accuracyNote?: string;
+  /** Per-year projection rows for this structure (ForecastRow-shaped on the
+   *  firm track, DividendDiscountRow-shaped on the dividend track). */
+  rows?: ForecastRow[] | DividendDiscountRow[];
+}
+
+export interface ValuationSelection {
+  track: "fcff" | "nstage" | "ddm";
+  recommendedStages: number;
+  selectorStages?: number;
+  highGrowthYears: number;
+  archetype: string;               // "con-ed" | "pg" | "amgen"
+  rationale: string[];
+  hModelApplicable?: boolean;
+  roicStable?: number | null;
+  roicStableSource?: string;
+  diagnostics?: ValuationDiagnostic[];
+  stageVariants: Record<string, StageVariant>;
+}
+
+export interface ValuationDiagnostic {
+  id: string;
+  severity?: string;
+  detail: string;
+  value?: number | null;
+  [key: string]: unknown;
+}
+
+export interface HModelCrossCheck {
+  stableComponent: number;
+  extraordinaryComponent: number;
+  value: number;
+  hYears: number;
 }
 
 export interface IndividualVerdict {
@@ -137,6 +203,12 @@ export interface ForecastRow {
   reinvestment: number;
   fcff: number;
   pvFcff: number;
+  // Damodaran engine stage metadata (absent under legacy).
+  phase?: "high" | "transition";
+  roic?: number | null;
+  reinvestmentRate?: number | null;
+  wacc?: number;
+  discountFactor?: number;
 }
 
 export interface ForecastSensitivity {
@@ -243,11 +315,12 @@ export interface GrowthReconciliation {
   salesToCapitalUsed: number | null;
   ownSalesToCapital: number | null;
   industrySalesToCapital: number | null;
+  // Under "damodaran" these are the ADVISORY life-cycle band, not clamps.
   growthCap: number;
   growthFloor: number;
   marginTarget: number | null;
   marginTargetSource: string;
-  mode: "regression" | "shadow" | "fundamental";
+  mode: "regression" | "shadow" | "fundamental" | "damodaran";
 }
 
 /** One growth-viability due-diligence question with the figures behind it. */
@@ -272,8 +345,11 @@ export interface IndividualForecast {
   // false for Financials/REITs (FCFF is the wrong model); the rest is absent then.
   applicable?: boolean;
   notApplicableReason?: string | null;
+  reason?: string | null;
   assumptions: ForecastAssumptions;
   waccBuild?: WaccBuild | null;
+  // Damodaran engine: model selection + every stage-count variant.
+  valuationSelection?: ValuationSelection | null;
   // Damodaran Ch.11: historical vs fundamental growth, and the reinvestment bridge.
   growthReconciliation?: GrowthReconciliation | null;
   lifecycle?: CompanyLifecycle | null;
@@ -429,6 +505,10 @@ export interface DividendDiscountRow {
   eps: number;
   dps: number;
   pv: number;
+  phase?: "high" | "transition";
+  payout?: number;
+  costOfEquity?: number;
+  discountFactor?: number;
 }
 
 export interface DividendDiscount {
@@ -453,6 +533,17 @@ export interface DividendDiscount {
   currentPrice: number | null;
   marginOfSafety?: number | null;
   note?: string;
+  // Damodaran engine additions.
+  stageVariants?: Record<string, StageVariant> | null;
+  recommendedStages?: number | null;
+  selectorStages?: number | null;
+  archetype?: string | null;
+  rationale?: string[] | null;
+  augmentedPayout?: number | null;
+  conventionalPayout?: number | null;
+  buybacksIncluded?: boolean | null;
+  roeStableSource?: string | null;
+  hModel?: HModelCrossCheck | null;
 }
 
 export interface FcfeRegulatoryRow {
@@ -478,6 +569,7 @@ export interface FcfeRegulatory {
   equityReinvestmentRate?: number | null;
   growthInitial?: number | null;
   growthTerminal?: number | null;
+  growthSource?: string | null;
   horizonYears?: number;
   rows?: FcfeRegulatoryRow[];
   pvFcfe?: number | null;
@@ -639,6 +731,8 @@ export interface ReverseDcf {
   historicalGrowth?: number | null;
   priceUsed: number;
   beyondModelCap?: boolean;
+  beyondDiagnosticBand?: boolean;
+  diagnosticBandHigh?: number;
   note?: string;
 }
 
@@ -682,6 +776,28 @@ export interface OwnerEarningsBlock {
   history?: { year: number; ownerEarnings: number }[];
   assumption?: string;
   note?: string;
+}
+
+/** Goodwill's share of invested capital + ROIC/EVA on tangible operating capital
+ *  only (Investment Valuation Ch.25). Dollar figures are in the reporting
+ *  currency; rates are decimals (0.24 = 24%). */
+export interface CapitalBaseBlock {
+  applicable: boolean;
+  reason?: string;
+  year?: number;
+  goodwill?: number | null;
+  intangibleAssets?: number | null;
+  goodwillAndIntangibles?: number | null;
+  investedCapital?: number | null;
+  tangibleInvestedCapital?: number | null;
+  goodwillPctInvestedCapital?: number | null;
+  goodwillAndIntangiblesPctInvestedCapital?: number | null;
+  nopat?: number | null;
+  wacc?: number | null;
+  roic?: number | null;
+  roicTangible?: number | null;
+  eva?: number | null;
+  evaTangible?: number | null;
 }
 
 // ── Industry life-cycle stage ─────────────
@@ -875,6 +991,7 @@ export interface IndividualAnalysis {
   epv?: EpvBlock | null;
   tobinsQ?: TobinsQBlock | null;
   ownerEarnings?: OwnerEarningsBlock | null;
+  capitalBase?: CapitalBaseBlock | null;
   events?: CompanyEvent[] | null;
   dupont?: Dupont | null;
   leverageRoe?: LeverageRoe | null;

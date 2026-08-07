@@ -63,20 +63,20 @@ A company with fewer than three usable years of history receives no stage at all
 
 ## Part 3: Why this metric is used to evaluate a company
 
-Every valuation rests on an assumed growth rate. A growth rate that fits the company badly misprices the company. A single ceiling applied to every company would quietly clip a genuine fast grower down to a mature company's speed. The stage exists so that the growth assumption fits the company being valued.
+Every valuation rests on a growth rate, and a growth rate that fits the company badly misprices the company. The stage exists so that the growth assumption is judged against the company being valued: a pace that is normal for a young company is a warning sign on a mature one.
 
-The stage changes three things inside the app's valuation. The first thing is the ceiling on the forecast growth rate. The second thing is whether the historical revenue trend or the fundamental growth rate leads the forecast. The fundamental growth rate is the rate implied by how much profit a company reinvests and how well those investments earn. A young company's revenue path leads, because its return on investment carries no signal yet. A mature company blends the two rates. The third thing is which sales-to-capital ratio funds the reinvestment in the forecast. The sales-to-capital ratio states how many dollars of sales one dollar of invested money produces. The app uses the industry's ratio for a young company and the company's own ratio once the company is mature.
+The stage changes three things inside the app's valuation. The first thing is the model structure, from a single-stage perpetuity for a firm already stable up to a three-stage path with a transition for a very fast grower (definition 871). The second thing is whether the historical revenue trend or the fundamental growth rate leads the forecast. The fundamental growth rate is the rate implied by how much profit a company reinvests and how well those investments earn. A young company's revenue path leads, because its return on investment carries no signal yet. The third thing is which sales-to-capital ratio funds the reinvestment in the forecast. The sales-to-capital ratio states how many dollars of sales one dollar of invested money produces. The app uses the industry's ratio for a young company and the company's own ratio once the company is mature.
 
-The growth ceiling by stage:
+The stage also sets an advisory range. The forecast growth is never clipped to it; a measured rate outside the range raises a warning instead, so the reader sees an unusual pace rather than a silently trimmed one.
 
-| Stage | Forecast growth ceiling the app applies | Chapter 11's own observed range |
+| Stage | Advisory range the app warns outside of | The observed range for the stage |
 |---|---|---|
-| Emerging | 60 percent | 30 to 100 percent a year |
-| High growth | 35 percent | 10 to 30 percent a year |
-| Mature | 25 percent | 5 to 15 percent a year |
-| Declining | 15 percent, with a floor low enough to let the forecast actually shrink | Negative |
+| Emerging | Up to 60 percent | 30 to 100 percent a year |
+| High growth | Up to 35 percent | 10 to 30 percent a year |
+| Mature | Up to 25 percent | 5 to 15 percent a year |
+| Declining | Up to 15 percent, with room below zero so the forecast can actually shrink | Negative |
 
-One rule survives every stage. Terminal growth, meaning the growth rate assumed forever after the forecast years end, is capped at the risk-free rate. The risk-free rate is the yield on a long-dated government bond. No company outgrows the whole economy forever, and the risk-free rate is the practical stand-in for the economy's long-run growth. Damodaran's own range for that final stable phase is 3 to 7 percent a year.
+One rule survives every stage. Terminal growth, meaning the growth rate assumed forever after the forecast years end, is capped at the risk-free rate. The risk-free rate is the yield on a long-dated government bond. No company outgrows the whole economy forever, and the risk-free rate is the practical stand-in for the economy's long-run growth.
 
 ## Part 4: What influences the output
 
@@ -153,7 +153,7 @@ Two base effects can fake a trend. A collapsed year makes the following year's g
 
 **Why read the two together.** The discounted cash flow model, or DCF, estimates what a share is worth by projecting the cash the business will produce and discounting that cash back to today. The stage sets the ceiling on the growth used in that projection. The stage also decides whether the forecast follows the revenue trend or the fundamental growth rate, and which sales-to-capital ratio funds the reinvestment. A change of stage therefore changes the intrinsic value the app reports.
 
-**What the combination tells you.** A high intrinsic value resting on an emerging label rests on a growth ceiling of 60 percent, so the reader should ask whether that pace is credible for this specific company. A stage assigned with low confidence leaves the intrinsic value uncertain in the same direction and by roughly the same amount. Reading the Reinvestment Rate alongside both numbers shows whether the assumed growth is actually being funded, because growth without reinvestment is growth without a source. Terminal growth stays capped at the risk-free rate whatever the stage, so an over-generous label inflates the forecast years rather than the value beyond them.
+**What the combination tells you.** A high intrinsic value resting on an emerging label rests on a measured growth pace that can legitimately run far above a mature company's, so the reader should ask whether that pace is credible for this specific company. A stage assigned with low confidence leaves the intrinsic value uncertain in the same direction and by roughly the same amount. Reading the Reinvestment Rate alongside both numbers shows whether the assumed growth is actually being funded, because growth without reinvestment is growth without a source. Terminal growth stays capped at the risk-free rate whatever the stage, so an over-generous label inflates the forecast years rather than the value beyond them.
 
 ## Part 8: Limitations
 

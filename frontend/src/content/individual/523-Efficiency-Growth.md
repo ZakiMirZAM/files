@@ -13,7 +13,7 @@ Common readings of the term:
 | 0 | The return on capital did not improve. Every point of forecast growth is being paid for with new investment. |
 | 0.01 to 0.03 | A small improvement in the return. The contribution to growth is real but minor. |
 | 0.03 to 0.07 | A meaningful improvement in the return. The reason behind the improvement needs to be identified before the growth is trusted. |
-| 0.10 | The capped reading. The raw improvement was ten percent or more of last year's return, and the app refuses to let one year's jump drive the whole forecast. |
+| Warned, not counted | The return rose in the latest year only, without a rise the year before. A one-year jump is far more often a restatement or a margin blip than a trend, so the app reports the jump as a warning and leaves the term out of the forecast. |
 
 ## Part 2: How it is calculated
 
@@ -36,7 +36,7 @@ Two rules govern how the app applies the term:
 | Rule | What the rule does |
 |---|---|
 | Only an improving return counts | A falling return is not subtracted. The forecast already leans on the company's historical revenue trend, and a company is not assumed to shrink on this account. |
-| The term is capped at 0.10 | Ten percentage points of growth is the most the term can contribute. Without the cap, one year's jump in the return would dominate a growth forecast that is meant to describe many years. |
+| The term needs a trend | The term is counted only when the return has risen across two consecutive years. Without that rule, one year's jump in the return would dominate a growth forecast that is meant to describe many years; a single-year rise is reported as a warning instead. |
 
 ## Part 3: Why this metric is used to evaluate a company
 

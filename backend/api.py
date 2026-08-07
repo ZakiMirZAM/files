@@ -107,7 +107,9 @@ app = FastAPI(
 try:
     from financial_db import (  # type: ignore
         FinancialDB, fetch_latest_market_cap_yf, EXCEL_COLUMNS,
+        capm_discount_rate,
     )
+    from valuation import valuation_engine  # type: ignore
     from individualanalysis import (  # type: ignore
         build_individual_snapshot,
         load_ticker_rows,
@@ -116,6 +118,7 @@ try:
         DCF_TERMINAL_GROWTH,
         DCF_PROJECTION_YEARS,
         DISPLAY_METRICS,
+        MARGINAL_TAX_RATE,
     )
     from comparitivestockanalysis import (  # type: ignore
         build_snapshot as build_comparative_snapshot,
@@ -143,6 +146,22 @@ except Exception as exc:  # noqa: BLE001
         """Fallback when analysis modules fail to import — no live cap available,
         so callers keep the stored DB Market Cap."""
         return None
+
+    def capm_discount_rate(beta, rf=None, erp=None, *, market_fallback=False):  # type: ignore[misc]
+        """Import-failure stub mirroring financial_db.capm_discount_rate."""
+        rf = 0.045 if rf is None else rf
+        erp = 0.045 if erp is None else erp
+        try:
+            return rf + float(beta) * erp
+        except (TypeError, ValueError):
+            return (rf + erp) if market_fallback else 0.10
+
+    MARGINAL_TAX_RATE = 0.21  # mirror of individualanalysis.MARGINAL_TAX_RATE
+
+    def valuation_engine() -> str:  # type: ignore[misc]
+        """Import-failure stub mirroring valuation.valuation_engine."""
+        mode = os.environ.get("VALUATION_ENGINE", "damodaran").strip().lower()
+        return mode if mode in ("damodaran", "legacy") else "damodaran"
 
 _db_instance: Any = None
 
@@ -829,14 +848,18 @@ def get_live_wacc_params() -> dict[str, float]:
         implied value is available.
 
     ``erpMethod`` records which path was taken (``implied_two_stage`` |
-    ``damodaran`` | ``fixed_fallback``) so the UI can show the ERP's provenance."""
+    ``damodaran`` | ``fixed_fallback``) and ``rfSource`` does the same for the
+    risk-free rate (``live_dgs10`` | ``static_fallback``), so a stale macro
+    input is visible in the payload instead of silently driving valuations."""
     rf = 0.045
+    rf_source = "static_fallback"
     try:
         obs = fred_fetch("DGS10", "2010-01-01", _today_iso())
         if obs:
             v = obs[-1]["value"]
             if v is not None and v > 0:
                 rf = v / 100.0
+                rf_source = "live_dgs10"
     except Exception as exc:  # noqa: BLE001
         log.warning("rf_anchor: DGS10 fetch failed, using fallback rf=%.4f: %s", rf, exc)
 
@@ -850,7 +873,67 @@ def get_live_wacc_params() -> dict[str, float]:
         log.warning("erp_anchor: implied ERP unavailable, using fixed %.4f: %s",
                     FIXED_EQUITY_RISK_PREMIUM, exc)
 
-    return {"rf": round(rf, 4), "erp": round(erp, 4), "erpMethod": erp_method}
+    return {"rf": round(rf, 4), "erp": round(erp, 4),
+            "erpMethod": erp_method, "rfSource": rf_source}
+
+
+def _yoy_from_levels(vals: list[tuple[str, float]],
+                     tolerance_days: int = 75) -> Optional[tuple[float, str]]:
+    """Trailing year-over-year growth from a dated level series: the latest
+    observation against the one closest to 365 days earlier, DATE-matched
+    rather than position-counted so a gapped series cannot silently pair the
+    wrong quarters. None when no prior observation lands within tolerance."""
+    import datetime as _ndt
+    if len(vals) < 2:
+        return None
+    latest_date_s, latest_v = vals[-1]
+    if latest_v is None or latest_v <= 0:
+        return None
+    try:
+        latest_d = _ndt.date.fromisoformat(latest_date_s)
+    except ValueError:
+        return None
+    target = latest_d - _ndt.timedelta(days=365)
+    best: tuple[int, float] | None = None
+    for date_s, v in vals[:-1]:
+        if v is None or v <= 0:
+            continue
+        try:
+            gap = abs((_ndt.date.fromisoformat(date_s) - target).days)
+        except ValueError:
+            continue
+        if gap <= tolerance_days and (best is None or gap < best[0]):
+            best = (gap, v)
+    if best is None:
+        return None
+    return latest_v / best[1] - 1.0, latest_date_s
+
+
+@cached(ttl_seconds=24 * 3600, key_prefix="macro")
+def get_nominal_gdp_growth() -> dict[str, Any]:
+    """Trailing year-over-year US nominal GDP growth from the FRED ``GDP`` level
+    series (quarterly): latest quarter over the observation one year earlier,
+    date-matched. The marketdata scheduler snapshots the SAME level series
+    (FRED_CATALOG "national_accounts"), so there is one definition of nominal
+    GDP growth in the app regardless of which side computes it.
+
+    This is the live economy pace behind Damodaran's Ch.12 stable-growth
+    constraint (g_stable cannot outrun the economy; the risk-free rate is his
+    proxy for it) and replaces the hardcoded 5% the growth-viability deck used
+    to state as fact. ``{"value": None, ...}`` when FRED is unreachable, so
+    consumers fall back to describing the rf proxy instead of a stale number."""
+    try:
+        obs = fred_fetch("GDP", "2015-01-01", _today_iso())
+        vals = [(o["date"], o["value"]) for o in obs
+                if o.get("value") is not None and o["value"] > 0]
+        yoy = _yoy_from_levels(vals)
+        if yoy is not None:
+            value, as_of = yoy
+            return {"value": round(value, 4), "asOf": as_of,
+                    "source": "fred_gdp_yoy"}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("nominal GDP growth unavailable: %s", exc)
+    return {"value": None, "asOf": None, "source": "unavailable"}
 
 
 @cached(ttl_seconds=24 * 3600, key_prefix="macro-hist")
@@ -2377,6 +2460,46 @@ def sector_etf_endpoint(request: Request, sector: str = PathParam(pattern=GROUP_
     }
 
 
+def _warm_benchmark_matrices() -> None:
+    """Pre-build the sector and industry matrices that back
+    ``/api/individual/{ticker}/benchmarks``.
+
+    That endpoint is cheap once those two aggregates are cached and expensive on a
+    cold process, because the first call builds both. The RAG verification layer
+    calls it with a 6-second client timeout, so on a freshly restarted backend the
+    first verification found no evidence and correctly declined to act. Warming
+    here costs nothing a user waits on: it runs on a daemon thread after startup,
+    mirroring how ``start_all.ps1`` warms ``/api/economic``.
+    """
+    try:
+        _sector_current_metrics()
+        log.info("benchmark warm: sector matrix ready")
+    except Exception as e:  # noqa: BLE001 - a warm failure must never block startup
+        log.warning("benchmark warm (sector) failed: %s", e)
+        return
+    # The industry lens is per-sector and there are only ~11 of them, so warming
+    # each is bounded. Failures are logged and skipped: a cold industry column
+    # degrades the benchmark payload, it does not break it.
+    try:
+        sectors = [s.get("name") for s in (list_sectors() or []) if s.get("name")]
+    except Exception as e:  # noqa: BLE001
+        log.warning("benchmark warm: sector list failed: %s", e)
+        return
+    for name in sectors:
+        try:
+            _industry_metrics_for_sector(name)
+        except Exception as e:  # noqa: BLE001
+            log.warning("benchmark warm (industry/%s) failed: %s", name, e)
+    log.info("benchmark warm: %d industry matrices ready", len(sectors))
+
+
+@app.on_event("startup")
+def _start_benchmark_warm() -> None:
+    if os.environ.get("DISABLE_BENCHMARK_WARM") == "1":
+        return
+    threading.Thread(target=_warm_benchmark_matrices, daemon=True).start()
+
+
 @app.on_event("startup")
 def _start_marketdata_scheduler() -> None:
     """Start the in-process marketdata refresh daemon (CAPE/ERP/EPU/GPR/market
@@ -2656,6 +2779,11 @@ def _industry_growth_norms(ticker: str) -> dict[str, Any]:
         s2c = _industry_sales_to_capital(row["industry"])
         if s2c:
             out["salesToInvestedCapital"] = s2c
+        # The stable-phase return anchor (Ch.12): terminal ROIC moves toward the
+        # industry median instead of persisting at the firm's own peak level.
+        ind_roic = _industry_roic(row["industry"])
+        if ind_roic:
+            out["roic"] = ind_roic
         return out
     except Exception as exc:  # noqa: BLE001 — norms are a nicety, never a blocker
         log.warning("[api] industry growth norms for %s failed: %s", ticker, exc)
@@ -2710,6 +2838,57 @@ def _industry_sales_to_capital(industry: str) -> Optional[float]:
         return None
 
 
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _industry_roic(industry: str) -> Optional[float]:
+    """Median after-tax return on invested capital across an industry's latest
+    filings. The stable-phase anchor Damodaran prescribes (Ch.12): a company's
+    terminal return moves TOWARD the industry average rather than persisting at
+    its own high-growth level forever.
+
+    Deliberately uses the same book base as the engine's ROIC (equity + debt,
+    NO cash subtraction — individualanalysis._invested_capital), so anchoring a
+    terminal return to it never mixes two capital definitions."""
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT f."Operating Income" AS op,
+                       f."Total Stockholders Equity" AS eq,
+                       f."Total Debt" AS td
+                FROM financials f
+                JOIN tickers t ON t.ticker = f.Ticker
+                JOIN (SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) AS y
+                      FROM financials
+                      WHERE "Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
+                      GROUP BY Ticker) last
+                  ON last.Ticker = f.Ticker
+                 AND CAST(f."Calendar Year" AS INTEGER) = last.y
+                WHERE t.industry = ? AND f."Revenue" > 0 AND f."Market Cap" > 0
+                """,
+                (industry,),
+            ).fetchall()
+        vals: list[float] = []
+        for r in rows:
+            op, eq, td = r["op"], r["eq"], r["td"] or 0.0
+            if op is None or eq is None or op <= 0:
+                continue
+            capital = eq + td
+            if capital <= 0:
+                continue
+            roic = (op * (1.0 - MARGINAL_TAX_RATE)) / capital
+            if 0.0 < roic <= 0.60:     # a 60%+ industry median is a data artefact
+                vals.append(roic)
+        if len(vals) < 3:
+            return None
+        vals.sort()
+        mid = len(vals) // 2
+        med = vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2.0
+        return round(med, 4)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[api] industry ROIC for %s failed: %s", industry, exc)
+        return None
+
+
 def _lifecycle_stage(group_col: str, group_name: str) -> Optional[dict[str, Any]]:
     """Life-cycle stage for one industry/sector from the cached by-year aggregates."""
     try:
@@ -2742,7 +2921,12 @@ def _group_valuation(group_col: str) -> dict[str, dict[str, Any]]:
     try:
         db = get_db()
         cape = compute_cape(db, group_col)
-        dcf = compute_dcf(db, group_col)
+        try:
+            _macro = get_live_wacc_params()
+            _rf, _erp = _macro.get("rf"), _macro.get("erp")
+        except Exception:  # noqa: BLE001 — the group DCF falls back to module constants
+            _rf = _erp = None
+        dcf = compute_dcf(db, group_col, rf=_rf, erp=_erp)
 
         # Latest-year averages for value scoring
         if group_col == "industry":
@@ -2866,7 +3050,7 @@ def _group_excess_return(group_col: str) -> dict[str, dict[str, Any]]:
         payout = _sf(r, "Payout Ratio")
         payout = max(0.0, min(1.0, payout)) if payout is not None else None
         retention = (1.0 - payout) if payout is not None else 1.0
-        g_eq = min(_SECTOR_RF, max(0.0, retention * roe))
+        g_eq = min(_live_rf(), max(0.0, retention * roe))
         just_pb = ((roe - g_eq) / (ke - g_eq)) if (ke > g_eq and roe > 0) else None
 
         # Net interest margin — spread-based lenders only (interest income ≥ 20%
@@ -3166,7 +3350,7 @@ def _group_section(
             metric(
                 number=base + 1, name="Cost of Equity (Ke)", unit="%",
                 trend=er.get("keTrend", []),
-                definition=("Market-cap-weighted CAPM cost of equity (Rf 4.5% + β × 5.5%) across the "
+                definition=("Market-cap-weighted CAPM cost of equity (the live 10-year Treasury yield plus beta times the live implied equity risk premium) across the "
                             "group. The hurdle ROE must clear to create value — the right benchmark for "
                             "banks and insurers, where a firm-level WACC cannot be defined."),
                 analysis="The bar above (excess return) is ROE measured against this hurdle.",
@@ -3298,6 +3482,17 @@ _AVG_MC_FLOOR_USD = 1e8     # $100M, applied to FX-converted market cap
 # now read the same live implied ERP (Damodaran Ch.8) via _sector_wacc_params.
 _SECTOR_RF = 0.045          # risk-free fallback (matches data/financial_db.py)
 _SECTOR_ERP = 0.045         # equity-risk-premium fallback (matches FIXED_EQUITY_RISK_PREMIUM)
+
+
+def _live_rf() -> float:
+    """The LIVE risk-free rate for growth ceilings in rendered ratios (the
+    justified P/B's perpetuity cap). The individual page already caps at the
+    live rate; the scorecard matrices must not silently use a frozen 4.5%
+    while the cost of equity beside them moves."""
+    try:
+        return float(get_live_wacc_params().get("rf") or _SECTOR_RF)
+    except Exception:  # noqa: BLE001
+        return _SECTOR_RF
 # Sector Ke market-cap-weights many single-name betas; a corrupt/extreme beta on
 # one large constituent could dominate the aggregate, so each is clamped to a
 # plausible band before weighting (the individual page leaves beta unclamped).
@@ -3319,7 +3514,7 @@ _SECTOR_METRIC_DEFS: list[tuple[str, str, str, str, str]] = [
     ("roic", "ROIC", "%", "Value creation",
      "Each company's NOPAT ÷ Invested Capital (Equity + Debt), market-cap-weighted. Return earned on capital employed."),
     ("wacc", "WACC", "%", "Value creation",
-     "Each company's full WACC — CAPM cost of equity (Rf 4.5% + β × 5.5%) blended with its after-tax cost of debt — market-cap-weighted. The hurdle ROIC must clear."),
+     "Each company's full WACC — CAPM cost of equity (the live 10-year Treasury yield plus beta times the live implied equity risk premium) blended with its after-tax cost of debt — market-cap-weighted. The hurdle ROIC must clear."),
     ("roicWaccSpread", "ROIC − WACC Spread", "%", "Value creation",
      "ROIC minus WACC, market-cap-weighted across the group and derived from the weighted ROIC and weighted WACC so the three numbers reconcile. The core value-creation test. A positive spread means invested capital earns more than it costs, so growth builds value. A negative spread means returns sit below the cost of capital, so growth destroys it."),
     # Equity-side value creation (Damodaran, Ch.21). For financials, ROIC/WACC are
@@ -3329,7 +3524,7 @@ _SECTOR_METRIC_DEFS: list[tuple[str, str, str, str, str]] = [
     ("roeEquity", "ROE", "%", "Value creation (equity)",
      "Each company's Net Income ÷ Equity, market-cap-weighted. The return to shareholders — but on its own it is not a value-creation verdict (leverage inflates it); read it against the cost of equity below."),
     ("costOfEquity", "Cost of Equity (Ke)", "%", "Value creation (equity)",
-     "Each company's CAPM cost of equity (Rf 4.5% + β × 5.5%), market-cap-weighted. The equity hurdle rate — the right benchmark for banks and insurers, where ROIC/WACC are undefined because debt is operating raw material."),
+     "Each company's CAPM cost of equity (the live 10-year Treasury yield plus beta times the live implied equity risk premium), market-cap-weighted. The equity hurdle rate — the right benchmark for banks and insurers, where ROIC/WACC are undefined because debt is operating raw material."),
     ("excessReturnEquity", "Excess Return (ROE − Ke)", "%", "Value creation (equity)",
      "Each company's ROE minus its cost of equity, market-cap-weighted (Damodaran, Ch.21). The direct equity value-creation test: positive = value created (P/B should exceed 1), negative = value destroyed. The equity-only twin of ROIC − WACC."),
     ("justifiedPB", "Justified P/B", "x", "Value creation (equity)",
@@ -3360,7 +3555,7 @@ _SECTOR_METRIC_DEFS: list[tuple[str, str, str, str, str]] = [
     ("netMargin", "Net Margin", "%", "Margins",
      "Each company's Net Income ÷ Revenue, market-cap-weighted. Bottom-line profitability."),
     ("revenueGrowth", "Revenue Growth", "%", "Growth",
-     "Each company's year-over-year revenue growth, market-cap-weighted across the group. The aggregate top-line growth rate. Compare against US nominal GDP growth of roughly 5 to 7 percent."),
+     "Each company's year-over-year revenue growth, market-cap-weighted across the group. The aggregate top-line growth rate. Compare against the economy's own nominal growth (the Economic page carries the live GDP series)."),
     ("netIncomeGrowth", "Net Income Growth", "%", "Growth",
      "Each company's year-over-year net income growth, market-cap-weighted across the group. The aggregate bottom-line growth rate; it can swing far more than revenue because costs and one-off items move profit sharply."),
     ("operatingLeverage", "Operating Leverage (DOL)", "x", "Efficiency",
@@ -3445,11 +3640,13 @@ def _sector_wacc_params() -> tuple[float, float]:
 
 
 def _sector_capm(beta: float | None) -> float:
+    """Sector-level CAPM: clamps the aggregate beta to a sane band, then routes
+    through the single shared ``capm_discount_rate`` (market_fallback=True is
+    the documented no-beta policy: beta = 1 at live rates, never a flat 10%)."""
     rf, erp = _sector_wacc_params()
-    if beta is None or beta <= 0:
-        return rf + erp  # no beta ⇒ market (β=1) cost of equity
-    b = max(_SECTOR_BETA_MIN, min(_SECTOR_BETA_MAX, beta))
-    return rf + b * erp
+    b = None if (beta is None or beta <= 0) else max(
+        _SECTOR_BETA_MIN, min(_SECTOR_BETA_MAX, beta))
+    return capm_discount_rate(b, rf=rf, erp=erp, market_fallback=True)
 
 
 def _sf(row: Any, col: str) -> float | None:
@@ -3707,7 +3904,7 @@ def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
     justified_pb = None
     if roe is not None and roe > 0:
         retention = (1.0 - payout) if payout is not None else 1.0
-        g_eq = min(_SECTOR_RF, max(0.0, retention * roe))
+        g_eq = min(_live_rf(), max(0.0, retention * roe))
         if ke > g_eq:
             justified_pb = (roe - g_eq) / (ke - g_eq)
 
@@ -5342,6 +5539,79 @@ _INDIVIDUAL_METRICS: list[tuple[int, str, str, str, str, str, str]] = [
 ]
 
 
+_MODEL_LABELS = {
+    "fcff": "FCFF firm model",
+    "nstage": "Revenue-driven n-stage FCFF",
+    "ddm": "Dividend discount model",
+}
+
+
+def _valuation_block(snap: Any) -> dict[str, Any]:
+    """The headline valuation payload. Legacy echoes the old per-share DCF and
+    its module constants; the damodaran engine reports the CHOSEN MODEL's own
+    discount rate, terminal growth, horizon and selection metadata — nothing
+    rendered here is a constant the model never used."""
+    if valuation_engine() == "legacy":
+        return {
+            "dcfIntrinsicPerShare": snap.dcf_intrinsic,
+            "impliedPrice": snap.implied_price,
+            "marginOfSafety": snap.margin_of_safety,
+            "fcfGrowthUsed": snap.avg_fcf_growth,
+            "wacc": DCF_WACC,
+            "terminalGrowth": DCF_TERMINAL_GROWTH,
+            "projectionYears": DCF_PROJECTION_YEARS,
+        }
+    fc = snap.forecast if isinstance(getattr(snap, "forecast", None), dict) else None
+    base = {
+        "dcfIntrinsicPerShare": snap.dcf_intrinsic,
+        "impliedPrice": snap.implied_price,
+        "marginOfSafety": snap.margin_of_safety,
+        "fcfGrowthUsed": snap.avg_fcf_growth,
+    }
+    if not fc or fc.get("applicable") is False:
+        # Financials: the dividend model carries the headline (JP Morgan rule).
+        ddm = getattr(snap, "dividend_discount", None)
+        if isinstance(ddm, dict) and ddm.get("applicable"):
+            base.update({
+                "wacc": ddm.get("costOfEquity"),
+                "terminalGrowth": ddm.get("growthTerminal"),
+                "projectionYears": ddm.get("horizonYears"),
+                "model": "ddm",
+                "modelLabel": _MODEL_LABELS["ddm"],
+                "stageCount": ddm.get("recommendedStages"),
+                "highGrowthYears": ddm.get("horizonYears"),
+                "archetype": ddm.get("archetype"),
+                "rationale": ddm.get("rationale"),
+                "discountRate": ddm.get("costOfEquity"),
+            })
+            return base
+        base.update({
+            "wacc": None, "terminalGrowth": None, "projectionYears": None,
+            "model": None, "modelLabel": None,
+            # compute_forecast uses "notApplicableReason" for the sector guard
+            # (financials/REITs) and "reason" for underivable growth — read both.
+            "notApplicableReason": ((fc or {}).get("reason")
+                                    or (fc or {}).get("notApplicableReason")),
+        })
+        return base
+    assumptions = fc.get("assumptions") or {}
+    sel = fc.get("valuationSelection") or {}
+    track = sel.get("track")
+    base.update({
+        "wacc": assumptions.get("wacc"),
+        "terminalGrowth": assumptions.get("revenueGrowthTerminal"),
+        "projectionYears": assumptions.get("horizonYears"),
+        "model": track,
+        "modelLabel": _MODEL_LABELS.get(track),
+        "stageCount": sel.get("recommendedStages"),
+        "highGrowthYears": sel.get("highGrowthYears"),
+        "archetype": sel.get("archetype"),
+        "rationale": sel.get("rationale"),
+        "discountRate": assumptions.get("wacc"),
+    })
+    return base
+
+
 def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
     """Serialize an IndividualSnapshot dataclass into a JSON-safe dict."""
     return {
@@ -5375,16 +5645,10 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
             }
             for y in snap.years
         ],
-        # DCF
-        "valuation": {
-            "dcfIntrinsicPerShare": snap.dcf_intrinsic,
-            "impliedPrice": snap.implied_price,
-            "marginOfSafety": snap.margin_of_safety,
-            "fcfGrowthUsed": snap.avg_fcf_growth,
-            "wacc": DCF_WACC,
-            "terminalGrowth": DCF_TERMINAL_GROWTH,
-            "projectionYears": DCF_PROJECTION_YEARS,
-        },
+        # Intrinsic valuation headline. Under the damodaran engine every number
+        # here is the CHOSEN MODEL'S actual value (the old block echoed module
+        # constants — a 10% WACC and 3% terminal that the model never used).
+        "valuation": _valuation_block(snap),
         # Horizontal analysis — {metric: {year: yoy_pct_decimal}}
         "horizontal": {
             "income": {m: {str(y): v for y, v in d.items() if v is not None}
@@ -5453,6 +5717,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "epv": snap.epv,
         "tobinsQ": snap.tobins_q,
         "ownerEarnings": snap.owner_earnings,
+        # Capital base: goodwill share of invested capital + tangible-capital ROIC/EVA
+        "capitalBase": snap.capital_base,
         # Business-events feed: recent 8-K/6-K filings (Lev & Gu Ch.4)
         "events": snap.events,
         # Extended (5-factor) DuPont decomposition of ROE
@@ -5628,10 +5894,15 @@ def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER
             if rows_full:
                 macro = get_live_wacc_params()
                 hist_params = get_historical_wacc_params()
+                try:
+                    _gdp = get_nominal_gdp_growth().get("value")
+                except Exception:  # noqa: BLE001 — the economy pace is garnish
+                    _gdp = None
                 snap = build_individual_snapshot(
                     ticker_upper, rows_full, db=db, rf=macro["rf"], erp=macro["erp"],
                     erp_method=macro.get("erpMethod"), hist_params=hist_params,
-                    industry_norms=_industry_growth_norms(ticker_upper))
+                    industry_norms=_industry_growth_norms(ticker_upper),
+                    gdp_growth=_gdp)
                 if snap is not None:
                     snap_dict = _snapshot_to_dict(snap)
         except Exception as exc:  # noqa: BLE001

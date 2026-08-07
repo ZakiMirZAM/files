@@ -99,6 +99,19 @@ export function GrowthReconciliationSection({ data, lifecycle }: GrowthReconcili
           </div>
         </div>
 
+        {data.methodUsed && (
+          <p className="text-sm text-white/60 leading-snug">
+            {data.methodUsed.charAt(0).toUpperCase() + data.methodUsed.slice(1)}.
+            {data.mode === "damodaran" && (
+              <span className="text-white/40">
+                {" "}Nothing here is clamped: the rate is measured from the
+                fundamentals, and the only structural ceiling anywhere is on
+                the stable phase (growth cannot outrun the risk-free rate).
+              </span>
+            )}
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
           {usesSalesToCapital && <DefinitionLink number={520}>How sales-to-capital works</DefinitionLink>}
           {data.efficiencyTerm != null && data.efficiencyTerm > 0 && (

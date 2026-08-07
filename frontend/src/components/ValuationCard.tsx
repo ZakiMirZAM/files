@@ -3,6 +3,7 @@ import { formatCurrency, formatPercent } from "../lib/format";
 import { cn } from "../lib/cn";
 import { Check, X, TrendingUp, Calculator, Award } from "lucide-react";
 import { DefinitionsBlock, MetricTerm } from "./individual/DefinitionsBlock";
+import { StageToggle, useActiveVariant } from "./individual/StageToggle";
 
 interface ValuationCardProps {
   analysis: IndividualAnalysis;
@@ -45,9 +46,9 @@ export function ValuationCard({ analysis }: ValuationCardProps) {
         </div>
       </header>
 
-      {/* DCF + ratios row */}
+      {/* Intrinsic valuation + ratios row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <DcfPanel valuation={valuation} mos={mos} />
+        <IntrinsicPanel analysis={analysis} mos={mos} />
         <RatiosPanel ratios={analysis.ratios} />
         <CashRow rows={analysis.cashGeneration} />
       </div>
@@ -127,30 +128,69 @@ function QualityGauge({ score }: { score: number }) {
   );
 }
 
-function DcfPanel({
-  valuation,
+function IntrinsicPanel({
+  analysis,
   mos,
 }: {
-  valuation: IndividualAnalysis["valuation"];
+  analysis: IndividualAnalysis;
   mos: number | null;
 }) {
-  const mosPct = mos !== null ? mos * 100 : null;
+  const { valuation, forecast, dividendDiscount } = analysis;
+  const selection = forecast?.valuationSelection ?? null;
+  // Firm-side variants from the forecast, dividend-side from the DDM (banks).
+  const variants = selection?.stageVariants
+    ?? dividendDiscount?.stageVariants
+    ?? null;
+  const recommended = selection?.recommendedStages
+    ?? dividendDiscount?.recommendedStages
+    ?? null;
+  const active = useActiveVariant(analysis.ticker, variants, recommended);
+
+  // The toggle is a lens: the displayed value follows it, the score does not.
+  const intrinsic = active?.intrinsicPerShare ?? valuation.dcfIntrinsicPerShare;
+  const shownMos = active?.marginOfSafety ?? mos;
+  const mosPct = shownMos != null ? shownMos * 100 : null;
   const mosColor =
     mosPct === null ? "text-white/40" :
     mosPct >= 25 ? "text-gain-strong" :
     mosPct >= 0 ? "text-gain" :
     mosPct >= -25 ? "text-gold" :
     "text-loss";
+  const growth = active?.growthInitial ?? valuation.fcfGrowthUsed;
+  const discount = active?.waccStable ?? active?.costOfEquityStable
+    ?? valuation.discountRate ?? valuation.wacc;
+  const terminal = active?.growthTerminal ?? valuation.terminalGrowth;
+  const horizon = active != null
+    ? (active.nHigh ?? 0) + (active.nTransition ?? 0)
+    : valuation.projectionYears;
+
   return (
     <div className="panel-soft p-5">
-      <p className="eyebrow mb-3 inline-flex items-center gap-2">
-        <Calculator className="w-4 h-4" /> DCF Valuation
+      <p className="eyebrow mb-2 inline-flex items-center gap-2">
+        <Calculator className="w-4 h-4" /> Intrinsic Valuation
       </p>
+      {valuation.modelLabel && (
+        <p className="text-xs text-white/60 mb-2">
+          <MetricTerm metric={valuation.modelLabel} scope="valuation" asSpan>
+            {valuation.modelLabel}
+          </MetricTerm>
+          {valuation.rationale && valuation.rationale.length > 0 && (
+            <span className="text-white/40"> · {valuation.rationale[0]}</span>
+          )}
+        </p>
+      )}
+      {variants && recommended != null && (
+        <StageToggle
+          ticker={analysis.ticker}
+          variants={variants}
+          recommended={recommended}
+          className="mb-3"
+          showNote={false}
+        />
+      )}
       <div className="space-y-2.5 text-sm">
         <Row label="Intrinsic / share" value={
-          valuation.dcfIntrinsicPerShare !== null
-            ? `$${valuation.dcfIntrinsicPerShare.toFixed(3)}`
-            : "n/a"
+          intrinsic != null ? `$${intrinsic.toFixed(3)}` : "n/a"
         } />
         <Row label="Implied price" value={
           valuation.impliedPrice !== null ? `$${valuation.impliedPrice.toFixed(3)}` : "n/a"
@@ -160,14 +200,22 @@ function DcfPanel({
             ? <span className={cn("font-mono", mosColor)}>{mosPct >= 0 ? "+" : ""}{mosPct.toFixed(3)}%</span>
             : "n/a"
         } />
-        <Row label="FCF growth used" value={
-          valuation.fcfGrowthUsed !== null
-            ? `${(valuation.fcfGrowthUsed * 100).toFixed(3)}%`
-            : "n/a"
+        <Row label="Growth used" value={
+          growth != null ? `${(growth * 100).toFixed(3)}%` : "n/a"
         } />
-        <div className="pt-3 mt-3 border-t border-gold/10 text-[0.7rem] text-white/35 font-mono">
-          WACC {(valuation.wacc * 100).toFixed(3)}% · Terminal {(valuation.terminalGrowth * 100).toFixed(3)}% · {valuation.projectionYears}yr proj
-        </div>
+        {valuation.notApplicableReason && (
+          <p className="text-xs text-white/45 leading-snug pt-1">
+            {valuation.notApplicableReason}
+          </p>
+        )}
+        {(discount != null || terminal != null) && (
+          <div className="pt-3 mt-3 border-t border-gold/10 text-[0.7rem] text-white/35 font-mono">
+            {discount != null && <>Discount {(discount * 100).toFixed(2)}%</>}
+            {terminal != null && <> · Terminal {(terminal * 100).toFixed(2)}%</>}
+            {horizon != null && horizon > 0 && <> · {horizon}yr explicit</>}
+            {horizon === 0 && <> · perpetuity</>}
+          </div>
+        )}
       </div>
     </div>
   );

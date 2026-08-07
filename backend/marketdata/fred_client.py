@@ -51,6 +51,15 @@ FRED_CATALOG: dict[str, list[tuple[str, str, str]]] = {
         ("USEPUINDXD", "Economic Policy Uncertainty (US, daily)", "index"),
         ("GEPUCURRENT", "Global Economic Policy Uncertainty (current GDP weights)", "index"),
     ],
+    # The economy's own pace — the live ceiling on any perpetual growth
+    # assumption (Damodaran Ch.12: stable growth cannot outrun the economy,
+    # with the risk-free rate as its proxy). Stored as the LEVEL series; every
+    # consumer derives the same trailing year-over-year rate from it, so there
+    # is exactly one definition of "nominal GDP growth" in the app (api.py's
+    # get_nominal_gdp_growth is the request-path twin of the same computation).
+    "national_accounts": [
+        ("GDP", "Nominal GDP (quarterly level)", "$B"),
+    ],
 }
 
 

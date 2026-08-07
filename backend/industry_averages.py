@@ -28,7 +28,7 @@ from datetime import date
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "data"))
 
-from financial_db import FinancialDB, EXCEL_COLUMNS, capm_discount_rate
+from financial_db import FinancialDB, EXCEL_COLUMNS, capm_discount_rate, RISK_FREE_RATE
 
 # Bottom-up beta engine (optional). When BETA_RESOLVER=on, the group-DCF SQL
 # below reads resolver betas via LEFT JOIN computed_betas (same financials.db).
@@ -434,8 +434,8 @@ def compute_cape(db: FinancialDB, group_col: str) -> dict[str, float | None]:
 def compute_dcf(
     db: FinancialDB,
     group_col: str,
-    wacc: float = 0.10,
-    terminal_growth: float = 0.03,
+    rf: float | None = None,
+    erp: float | None = None,
     projection_years: int = 5,
 ) -> dict[str, dict[str, float | None]]:
     """
@@ -443,12 +443,20 @@ def compute_dcf(
 
     For each ticker:
       - FCF per share (most recent year)
-      - Historical average FCF growth rate (capped to [-15%, 20%] to avoid distortion)
+      - The stored FCF growth rate, as MEASURED (a ticker with no stored rate
+        is skipped rather than handed a fabricated 5%; no clamps)
       - Project FCF/share for `projection_years` years
-      - Terminal value = FCF_final * (1 + terminal_g) / (WACC - terminal_g)
+      - Terminal growth = min(rf, max(0, growth)) per ticker (Ch.12: stable
+        growth cannot outrun the economy; the risk-free rate is its proxy) and
+        the terminal cash flow carries a stable reinvestment charge derived
+        from the ticker's stored ROIC where one exists
       - Intrinsic value = PV of projected FCFs + PV of terminal value
       - Implied current price = Market Cap / Shares Out (most recent year)
       - Margin of safety = (intrinsic - implied_price) / implied_price
+
+    ``rf``/``erp`` are the LIVE macro inputs (api passes them from
+    get_live_wacc_params); the discount rate is per-ticker CAPM with the
+    market (beta = 1) policy when no beta exists — never a flat constant.
 
     Returns {group: {"dcf_intrinsic": float, "margin_of_safety": float,
                      "avg_fcf_growth": float, "ticker_count": int}}
@@ -459,6 +467,7 @@ def compute_dcf(
             SELECT f.Ticker,
                    f."Free Cash Flow Per Share"          AS fcf_ps,
                    f."Free Cash Flow Growth"             AS fcf_growth,
+                   f."ROIC"                              AS roic,
                    f."Market Cap" / NULLIF(f."Weighted Average Shs Out Dil", 0) AS implied_price,
                    -- weight in USD (see compute_cape note); per-share figures
                    -- stay local so the DCF ratio math is currency-neutral.
@@ -484,6 +493,7 @@ def compute_dcf(
             l.Ticker,
             l.fcf_ps,
             l.fcf_growth,
+            l.roic,
             l.implied_price,
             l.mktcap,
             {beta_expr} AS beta
@@ -507,10 +517,12 @@ def compute_dcf(
         groups.setdefault(g, []).append({
             "fcf_ps":        row["fcf_ps"],
             "fcf_growth":    row["fcf_growth"],
+            "roic":          row["roic"],
             "implied_price": row["implied_price"],
             "mktcap":        row["mktcap"],
             "beta":          row["beta"],
         })
+    rf_eff = rf if rf is not None else RISK_FREE_RATE
 
     result = {}
     for g, tickers in groups.items():
@@ -521,6 +533,7 @@ def compute_dcf(
         for t in tickers:
             fcf_ps  = t["fcf_ps"]
             growth  = t["fcf_growth"]
+            roic_t  = t["roic"]
             price   = t["implied_price"]
             mktcap  = t["mktcap"] or 0.0
             beta_t  = t["beta"]
@@ -528,16 +541,19 @@ def compute_dcf(
             if fcf_ps is None or fcf_ps <= 0 or price is None or price <= 0:
                 continue
 
-            # Cap growth rate to a realistic range
+            # No stored growth means this ticker cannot be valued honestly —
+            # skip it rather than hand it a fabricated 5%. No clamps: the rate
+            # is a measurement.
             if growth is None:
-                growth = 0.05
-            else:
-                growth = max(-0.15, min(growth, 0.20))
+                continue
 
-            # Per-ticker discount rate via CAPM when beta is known; falls back
-            # to the caller-supplied `wacc` (default 10%) when beta is missing.
-            disc = capm_discount_rate(beta_t) if beta_t is not None else wacc
-            if disc <= terminal_growth:
+            # Per-ticker CAPM at the LIVE rf/erp; a missing beta takes the
+            # market's own cost of equity (beta = 1), never a flat constant.
+            disc = capm_discount_rate(beta_t, rf=rf, erp=erp,
+                                      market_fallback=True)
+            # Stable growth per ticker: capped at the risk-free rate only.
+            g_term = min(rf_eff, max(0.0, growth))
+            if disc <= g_term:
                 continue
 
             # Only count this ticker's growth toward the reported average once it
@@ -552,9 +568,21 @@ def compute_dcf(
                 fcf = fcf * (1 + growth)
                 pv_fcfs += fcf / (1 + disc) ** yr
 
-            # Terminal value
-            terminal_fcf = fcf * (1 + terminal_growth)
-            terminal_value = terminal_fcf / (disc - terminal_growth)
+            # Terminal value with the stable reinvestment charge (Ch.12).
+            # The projected FCF embeds reinvestment consistent with the
+            # EXPLICIT growth rate; the stable phase grows slower and so
+            # reinvests less. Where a stored ROIC exists the conversion
+            # factor (1 − g_term/ROIC)/(1 − growth/ROIC) restates the final
+            # cash flow at the stable reinvestment rate; without a usable
+            # ROIC the plain (1 + g_term) form stands.
+            terminal_fcf = fcf * (1 + g_term)
+            if (roic_t is not None and roic_t > 0
+                    and roic_t > g_term and roic_t > growth):
+                explicit_keep = 1.0 - (growth / roic_t)
+                stable_keep = 1.0 - (g_term / roic_t)
+                if explicit_keep > 0:
+                    terminal_fcf = fcf * (1 + g_term) * (stable_keep / explicit_keep)
+            terminal_value = terminal_fcf / (disc - g_term)
             pv_terminal    = terminal_value / (1 + disc) ** projection_years
 
             intrinsic = pv_fcfs + pv_terminal

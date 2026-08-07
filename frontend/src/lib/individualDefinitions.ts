@@ -58,7 +58,11 @@ export type IndividualSectionKey =
   // capitalAllocation into the 800s for the same reason. ROE (002), ROIC (003)
   // and Debt To Equity (012) are reused from their existing bands rather than
   // duplicated; only the terms unique to the identity are numbered here.
-  | "leverageRoe"; // 850-869 -> LeverageRoeSection
+  | "leverageRoe" // 850-869 -> LeverageRoeSection
+  // The multi-stage intrinsic-valuation engine (model selection, stage counts,
+  // per-track fundamental growth, stable-phase discipline, H model). Follows
+  // the other post-599 bands into the 800s.
+  | "intrinsicModels"; // 870-889 -> ForecastSection / StageToggle / EquityModelsSection
 
 /** Inclusive number ranges per section, the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
@@ -110,6 +114,7 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   // duplicated here. Only the section overview and the derived share metric are new.
   ["capitalAllocation", 800, 849],
   ["leverageRoe", 850, 869],
+  ["intrinsicModels", 870, 889],
 ];
 
 /** Per-number exceptions; takes precedence over SECTION_RANGES. */

@@ -44,8 +44,9 @@ def _row(year, revenue, op_income, **kw):
 @pytest.fixture(autouse=True)
 def _default_mode(monkeypatch):
     """Every test states its own mode; default the env so one test cannot leak
-    its GROWTH_MODEL into the next."""
+    its GROWTH_MODEL or VALUATION_ENGINE into the next."""
     monkeypatch.delenv("GROWTH_MODEL", raising=False)
+    monkeypatch.delenv("VALUATION_ENGINE", raising=False)
 
 
 # ── The flag ─────────────────────────────────────────────────────────────────
@@ -103,14 +104,28 @@ def test_fundamental_growth_is_reinvestment_times_roic():
     assert out["growth"] == pytest.approx(expected_reinvest * roic, rel=1e-3)
 
 
-def test_fundamental_growth_adds_efficiency_when_roic_improves():
-    # Prior-year ROIC lower than this year's adds the (new - old)/old term, which
-    # a purely backward-looking growth rate cannot see (Damodaran Ch.11).
-    rows = [_row(2023, 900.0, 50.0), _row(2024, 1000.0, 100.0)]
-    flat = ia._fundamental_growth(rows, roic=0.20)
-    assert flat is not None
-    assert flat["efficiencyTerm"] > 0.0
-    assert flat["growth"] > flat["base"]
+def test_fundamental_growth_adds_efficiency_when_roic_improves(monkeypatch):
+    # Damodaran engine: the (new - old)/old repricing term drives the forecast
+    # only when the improvement is a TREND (two consecutive rises, Ch.11's
+    # expected-improvement case); a single-year jump is warned, not projected.
+    rows3 = [_row(2022, 800.0, 30.0), _row(2023, 900.0, 50.0),
+             _row(2024, 1000.0, 100.0)]
+    trend = ia._fundamental_growth(rows3, roic=0.20)
+    assert trend is not None
+    assert trend["efficiencyTerm"] > 0.0
+    assert trend["growth"] > trend["base"]
+
+    rows2 = [_row(2023, 900.0, 50.0), _row(2024, 1000.0, 100.0)]
+    single = ia._fundamental_growth(rows2, roic=0.20)
+    assert single["efficiencyTerm"] == 0.0
+    assert any(d["id"] == "single_year_roic_jump"
+               for d in single.get("diagnostics", []))
+
+    # Legacy keeps the old capped single-year term, byte-identical.
+    monkeypatch.setenv("VALUATION_ENGINE", "legacy")
+    legacy = ia._fundamental_growth(rows2, roic=0.20)
+    assert legacy["efficiencyTerm"] > 0.0
+    assert legacy["growth"] > legacy["base"]
 
 
 def test_fundamental_growth_none_when_roic_carries_no_signal():
@@ -187,11 +202,11 @@ def _forecast(rows, mode, monkeypatch):
                                                "revenueGrowth": 0.08})
 
 
-def test_shadow_does_not_move_the_valuation_of_a_company_that_already_had_one(monkeypatch):
-    # The whole promise of `shadow`: a company with an intrinsic value today comes
-    # out of shadow with the SAME intrinsic value. The trap is the stage ceiling.
-    # A profitable company classified `emerging` would see its cap widen from 25%
-    # to 60%, which moves the number before the user ever flips the flag.
+def test_legacy_shadow_does_not_move_the_valuation(monkeypatch):
+    # Under VALUATION_ENGINE=legacy the old GROWTH_MODEL semantics hold exactly:
+    # a company with an intrinsic value under `regression` comes out of `shadow`
+    # with the SAME intrinsic value, and the flat 25% cap still binds.
+    monkeypatch.setenv("VALUATION_ENGINE", "legacy")
     rows = _profitable_fast_grower()
     base = _forecast(rows, "regression", monkeypatch)
     shadow = _forecast(rows, "shadow", monkeypatch)
@@ -210,6 +225,37 @@ def test_shadow_does_not_move_the_valuation_of_a_company_that_already_had_one(mo
     # ...and flipping the flag is what lets the stage ceiling through.
     full = _forecast(rows, "fundamental", monkeypatch)
     assert full["growthReconciliation"]["growthCap"] == ia._stage_bounds("emerging")[1]
+
+
+def test_damodaran_growth_is_measured_not_capped(monkeypatch):
+    # The damodaran engine (the default): GROWTH_MODEL is ignored, fundamental
+    # growth (reinvestment x ROIC) drives the projection uncapped, every stage
+    # variant is computed, and the life-cycle bounds survive only as
+    # diagnostics. The 30% compounder is no longer pinned to exactly 25%.
+    monkeypatch.delenv("VALUATION_ENGINE", raising=False)
+    rows = _profitable_fast_grower()
+    out = _forecast(rows, "shadow", monkeypatch)    # mode flag must be inert
+    assert out is not None and out.get("applicable", True) is not False
+
+    gr = out["growthReconciliation"]
+    assert gr["mode"] == "damodaran"
+    assert gr["reinvestmentMethod"] == "earnings"
+    # The driving growth IS the fundamental rate — measured, not clamped.
+    assert (out["assumptions"]["revenueGrowthInitial"]
+            == pytest.approx(gr["fundamental"], abs=1e-3))
+    assert out["assumptions"]["revenueGrowthInitial"] != ia.FORECAST_GROWTH_CAP
+
+    sel = out["valuationSelection"]
+    assert sel is not None
+    assert set(sel["stageVariants"].keys()) == {"1", "2", "3"}
+    assert sel["recommendedStages"] in (1, 2, 3)
+    rec = sel["stageVariants"][str(sel["recommendedStages"])]
+    assert rec["applicable"] and rec["intrinsicPerShare"] is not None
+    assert rec["accuracyNote"]
+    # The recommended variant is the headline number.
+    assert out["intrinsicPerShare"] == rec["intrinsicPerShare"]
+    # Terminal discipline: stable growth capped at the risk-free rate only.
+    assert out["assumptions"]["revenueGrowthTerminal"] <= 0.04 + 1e-9
 
 
 # ── The sales-to-capital projection values a loss-making company ─────────────

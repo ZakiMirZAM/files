@@ -405,7 +405,9 @@ export function IndividualPage() {
           />
         )}
 
-        {data?.analysis?.forecast && <ForecastSection forecast={data.analysis.forecast} />}
+        {data?.analysis?.forecast && (
+          <ForecastSection forecast={data.analysis.forecast} ticker={data.analysis.ticker} />
+        )}
 
         {/* Where the growth in the model above actually comes from. */}
         {data?.analysis?.forecast?.growthReconciliation && (
@@ -468,6 +470,7 @@ export function IndividualPage() {
           <EquityModelsSection
             dividendDiscount={data.analysis.dividendDiscount}
             fcfeRegulatory={data.analysis.fcfeRegulatory}
+            ticker={data.analysis.ticker}
           />
         )}
 

@@ -16,6 +16,16 @@ $CHECK_EVERY_SEC = 45
 $HEALTH_TIMEOUT_SEC = 12
 $FAILS_BEFORE_RESTART = 2   # consecutive failures before we act (avoids flapping)
 
+# Bare `python` resolves to the WindowsApps Store alias here, which fails to launch
+# under Start-Process. That is why this watchdog restarted the RAG server and proxy
+# in a tight loop for over 24 hours without ever recovering: every relaunch used a
+# python that could not start. Resolve the REAL interpreter, known-good fallback.
+$PYTHON = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.*\python.exe" -ErrorAction SilentlyContinue |
+           Select-Object -First 1 -ExpandProperty FullName)
+if (-not $PYTHON) {
+    $PYTHON = "C:\Users\Zaki_Mir\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe"
+}
+
 function Log($msg) {
     $line = "$([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss'))  $msg"
     Add-Content -Path $LOG -Value $line
@@ -25,7 +35,7 @@ function Restart-Rag {
     Log "RESTART: killing anything on :3001 and relaunching server.py"
     $conn = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
     if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
-    Start-Process "python" -ArgumentList "server.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
+    Start-Process $PYTHON -ArgumentList "server.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
     # give it time to load the SDK + vault index before we start checking again
     Start-Sleep -Seconds 20
 }
@@ -34,7 +44,7 @@ function Ensure-Proxy {
     # ai_proxy.py (port 3002) is a thin passthrough; if it died, /ask breaks.
     if (-not (Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue)) {
         Log "PROXY DOWN: relaunching ai_proxy.py"
-        Start-Process "python" -ArgumentList "ai_proxy.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
+        Start-Process $PYTHON -ArgumentList "ai_proxy.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
         Start-Sleep -Seconds 5
     }
 }

@@ -4,7 +4,7 @@
 
 The PV of explicit FCFF is the sum of the forecast years' cash flows, each brought back to today's worth, over the years the analyst models one by one. FCFF is short for free cash flow to the firm. Free cash flow to the firm is the cash a business produces after operating costs and taxes and reinvestment, before any payment to lenders or shareholders. Reinvestment is the cash a company puts back into the business to keep operating and to grow. Present value, shortened to PV, is what a future amount of money is worth today once it is reduced for the time and the risk of waiting.
 
-The explicit forecast horizon is the set of near years the app projects one at a time, roughly the next eight years. The PV of explicit FCFF captures the value of only those modeled years. Value from all the years after the horizon sits in a separate figure called the terminal value. The metric answers one question: how much of today's firm value comes from the cash the analyst forecasts year by year rather than assumes forever?
+The explicit forecast horizon is the set of near years the app projects one at a time, up to ten years depending on the model structure the app chose. The PV of explicit FCFF captures the value of only those modeled years. Value from all the years after the horizon sits in a separate figure called the terminal value. The metric answers one question: how much of today's firm value comes from the cash the analyst forecasts year by year rather than assumes forever?
 
 Common readings of the figure:
 

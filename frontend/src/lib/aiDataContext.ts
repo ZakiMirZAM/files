@@ -102,6 +102,27 @@ export function buildDataContext(
       if (val.fcfGrowthUsed != null) v.push(`FCF growth assumed ${num(val.fcfGrowthUsed * 100)}%`);
       if (v.length) lines.push(`Valuation: ${v.join(", ")}`);
     }
+    // Capital base: the figures behind "how much of invested capital is goodwill"
+    // and "what is EVA on the operating assets alone" (deck questions the AI
+    // could not answer while the page withheld these).
+    const cb = an.capitalBase;
+    if (cb?.applicable) {
+      const c: string[] = [];
+      if (cb.goodwill != null) c.push(`goodwill ${fmtVal(cb.goodwill, "$")}`);
+      if (cb.intangibleAssets != null) c.push(`other intangibles ${fmtVal(cb.intangibleAssets, "$")}`);
+      if (cb.investedCapital != null) c.push(`invested capital ${fmtVal(cb.investedCapital, "$")}`);
+      if (cb.goodwillPctInvestedCapital != null)
+        c.push(`goodwill share of invested capital ${num(cb.goodwillPctInvestedCapital * 100, 1)}%`);
+      if (cb.goodwillAndIntangiblesPctInvestedCapital != null)
+        c.push(`goodwill+intangibles share ${num(cb.goodwillAndIntangiblesPctInvestedCapital * 100, 1)}%`);
+      if (cb.tangibleInvestedCapital != null)
+        c.push(`tangible invested capital ${fmtVal(cb.tangibleInvestedCapital, "$")}`);
+      if (cb.roic != null) c.push(`ROIC ${num(cb.roic * 100)}%`);
+      if (cb.roicTangible != null) c.push(`ROIC on tangible capital ${num(cb.roicTangible * 100)}%`);
+      if (cb.eva != null) c.push(`EVA ${fmtVal(cb.eva, "$")}`);
+      if (cb.evaTangible != null) c.push(`EVA on tangible capital ${fmtVal(cb.evaTangible, "$")}`);
+      if (c.length) lines.push(`Capital base (FY${cb.year ?? ""}): ${c.join(", ")}`);
+    }
     const vd = an.verdict;
     if (vd) {
       lines.push(`Verdict: ${vd.label} (quality score ${num(vd.qualityScore, 0)})`);

@@ -2,7 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-// Investment Policy Statement — one per user. Reilly & Brown make the written
+// Investment Policy Statement: one per user. Reilly & Brown make the written
 // policy statement step one of the whole process: objectives and constraints
 // come before any analysis, and every thesis is judged against them.
 

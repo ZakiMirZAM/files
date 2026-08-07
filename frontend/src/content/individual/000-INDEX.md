@@ -391,3 +391,45 @@ narration into the "Earnings Quality" deck (7 Q, Damodaran Ch.9 + Financial Shen
 and its income-walk labels reuse the vertical income-statement defs (082-100). Latest
 Filings (596) replaces the old 8-K/6-K feed: the backend now serves the most recent 10-K
 and 10-Q (20-F/40-F for foreign filers).
+
+### Intrinsic valuation engine (870-889)
+
+The Damodaran multi-stage intrinsic-valuation engine (backend/valuation/): measured
+per-track growth, observable-driven model selection, 1/2/3-stage variants with the
+StageToggle, and the stable-phase discipline. Band registered as `intrinsicModels`
+(870-889) in `src/lib/individualDefinitions.ts`. Concept-format overviews serve the
+ForecastSection and StageToggle "how this works" links; the rest follow the strict
+9-part template.
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 870 | 870-Intrinsic-Valuation-Engine.md | Intrinsic Valuation Engine (overview, concept format) |
+| [x] | 871 | 871-Model-Selection-Rules.md | Model Selection Rules (concept format) |
+| [x] | 872 | 872-High-Growth-Period-Length.md | High Growth Period Length (concept format) |
+| [x] | 873 | 873-H-Model.md | H Model |
+| [x] | 874 | 874-Augmented-Payout-Ratio.md | Augmented Payout Ratio |
+| [x] | 875 | 875-Equity-Reinvestment-Rate.md | Equity Reinvestment Rate |
+| [x] | 876 | 876-Noncash-ROE.md | Noncash ROE |
+| [x] | 877 | 877-Cumulated-Cost-Of-Equity.md | Cumulated Cost Of Equity |
+| [x] | 878 | 878-Stable-Period-Beta.md | Stable Period Beta |
+| [x] | 879 | 879-Stable-Reinvestment-Rate.md | Stable Reinvestment Rate |
+| [x] | 880 | 880-Terminal-Value-And-Excess-Returns.md | Terminal Value And Excess Returns (concept format) |
+| [x] | 881 | 881-Imputed-ROIC-Check.md | Imputed ROIC Check |
+| [x] | 882 | 882-Implied-Market-Share.md | Implied Market Share |
+| [x] | 883 | 883-Why-Stage-Count-Changes-The-Value.md | Why Stage Count Changes The Value (concept format, StageToggle explainer) |
+
+Reused existing defs: Fundamental Growth → 519, Reinvestment Rate → 047, ROIC → 003,
+ROE → 002, WACC → 183, Terminal Value → 505, Risk-Free Rate → 500, Life-Cycle Stage →
+521, Sales-to-Capital Reinvestment → 520, DCF intrinsic → 508, Margin of Safety → 509.
+
+The five ReturnsQualitySection defs (previously unindexed at 870-874, where they
+collided with the engine files above; the label → number resolver keys on the filename
+stem, so the renumbering is invisible to `MetricTerm`) now live at 884-888:
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 884 | 884-Return-On-Equity-Against-Its-Own-History.md | Return On Equity Against Its Own History |
+| [x] | 885 | 885-Return-On-Capital-Against-Its-Own-History.md | Return On Capital Against Its Own History |
+| [x] | 886 | 886-Return-On-Capital-Against-The-Industry.md | Return On Capital Against The Industry |
+| [x] | 887 | 887-Expected-Growth-Against-Actual-Growth.md | Expected Growth Against Actual Growth |
+| [x] | 888 | 888-Reinvestment-Rate-Sustainability.md | Reinvestment Rate Sustainability |

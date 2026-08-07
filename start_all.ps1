@@ -8,6 +8,17 @@
 $ErrorActionPreference = "Continue"
 $ROOT = "C:\Users\Zaki_Mir\Downloads\files"
 
+# Bare `python` on this machine resolves to the WindowsApps Store alias, which
+# fails to launch under Start-Process ("The system cannot find the file
+# specified") and silently took the whole site down for over 24 hours. Resolve the
+# REAL interpreter (the PythonSoftwareFoundation subpath), with the known-good path
+# as a fallback.
+$PYTHON = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.*\python.exe" -ErrorAction SilentlyContinue |
+           Select-Object -First 1 -ExpandProperty FullName)
+if (-not $PYTHON) {
+    $PYTHON = "C:\Users\Zaki_Mir\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe"
+}
+
 function Test-Port($port) {
     return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
 }
@@ -44,7 +55,7 @@ else {
 if (Test-Port 3001) { Write-Host "3. RAG server: already running" }
 else {
     Write-Host "3. RAG server: starting..."
-    Start-Process "python" -ArgumentList "server.py" -WorkingDirectory "$ROOT\rag" -WindowStyle Minimized
+    Start-Process $PYTHON -ArgumentList "server.py" -WorkingDirectory "$ROOT\rag" -WindowStyle Minimized
     Wait-Port 3001 "RAG server" 60 | Out-Null
 }
 
@@ -53,7 +64,7 @@ else {
 if (Test-Port 3002) { Write-Host "3b. AI proxy: already running" }
 else {
     Write-Host "3b. AI proxy: starting..."
-    Start-Process "python" -ArgumentList "ai_proxy.py" -WorkingDirectory "$ROOT\rag" -WindowStyle Minimized
+    Start-Process $PYTHON -ArgumentList "ai_proxy.py" -WorkingDirectory "$ROOT\rag" -WindowStyle Minimized
     Wait-Port 3002 "AI proxy" 20 | Out-Null
 }
 

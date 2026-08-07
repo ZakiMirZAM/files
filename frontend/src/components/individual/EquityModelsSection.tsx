@@ -1,11 +1,13 @@
-import type { DividendDiscount, FcfeRegulatory } from "../../lib/types";
+import type { DividendDiscount, DividendDiscountRow, FcfeRegulatory } from "../../lib/types";
 import { cn } from "../../lib/cn";
 import { Coins, Banknote } from "lucide-react";
 import { DefinitionLink } from "./DefinitionsBlock";
+import { StageToggle, useActiveVariant } from "./StageToggle";
 
 interface EquityModelsSectionProps {
   dividendDiscount?: DividendDiscount | null;
   fcfeRegulatory?: FcfeRegulatory | null;
+  ticker?: string;
 }
 
 const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
@@ -29,7 +31,7 @@ const mosText = (mos: number | null | undefined): string =>
  * unmeasurable-reinvestment problem). Method 3, FCFE where reinvestment is
  * redefined as the equity retained to grow regulatory capital.
  */
-export function EquityModelsSection({ dividendDiscount: ddm, fcfeRegulatory: fcfe }: EquityModelsSectionProps) {
+export function EquityModelsSection({ dividendDiscount: ddm, fcfeRegulatory: fcfe, ticker = "" }: EquityModelsSectionProps) {
   if (!ddm && !fcfe) return null;
   const recommended = !!(ddm?.recommended || fcfe?.recommended);
 
@@ -43,15 +45,26 @@ export function EquityModelsSection({ dividendDiscount: ddm, fcfeRegulatory: fcf
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <DdmCard ddm={ddm} />
+        <DdmCard ddm={ddm} ticker={ticker} />
         <FcfeCard fcfe={fcfe} />
       </div>
     </section>
   );
 }
 
-function DdmCard({ ddm }: { ddm?: DividendDiscount | null }) {
+function DdmCard({ ddm, ticker }: { ddm?: DividendDiscount | null; ticker: string }) {
+  const variants = ddm?.stageVariants ?? null;
+  const recommendedStages = ddm?.recommendedStages ?? null;
+  const active = useActiveVariant(ticker, variants, recommendedStages);
   if (!ddm) return null;
+  // The toggle is a lens: the card's headline follows the selected structure.
+  const shownIntrinsic = active?.intrinsicPerShare ?? ddm.intrinsicPerShare;
+  const shownMos = active?.marginOfSafety ?? ddm.marginOfSafety;
+  // Safe cast: DdmCard only receives variants from the DDM's stageVariants,
+  // which the backend builds exclusively from the dividend-track engine.
+  const shownRows = (active?.rows as DividendDiscountRow[] | undefined) ?? ddm.rows;
+  const shownPvDiv = active?.pvDividends ?? ddm.pvDividends;
+  const shownPvTerm = active?.pvTerminal ?? ddm.pvTerminal;
   return (
     <div className="panel-soft p-5">
       <p className="eyebrow mb-3 inline-flex items-center gap-2">
@@ -61,38 +74,69 @@ function DdmCard({ ddm }: { ddm?: DividendDiscount | null }) {
         <p className="text-sm text-white/55">{ddm.reason ?? "Not applicable."}</p>
       ) : (
         <>
+          {variants && recommendedStages != null && (
+            <StageToggle
+              ticker={ticker}
+              variants={variants}
+              recommended={recommendedStages}
+              className="mb-4"
+            />
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <Stat k="Ke" v={rate(ddm.costOfEquity)} />
-            <Stat k="Payout" v={rate(ddm.payout)} />
+            <Stat
+              k={ddm.buybacksIncluded ? "Payout (aug.)" : "Payout"}
+              v={rate(ddm.payout)}
+            />
             <Stat k="ROE" v={rate(ddm.roeUsed)} />
             <Stat k="g → term" v={`${rate(ddm.growthInitial)}→${rate(ddm.growthTerminal)}`} />
           </div>
+          {ddm.buybacksIncluded && ddm.conventionalPayout != null && (
+            <p className="text-xs text-white/45 mb-3 leading-snug">
+              The augmented payout counts buybacks as returned cash
+              ({rate(ddm.augmentedPayout)} vs {rate(ddm.conventionalPayout)} on
+              dividends alone), aggregated over recent years because buybacks
+              are lumpy.
+            </p>
+          )}
           <dl className="space-y-2 text-sm">
             <Row label="EPS₀ / DPS₀" value={`${ps(ddm.eps0)} / ${ps(ddm.dps0)}`} />
-            <Row label="PV of dividends" value={ps(ddm.pvDividends)} />
-            <Row label="+ PV terminal price" value={ps(ddm.pvTerminal)} />
+            <Row label="PV of dividends" value={ps(shownPvDiv)} />
+            <Row label="+ PV terminal price" value={ps(shownPvTerm)} />
             <div className="pt-1 mt-2 flex items-baseline justify-between">
               <span className="text-white/55 text-xs">DDM intrinsic / share</span>
-              <span className="font-display text-2xl font-semibold text-gold">{ps(ddm.intrinsicPerShare)}</span>
+              <span className="font-display text-2xl font-semibold text-gold">{ps(shownIntrinsic)}</span>
             </div>
             <Row label="Current price" value={ps(ddm.currentPrice)} />
             <div className="flex items-baseline justify-between">
               <span className="text-white/55 text-xs">Margin of safety</span>
-              <span className={cn("font-mono text-base", mosColor(ddm.marginOfSafety))}>
-                {mosText(ddm.marginOfSafety)}
+              <span className={cn("font-mono text-base", mosColor(shownMos))}>
+                {mosText(shownMos)}
               </span>
             </div>
           </dl>
-          {ddm.rows && ddm.rows.length > 0 && (
+          {shownRows && shownRows.length > 0 && (
             <ProjTable
-              years={ddm.rows.map((r) => r.year)}
+              years={shownRows.map((r) => r.year)}
               rows={[
-                { label: "Growth", get: (i) => rate(ddm.rows![i].growth) },
-                { label: "EPS", get: (i) => ps(ddm.rows![i].eps) },
-                { label: "DPS", get: (i) => ps(ddm.rows![i].dps) },
-                { label: "PV", get: (i) => ps(ddm.rows![i].pv) },
+                { label: "Growth", get: (i) => rate(shownRows[i].growth) },
+                { label: "EPS", get: (i) => ps(shownRows[i].eps) },
+                { label: "DPS", get: (i) => ps(shownRows[i].dps) },
+                { label: "PV", get: (i) => ps(shownRows[i].pv) },
               ]}
             />
+          )}
+          {ddm.hModel && (
+            <div className="mt-4 panel-soft p-3">
+              <p className="text-[0.65rem] uppercase tracking-wider text-white/40 mb-1.5">
+                H-model cross-check
+              </p>
+              <p className="text-xs text-white/60 leading-snug">
+                Growth declining linearly over {ddm.hModel.hYears * 2} years
+                values the stock at {ps(ddm.hModel.value)} ({ps(ddm.hModel.stableComponent)}
+                {" "}stable + {ps(ddm.hModel.extraordinaryComponent)} extraordinary).
+              </p>
+            </div>
           )}
         </>
       )}
@@ -117,6 +161,11 @@ function FcfeCard({ fcfe }: { fcfe?: FcfeRegulatory | null }) {
             <Stat k="Equity/Assets" v={rate(fcfe.equityAssetRatio)} />
             <Stat k="Reinvest g/ROE" v={rate(fcfe.equityReinvestmentRate)} />
           </div>
+          {fcfe.growthSource && (
+            <p className="text-xs text-white/45 mb-3 leading-snug">
+              Growth source: {fcfe.growthSource}.
+            </p>
+          )}
           <dl className="space-y-2 text-sm">
             <Row label="Book value / share (BVPS₀)" value={ps(fcfe.bvps0)} />
             <Row label="PV of FCFE" value={ps(fcfe.pvFcfe)} />
