@@ -58,8 +58,15 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # specificity floor, banned generic reasons, name-swap test, verdict flip
 # conditions), inserted between the skepticism and WRITING FIGURES sections.
 # EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
+#
+# ASK_SYSTEM re-recorded 2026-08-08: owner edit strengthening the qualitative
+# mandate. "Always ask WHY" added to SUBJECT AND QUESTION; frame 1 now requires
+# answering every 5W1H item with qualitative analysis and research, not only
+# financial numbers; the causal-analysis section is retitled "EVERY RESPONSE
+# SHOULD BE MAINLY QUALITATIVE ANALYSIS". EXPLAIN_SYSTEM and DEFINE_SYSTEM
+# unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "6fa7e5c88b8e35bbdc74adedd0dac96e5744f88dbc59a9d894be2ed8fbbc910f",
+    "ASK_SYSTEM": "946e6ebee766439fc78b1664e0b466d1cd6b2ad4e65a42b93165bfa9fa92379a",
     "EXPLAIN_SYSTEM": "76c271377fbdfe24fdb4772f437038a3ae42a24e27fb4eee93eddc124837d4d9",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
