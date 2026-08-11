@@ -65,9 +65,16 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # financial numbers; the causal-analysis section is retitled "EVERY RESPONSE
 # SHOULD BE MAINLY QUALITATIVE ANALYSIS". EXPLAIN_SYSTEM and DEFINE_SYSTEM
 # unchanged.
+#
+# ASK_SYSTEM and EXPLAIN_SYSTEM re-recorded 2026-08-11: owner edit trimming the
+# prompts. ASK_SYSTEM drops the length-throttle line, compresses frames 1, 2, 6,
+# 7 and 8, drops the "keep sentences short" and superficial "-ing" style rules
+# and the no-en-dash clause, and adds a repeat-words-freely rule plus a
+# competitive-strategy qualitative mandate on every number. EXPLAIN_SYSTEM drops
+# its whole trailing STYLE block. DEFINE_SYSTEM unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "946e6ebee766439fc78b1664e0b466d1cd6b2ad4e65a42b93165bfa9fa92379a",
-    "EXPLAIN_SYSTEM": "76c271377fbdfe24fdb4772f437038a3ae42a24e27fb4eee93eddc124837d4d9",
+    "ASK_SYSTEM": "5710e81049f8e6eeb377e9037ff6e3c867bf3baa201ff527f0748328369a3ad7",
+    "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
 
