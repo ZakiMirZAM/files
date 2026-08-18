@@ -157,8 +157,9 @@ export const ECON_PANEL_OFFSET = 600;
 // Definitions 57-65 (commodity tiles + the two valuation panels) have no metric
 // dropdown, so they surface only through the sidebar. Their qualitative questions
 // therefore stay in the sidebar text; every dropdown metric moves its questions
-// into the dropdown body instead.
-export const ECON_PANEL_ONLY = new Set([57, 58, 59, 60, 61, 62, 63, 64, 65]);
+// into the dropdown body instead. 70 is the "How the economy works" concept
+// overview behind the Understand the Economy First section: sidebar-only, no chart.
+export const ECON_PANEL_ONLY = new Set([57, 58, 59, 60, 61, 62, 63, 64, 65, 70]);
 
 const ECON_BY_NUMBER = new Map(ECONOMIC_METRIC_DEFS.map((d) => [d.number, d]));
 

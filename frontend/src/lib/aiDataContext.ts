@@ -2,7 +2,8 @@
 // for the subject in view, so the AI answer can use the site's own data (e.g. the
 // yield curve on the Economic page). Returns undefined when the data is absent or
 // is the offline mock fallback, so the server never treats mock data as real.
-import type { LeaderboardRow, Metric, SectionData, SectionKey } from "./types";
+import type { LeaderboardRow, Metric, SectionData, SectionKey, SectorMetricsData } from "./types";
+import type { SectorTotal } from "./sectorRotation";
 
 function num(v: number | null | undefined, digits = 2): string {
   return v == null || Number.isNaN(v) ? "n/a" : Number(v).toFixed(digits);
@@ -171,6 +172,106 @@ export function buildDataContext(
 
   const out = lines.filter(Boolean).join("\n");
   return out.length ? out : undefined;
+}
+
+// ── Sector Verdict deck context (economic synthesis questions) ───────────────
+
+/**
+ * Context for the Sector Verdict deck: the page's economic figures plus the two
+ * cross-surface reads its questions lean on, the sector scorecard's Value
+ * Scores (fundamentals) and the user's own Sector Rotation matrix ranking.
+ * Either extra block is omitted when its source is unavailable.
+ */
+export function buildSectorVerdictContext(
+  econContext: string | undefined,
+  sectorMetrics: SectorMetricsData | null,
+  matrixRanking: SectorTotal[] | null,
+): string | undefined {
+  const blocks: string[] = [];
+  if (econContext) blocks.push(econContext);
+
+  if (sectorMetrics) {
+    const lines: string[] = [];
+    for (const s of sectorMetrics.sectors) {
+      const col = sectorMetrics.data[s];
+      if (!col) continue;
+      const score = col.valueScore;
+      const spread = col.roicWaccSpread;
+      const parts: string[] = [];
+      if (score != null) parts.push(`value score ${score.toFixed(1)}/100`);
+      if (spread != null) parts.push(`ROIC-WACC spread ${spread.toFixed(1)}pp`);
+      if (parts.length > 0) lines.push(`- ${s}: ${parts.join(", ")}`);
+    }
+    if (lines.length > 0) {
+      blocks.push(
+        "Sector value scores (fundamentals, market-cap-weighted; higher = more value creation):\n" +
+          lines.join("\n"),
+      );
+    }
+  }
+
+  if (matrixRanking && matrixRanking.length > 0) {
+    const top = matrixRanking.slice(0, 3).map((r) => `${r.sector} (${r.total})`).join(", ");
+    const bottom = matrixRanking
+      .slice(-2)
+      .map((r) => `${r.sector} (${r.total})`)
+      .join(", ");
+    blocks.push(
+      `User's Sector Rotation matrix (their own readings and weights): top ${top}; bottom ${bottom}.`,
+    );
+  }
+
+  const out = blocks.join("\n\n");
+  return out.length > 0 ? out : undefined;
+}
+
+// ── Sector-benefit question (universal, per-metric, economic surface) ────────
+
+/** The universal first question under every economic chart: read the current
+ *  level and slope, name the sectors it favors, then test whether that benefit
+ *  is durable. A temporary reading is not a real benefit, which is the core
+ *  lesson the Sector Rotation matrix teaches. */
+export function sectorBenefitQuestion(metricName: string): string {
+  return (
+    `Which sectors would benefit the most based off the current reading of the ${metricName} ` +
+    `chart above, and a qualitative analysis of the metric? Is this benefit temporary or ` +
+    `short term, or does it last a few years? If the benefit is temporary, the sector should ` +
+    `not actually be treated as benefited by the reading.`
+  );
+}
+
+// ── Sector-exclusion question (universal, per-metric, economic surface) ──────
+
+/** The universal second question under every economic chart: name the sectors
+ *  the current reading argues AGAINST owning, then force the cross-check. One
+ *  metric alone can never condemn a sector, so the question demands the other
+ *  metrics and qualitative conclusions that were checked before any sector is
+ *  written off, plus the durability and priced-in tests. */
+export function sectorExclusionQuestion(metricName: string): string {
+  return (
+    `Based on the current reading and trend of ${metricName}, which sectors are definitely ` +
+    `not good buys right now, and through which channel: earnings or the discount rate? One ` +
+    `metric alone cannot condemn a sector. Name the other metrics and qualitative conclusions ` +
+    `you cross-checked before writing any sector off, and state whether the adverse reading ` +
+    `is durable or already priced in.`
+  );
+}
+
+/** The exclusion question's hint: the rotation matrix's own casualty list for
+ *  this metric when it resolves, otherwise the generic cross-check reminder. */
+export function sectorExclusionHint(
+  impact: { risingHurts: string[]; fallingHurts: string[] } | null,
+): string {
+  if (impact && (impact.risingHurts.length > 0 || impact.fallingHurts.length > 0)) {
+    const parts: string[] = [];
+    if (impact.risingHurts.length > 0) parts.push(`a rising reading hurts: ${impact.risingHurts.join(", ")}`);
+    if (impact.fallingHurts.length > 0) parts.push(`a falling reading hurts: ${impact.fallingHurts.join(", ")}`);
+    return (
+      `The rotation matrix says ${parts.join("; ")}. Test those first, then cross-check the ` +
+      `credit, liquidity, and curve metrics before concluding.`
+    );
+  }
+  return "Cross-check the credit, liquidity, and curve metrics before writing any sector off.";
 }
 
 // ── Historical-trend analysis question (universal, per-metric) ───────────────

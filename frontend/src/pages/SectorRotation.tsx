@@ -19,51 +19,25 @@ import {
   METRICS,
   SECTOR_COLS,
   clampWeight,
+  convictionFor,
   groupWeightShares,
   hasNeutral,
   readingSign,
   scoreMatrix,
+  scoreMatrixNormalized,
   type Reading,
 } from "../lib/sectorRotation";
 
-const KEY = "ifed.rotation.directions";
-const WKEY = "ifed.rotation.weights";
+import {
+  ROTATION_DIRECTIONS_KEY as KEY,
+  ROTATION_WEIGHTS_KEY as WKEY,
+  ROTATION_NORMALIZED_KEY as NKEY,
+  loadRotationDirections as loadDirections,
+  loadRotationNormalized as loadNormalized,
+  loadRotationWeights as loadWeights,
+} from "../lib/rotationState";
+
 const READINGS: Reading[] = ["up", "neutral", "down"];
-
-function loadDirections(): Record<string, Reading> {
-  const out: Record<string, Reading> = {};
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      for (const m of METRICS) {
-        const v = parsed[m.id];
-        if (v === "up" || v === "neutral" || v === "down") out[m.id] = v;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return out;
-}
-
-/** Only weight overrides that differ from the sourced default are stored. */
-function loadWeights(): Record<string, number> {
-  const out: Record<string, number> = {};
-  try {
-    const raw = localStorage.getItem(WKEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, number>;
-      for (const m of METRICS) {
-        const v = parsed[m.id];
-        if (typeof v === "number" && clampWeight(v) !== m.weight) out[m.id] = clampWeight(v);
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return out;
-}
 
 export function SectorRotation() {
   const [dirs, setDirs] = useState<Record<string, Reading>>(loadDirections);
@@ -71,6 +45,7 @@ export function SectorRotation() {
   const [econData, setEconData] = useState<SectionData | null>(null);
   const [econLive, setEconLive] = useState(false);
   const [howTo, setHowTo] = useState(false);
+  const [normalized, setNormalized] = useState<boolean>(loadNormalized);
 
   // Economic payload drives the sidebar's historical graphs and Fill from
   // data. Liveness matters here: auto-filling readings from the offline mock
@@ -104,13 +79,29 @@ export function SectorRotation() {
     }
   }, [weights]);
 
-  const ranked = useMemo(() => scoreMatrix(dirs, weights), [dirs, weights]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(NKEY, normalized ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [normalized]);
+
+  // Raw totals drive the score row, the bars, and the conviction read;
+  // the displayed RANKING follows the chosen mode (coverage-adjusted by
+  // default, the mode the historical replay validated).
+  const rawRanked = useMemo(() => scoreMatrix(dirs, weights), [dirs, weights]);
+  const ranked = useMemo(
+    () => (normalized ? scoreMatrixNormalized(dirs, weights) : rawRanked),
+    [normalized, dirs, weights, rawRanked],
+  );
   const groupShares = useMemo(() => groupWeightShares(weights), [weights]);
-  const totalBySector = useMemo(() => new Map(ranked.map((r) => [r.sector, r.total])), [ranked]);
+  const totalBySector = useMemo(() => new Map(rawRanked.map((r) => [r.sector, r.total])), [rawRanked]);
   const rankBySector = useMemo(() => new Map(ranked.map((r, i) => [r.sector, i + 1])), [ranked]);
   const anySet = Object.keys(dirs).length > 0;
   const weightsDirty = Object.keys(weights).length > 0;
-  const domain = Math.max(1, ...ranked.map((r) => Math.abs(r.total)));
+  const domain = Math.max(1, ...rawRanked.map((r) => Math.abs(r.total)));
+  const conviction = anySet ? convictionFor(rawRanked[0]?.total ?? 0) : null;
 
   // Click a reading; clicking the active one clears it back to unset.
   const setReading = (id: string, r: Reading) =>
@@ -148,13 +139,24 @@ export function SectorRotation() {
     }
     const prev = dirs;
     setDirs(merged);
+    const gated = result.filled.filter(
+      (f) => f.rule === "durability-gate" || f.rule === "priced-in-gate",
+    ).length;
+    const parts: string[] = [];
+    if (gated > 0) {
+      parts.push(
+        gated === 1
+          ? "1 inflation reading was set to stable: the rise is not confirmed as durable."
+          : `${gated} inflation readings were set to stable: the rises are not confirmed as durable.`,
+      );
+    }
+    if (result.skipped.length === 1) {
+      parts.push("1 metric could not be read from the data, set that one from your own view.");
+    } else if (result.skipped.length > 1) {
+      parts.push(`${result.skipped.length} metrics could not be read from the data, set those from your own view.`);
+    }
     toast.success(`Filled ${result.filled.length} of ${METRICS.length} metrics from the latest data`, {
-      description:
-        result.skipped.length === 0
-          ? undefined
-          : result.skipped.length === 1
-            ? "1 metric could not be read from the data, set that one from your own view."
-            : `${result.skipped.length} metrics could not be read from the data, set those from your own view.`,
+      description: parts.length === 0 ? undefined : parts.join(" "),
       duration: 10000,
       action: { label: "Undo", onClick: () => setDirs(prev) },
     });
@@ -236,8 +238,9 @@ export function SectorRotation() {
           <div className="px-5 pb-6 pt-1 border-t border-gold/10 space-y-4 text-sm text-white/75 leading-relaxed">
             <p>
               Read the Economic page, then set each metric here to rising, stable, or falling.
-              Every metric carries a weight from 1 to 5 for how strongly it predicts the next
-              move in sector returns, and a direction of effect on each sector. The matrix
+              Every metric carries a weight from 0 to 5 for how strongly it predicts the next
+              move in sector returns, and a direction of effect on each sector. A weight of 0
+              keeps the row visible for reference without letting it move the score. The matrix
               multiplies weight by your reading and sums down each column, so the sectors with
               the highest totals are the ones today's environment favors. Stable is a real vote,
               not a blank: many metrics have a steady-state tilt, so a flat yield curve or calm
@@ -252,6 +255,19 @@ export function SectorRotation() {
               market-priced signals like the yield curve, credit spreads, and commodity ratios
               turn before the economy does, so weighting them lets the matrix lean toward the
               sectors most likely to lead next rather than the ones that just led.
+            </p>
+            <p>
+              Two refinements come from a monthly historical replay of this matrix against
+              realized sector ETF returns from 2010 to 2026. First, the ranking adjusts for
+              coverage by default: sectors appear in different numbers of metric rows, so their
+              attainable maximum scores differ, and dividing each total by its maximum lets a
+              narrow-coverage sector compete on favorability rather than row count. In the
+              replay this improved both the ranking's accuracy and how often the top pick went
+              on to underperform, with nothing fitted to the data; the toggle above shows the
+              raw sums instead. Second, the conviction badge reads the top raw score: months
+              where it reached 24 or more were historically the matrix at its most reliable,
+              while readings in the low teens meant the environment favored nothing clearly,
+              and acting on those rankings added little. A weak score is itself information.
             </p>
             <div>
               <p className="label mb-2">
@@ -287,12 +303,62 @@ export function SectorRotation() {
 
       {/* Ranked result strip, pinned so the score stays visible while scrolling */}
       <div data-tour="rotation-ranked" className="sticky top-16 z-30 mb-5 rounded-md border border-gold/20 bg-ink-900/95 backdrop-blur-md p-4 shadow-lg shadow-black/20">
-        <p className="label mb-2">Ranked sectors {anySet ? "" : ",  set metric directions below to compute"}</p>
+        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+          <p className="label">Ranked sectors {anySet ? "" : ",  set metric directions below to compute"}</p>
+          <div className="flex items-center gap-4">
+            {conviction && (
+              <span
+                title={
+                  "Conviction reads the top raw score. In the 2010-2026 replay, months with a top score of 24 or more were the matrix at its most reliable; months at 12-23 were the least reliable; below 12 the matrix is saying no sector is clearly favored."
+                }
+                className={cn(
+                  "font-mono text-[0.65rem] uppercase tracking-wider px-2 py-0.5 rounded-sm border",
+                  conviction === "high"
+                    ? "border-gold/50 text-gold"
+                    : conviction === "moderate"
+                      ? "border-white/25 text-white/60"
+                      : "border-loss/40 text-loss-strong",
+                )}
+              >
+                {conviction === "high"
+                  ? "High conviction"
+                  : conviction === "moderate"
+                    ? "Moderate conviction"
+                    : "Low conviction"}
+              </span>
+            )}
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none" title="Divide each sector's score by its attainable maximum, so sectors mentioned by fewer metrics compete on favorability rather than coverage. The historically validated mode.">
+              <span className="text-xs text-white/60">Adjust for coverage</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={normalized}
+                onClick={() => setNormalized((v) => !v)}
+                className={cn(
+                  "relative w-9 h-5 rounded-full transition-colors shrink-0",
+                  normalized ? "bg-gold" : "bg-white/15",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-ink-900 transition-transform",
+                    normalized && "translate-x-4",
+                  )}
+                />
+              </button>
+            </label>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-3">
           {ranked.map((r, i) => (
             <Link
               key={r.sector}
               to={`/app/sector/${encodeURIComponent(r.sector)}`}
+              title={
+                normalized
+                  ? `${r.sector}: ${r.total >= 0 ? "+" : ""}${r.total}% of its attainable maximum (raw score ${fmt(totalBySector.get(r.sector) ?? 0)})`
+                  : undefined
+              }
               className={cn(
                 "inline-flex items-center gap-2 rounded-sm border px-2.5 py-1 text-xs transition-colors",
                 !anySet || r.total === 0
@@ -310,7 +376,7 @@ export function SectorRotation() {
                   r.total > 0 ? "text-gain-strong" : r.total < 0 ? "text-loss-strong" : "text-white/40",
                 )}
               >
-                {fmt(r.total)}
+                {normalized ? `${r.total >= 0 ? "+" : ""}${r.total}%` : fmt(r.total)}
               </span>
             </Link>
           ))}
@@ -392,12 +458,12 @@ export function SectorRotation() {
                           return (
                             <input
                               type="number"
-                              min={1}
+                              min={0}
                               max={5}
                               step={1}
                               value={eff}
                               aria-label={`${m.name} weight`}
-                              title={overridden ? `Custom weight (default ${m.weight})` : "Edit weight (1-5)"}
+                              title={overridden ? `Custom weight (default ${m.weight})` : "Edit weight (0-5)"}
                               onChange={(e) => setWeight(m.id, Number(e.target.value))}
                               className={cn(
                                 "w-9 bg-transparent text-center font-mono text-[0.8rem] outline-none rounded-sm border py-0.5",

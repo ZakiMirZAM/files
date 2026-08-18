@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BookOpen, Maximize2, Minimize2, X } from "lucide-react";
 import { anyDefByNumber } from "../../lib/allDefinitions";
 import type { DefinitionBenchmark, DefinitionSeries } from "../../lib/individualSeries";
@@ -13,6 +13,8 @@ import {
 import { Markdown } from "../Markdown";
 import { MetricBlock } from "../MetricBlock";
 import { MetricTrendQuestion } from "../MetricTrendQuestion";
+import { DefinitionQuestions } from "../DefinitionQuestions";
+import { splitSurfaceDefinition } from "../../lib/definitionQuestions";
 import { getPageAiContext } from "../../lib/aiContextStore";
 import { cn } from "../../lib/cn";
 import { DefinitionChart } from "./DefinitionChart";
@@ -91,6 +93,7 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
   const overrideSeries = openState?.series;
   const overrideTitle = openState?.title;
   const overrideDescription = openState?.description;
+  const questionScope = openState?.scope;
 
   const def = openNumber != null && openNumber > 0 ? anyDefByNumber(openNumber) : undefined;
   const block = !overrideSeries && openNumber != null ? metricBlocks?.get(openNumber) : undefined;
@@ -111,6 +114,15 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
 
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+
+  // When the opener supplied a question scope (a sector/industry matrix cell),
+  // split the definition's Part 9 questions out of the markdown and render them
+  // as an answerable deck below the body. No scope = the markdown renders whole,
+  // so every other DefinitionPanel mount behaves exactly as before.
+  const split = useMemo(
+    () => (questionScope && markdown !== null ? splitSurfaceDefinition(markdown) : null),
+    [questionScope, markdown],
+  );
   // Widen the panel for long, table-heavy definitions (e.g. the economic
   // metrics). Off by default so every other page keeps the 440px column.
   const [expanded, setExpanded] = useState(false);
@@ -301,7 +313,19 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                 ) : def && markdown === null ? (
                   <p className="text-sm text-white/40 font-mono py-3">loading definition…</p>
                 ) : markdown !== null ? (
-                  <Markdown content={markdown} />
+                  split && questionScope && split.questions.length > 0 ? (
+                    <>
+                      <Markdown content={split.body} />
+                      <DefinitionQuestions
+                        section={questionScope.section}
+                        scopeKey={questionScope.scopeKey}
+                        questions={split.questions}
+                        dataContext={questionScope.dataContext}
+                      />
+                    </>
+                  ) : (
+                    <Markdown content={markdown} />
+                  )
                 ) : null}
               </div>
             </>

@@ -56,7 +56,10 @@ export interface MetricRow {
   id: string;
   name: string;
   group: string;
-  weight: 1 | 2 | 3 | 4 | 5;
+  /** 0 = informational row: reading fills and renders but scores nothing by
+   *  default. Single-commodity price rows sit here, a commodity's price level
+   *  does not directly drive sector stock returns. User overrides still win. */
+  weight: 0 | 1 | 2 | 3 | 4 | 5;
   leadLag: "Lead" | "Coin" | "Lag" | "Struct";
   /** Effect on each sector when this metric RISES (down negates this). */
   impact: Impact;
@@ -108,15 +111,20 @@ export const METRICS: MetricRow[] = [
   { id: "gold_silver", name: "Gold/Silver Ratio", group: "Credit & risk", weight: 3, leadLag: "Lead", impact: { "Consumer Cyclical": -1, Technology: -1, Utilities: 1, "Consumer Defensive": 1, Healthcare: 1 } },
   { id: "ci_loans", name: "C&I Loans YoY", group: "Credit & risk", weight: 3, leadLag: "Coin", impact: { "Financial Services": 1, "Consumer Cyclical": 1, Industrials: 1 } },
 
-  // Inflation & commodities
+  // Inflation & commodities. Deliberately light: an inflation print only helps
+  // a sector when the trend is durable AND not already priced by the market
+  // (the auto-fill gates test both), and a single commodity's price level does
+  // not directly drive sector stock returns, so the commodity price rows are
+  // informational (weight 0) by default. Breakeven stays the one high-weight
+  // inflation row because it is the market's own forward pricing of inflation.
   { id: "breakeven5y", name: "5-Year Breakeven Inflation", group: "Inflation & commodities", weight: 4, leadLag: "Lead", impact: V_INFL, neutral: N_INFL_BENIGN },
-  { id: "ppi", name: "PPI YoY", group: "Inflation & commodities", weight: 4, leadLag: "Lead", impact: V_INFL, neutral: N_INFL_BENIGN },
-  { id: "cpi", name: "CPI YoY", group: "Inflation & commodities", weight: 3, leadLag: "Coin", impact: V_INFL, neutral: N_INFL_BENIGN },
-  { id: "import_prices", name: "Import Price Index YoY", group: "Inflation & commodities", weight: 3, leadLag: "Lead", impact: V_INFL, neutral: N_INFL_BENIGN },
-  { id: "oil", name: "WTI / Brent / NatGas", group: "Inflation & commodities", weight: 3, leadLag: "Coin", impact: { Energy: 1, "Basic Materials": 1, "Real Estate": 1, "Consumer Cyclical": -1, Industrials: -1, Utilities: -1 } },
-  { id: "copper", name: "Copper Price", group: "Inflation & commodities", weight: 3, leadLag: "Lead", impact: { "Basic Materials": 1, Industrials: 1, Energy: 1 } },
-  { id: "iron_ore", name: "Iron Ore Price", group: "Inflation & commodities", weight: 3, leadLag: "Lead", impact: { "Basic Materials": 1, Industrials: 1 } },
-  { id: "wheat", name: "Wheat Price", group: "Inflation & commodities", weight: 2, leadLag: "Coin", impact: { "Basic Materials": 1, "Consumer Defensive": -1 } },
+  { id: "ppi", name: "PPI YoY", group: "Inflation & commodities", weight: 2, leadLag: "Lead", impact: V_INFL, neutral: N_INFL_BENIGN },
+  { id: "cpi", name: "CPI YoY", group: "Inflation & commodities", weight: 2, leadLag: "Coin", impact: V_INFL, neutral: N_INFL_BENIGN },
+  { id: "import_prices", name: "Import Price Index YoY", group: "Inflation & commodities", weight: 0, leadLag: "Lead", impact: V_INFL, neutral: N_INFL_BENIGN },
+  { id: "oil", name: "WTI / Brent / NatGas", group: "Inflation & commodities", weight: 0, leadLag: "Coin", impact: { Energy: 1, "Basic Materials": 1, "Real Estate": 1, "Consumer Cyclical": -1, Industrials: -1, Utilities: -1 } },
+  { id: "copper", name: "Copper Price", group: "Inflation & commodities", weight: 0, leadLag: "Lead", impact: { "Basic Materials": 1, Industrials: 1, Energy: 1 } },
+  { id: "iron_ore", name: "Iron Ore Price", group: "Inflation & commodities", weight: 0, leadLag: "Lead", impact: { "Basic Materials": 1, Industrials: 1 } },
+  { id: "wheat", name: "Wheat Price", group: "Inflation & commodities", weight: 0, leadLag: "Coin", impact: { "Basic Materials": 1, "Consumer Defensive": -1 } },
 
   // Growth & activity
   { id: "copper_gold", name: "Copper/Gold Ratio", group: "Growth & activity", weight: 4, leadLag: "Lead", impact: V_GROW, neutral: N_MIDCYCLE },
@@ -186,6 +194,41 @@ export const ECON_LINK: Record<string, number> = {
   nonfin_debt: 32, population: 49, cape: 51,
 };
 
+export interface SectorImpactSummary {
+  /** Sectors this metric hurts when it is RISING (impact -1). */
+  risingHurts: Sector[];
+  /** Sectors this metric hurts when it is FALLING (impact +1 negated). */
+  fallingHurts: Sector[];
+}
+
+/**
+ * Which sectors an economic definition's metric hurts, read straight off the
+ * rotation matrix impact vectors. Several matrix rows can share one economic
+ * definition (both curve spreads point at #6), so the rows are unioned. Returns
+ * null when no matrix row links to the definition, or when the linked rows
+ * carry no negative tilt in either direction. Feeds the generated per-metric
+ * exclusion question's hint on the Economic page.
+ */
+export function sectorsHurtByEconMetric(econNumber: number): SectorImpactSummary | null {
+  const rising = new Set<Sector>();
+  const falling = new Set<Sector>();
+  let linked = false;
+  for (const m of METRICS) {
+    if (ECON_LINK[m.id] !== econNumber) continue;
+    linked = true;
+    for (const s of SECTORS) {
+      const sign = m.impact[s];
+      if (sign === -1) rising.add(s);
+      else if (sign === 1) falling.add(s);
+    }
+  }
+  if (!linked) return null;
+  const risingHurts = SECTORS.filter((s) => rising.has(s));
+  const fallingHurts = SECTORS.filter((s) => falling.has(s));
+  if (risingHurts.length === 0 && fallingHurts.length === 0) return null;
+  return { risingHurts, fallingHurts };
+}
+
 /** Whether a metric carries a distinct neutral (stable-reading) signal. */
 export function hasNeutral(m: MetricRow): boolean {
   return m.neutral != null && Object.keys(m.neutral).length > 0;
@@ -228,6 +271,191 @@ export function scoreMatrix(
     .sort((a, b) => b.total - a.total || a.sector.localeCompare(b.sector));
 }
 
+// ── Definitive (veto) weighting ──────────────────────────────────────────────
+// A sector must not rank first off low-weight inflation votes while the
+// high-weight risk metrics are adverse (the Basic-Materials-off-PPI failure).
+// When enough risk rows read adverse, each capped group's POSITIVE contribution
+// to a sector is limited to a share of that sector's total positive score.
+// scoreMatrix stays untouched; this wrapper is opt-in and fully transparent
+// (rawTotal, points removed, and rule tags are all returned for the UI).
+//
+// GATE: scoreMatrixWithVeto ships to the Sector Rotation page only after the
+// historical backtest (lib/rotationBacktest.ts + scripts/rotation_backtest/)
+// passes its pre-registered acceptance criteria and the owner signs off.
+
+export interface VetoRiskRow {
+  id: string;
+  /** The reading that counts as adverse for this row. */
+  adverse: Reading;
+}
+
+export interface VetoConfig {
+  /** High-weight risk rows whose adverse readings arm the veto. */
+  riskRows: VetoRiskRow[];
+  /** Number of adverse risk readings required to arm the cap. */
+  armThreshold: number;
+  /** Groups whose positive contribution is capped while armed. */
+  cappedGroups: string[];
+  /** Max share of a sector's total positive score a capped group may supply. */
+  groupCapPct: number;
+  /** Sectors whose TOTAL positive score is scaled down while armed (the
+   *  duration guard: long-duration sectors whose vectors underweight rates).
+   *  Empty = no sector cap. */
+  cappedSectors?: Sector[];
+  /** Multiplier on a capped sector's positive score while armed (e.g. 0.6). */
+  sectorCapPct?: number;
+}
+
+export const DEFAULT_VETO_CONFIG: VetoConfig = {
+  riskRows: [
+    { id: "hy_oas", adverse: "up" },
+    { id: "spread_10y3m", adverse: "down" },
+    { id: "spread_10y2y", adverse: "down" },
+    { id: "vix", adverse: "up" },
+    { id: "m2", adverse: "down" },
+    { id: "fed_bs", adverse: "down" },
+  ],
+  armThreshold: 2,
+  cappedGroups: ["Inflation & commodities"],
+  groupCapPct: 0.35,
+};
+
+export interface VetoedSectorTotal extends SectorTotal {
+  /** The plain scoreMatrix total before any cap. */
+  rawTotal: number;
+  /** Points removed by the cap (0 when unarmed or nothing to cap). */
+  capped: number;
+  /** Plain-language tags explaining what fired, empty when nothing did. */
+  rules: string[];
+}
+
+/**
+ * scoreMatrix with the definitive-weighting cap applied. Pure, same inputs as
+ * scoreMatrix plus a config. Unarmed (fewer than armThreshold adverse risk
+ * readings), the totals equal scoreMatrix exactly.
+ */
+export function scoreMatrixWithVeto(
+  directions: Record<string, Reading>,
+  weightOverrides: Record<string, number> = {},
+  cfg: VetoConfig = DEFAULT_VETO_CONFIG,
+): VetoedSectorTotal[] {
+  // Per-sector totals plus per-sector positive contributions split by group.
+  const totals = new Map<Sector, number>(SECTORS.map((s) => [s, 0]));
+  const posByGroup = new Map<Sector, Map<string, number>>(SECTORS.map((s) => [s, new Map()]));
+  const posTotal = new Map<Sector, number>(SECTORS.map((s) => [s, 0]));
+  for (const m of METRICS) {
+    const reading = directions[m.id];
+    if (!reading) continue;
+    const weight = weightOverrides[m.id] ?? m.weight;
+    for (const s of SECTORS) {
+      const contrib = weight * readingSign(m, s, reading);
+      if (contrib === 0) continue;
+      totals.set(s, (totals.get(s) as number) + contrib);
+      if (contrib > 0) {
+        posTotal.set(s, (posTotal.get(s) as number) + contrib);
+        const g = posByGroup.get(s) as Map<string, number>;
+        g.set(m.group, (g.get(m.group) ?? 0) + contrib);
+      }
+    }
+  }
+
+  const adverse = cfg.riskRows.filter((r) => directions[r.id] === r.adverse);
+  const armed = adverse.length >= cfg.armThreshold;
+  const armTag = armed
+    ? `risk-armed: ${adverse.map((r) => `${r.id} ${r.adverse}`).join(", ")}`
+    : null;
+
+  return SECTORS.map((sector) => {
+    const rawTotal = totals.get(sector) as number;
+    let capped = 0;
+    const rules: string[] = [];
+    if (armed) {
+      rules.push(armTag as string);
+      const tp = posTotal.get(sector) as number;
+      const groups = posByGroup.get(sector) as Map<string, number>;
+      for (const g of cfg.cappedGroups) {
+        const pos = groups.get(g) ?? 0;
+        const allowed = cfg.groupCapPct * tp;
+        if (pos > allowed) {
+          const cut = pos - allowed;
+          capped += cut;
+          rules.push(`${g} capped: -${cut.toFixed(1)} pts`);
+        }
+      }
+      if (cfg.cappedSectors?.includes(sector) && cfg.sectorCapPct != null && tp > 0) {
+        const cut = (1 - cfg.sectorCapPct) * tp;
+        if (cut > 0) {
+          capped += cut;
+          rules.push(`duration guard: -${cut.toFixed(1)} pts`);
+        }
+      }
+    }
+    return { sector, total: rawTotal - capped, rawTotal, capped, rules };
+  }).sort((a, b) => b.total - a.total || a.sector.localeCompare(b.sector));
+}
+
+// ── Coverage normalization ───────────────────────────────────────────────────
+// Sectors appear in different numbers of impact vectors, so their attainable
+// maximum scores differ: broad-coverage sectors (Cyclicals, Industrials, Tech)
+// can reach the +30s while narrow ones (Real Estate, Consumer Defensive) top
+// out far lower, which biases the raw ranking toward coverage rather than
+// favorability. Normalizing each total by the sector's attainable maximum
+// removes that bias with zero fitted parameters. Backtested 2010-2026
+// (scripts/rotation_backtest/): in the two windows containing all traded
+// sectors it improved rank IC (0.073->0.081 and 0.106->0.121) AND cut the
+// #1-in-bottom-half failure rate (41.4->35.2% and 40.0->35.8%), degrading
+// nothing in the third.
+
+/** Each sector's attainable maximum: the sum of weights over every row whose
+ *  impact or neutral vector mentions it (best case = all in its favor). */
+export function attainableMax(weightOverrides: Record<string, number> = {}): Map<Sector, number> {
+  const max = new Map<Sector, number>(SECTORS.map((s) => [s, 0]));
+  for (const m of METRICS) {
+    const weight = weightOverrides[m.id] ?? m.weight;
+    for (const s of SECTORS) {
+      if ((m.impact[s] ?? m.neutral?.[s]) != null) {
+        max.set(s, (max.get(s) as number) + weight);
+      }
+    }
+  }
+  return max;
+}
+
+/** scoreMatrix expressed as a percent of each sector's attainable maximum
+ *  (one decimal), so narrow-coverage sectors compete on favorability. */
+export function scoreMatrixNormalized(
+  directions: Record<string, Reading>,
+  weightOverrides: Record<string, number> = {},
+): SectorTotal[] {
+  const max = attainableMax(weightOverrides);
+  return scoreMatrix(directions, weightOverrides)
+    .map(({ sector, total }) => ({
+      sector,
+      total: (max.get(sector) as number) > 0
+        ? Math.round((total / (max.get(sector) as number)) * 1000) / 10
+        : 0,
+    }))
+    .sort((a, b) => b.total - a.total || a.sector.localeCompare(b.sector));
+}
+
+// ── Conviction ───────────────────────────────────────────────────────────────
+// The backtest's conviction buckets (raw top score, 3-month horizon): months
+// with a top score >= 24 were the matrix at its most reliable (IC 0.045, the
+// widest top3-bottom3 spread, #1 in the bottom half only 28% of the time);
+// months at 12-23 were the LEAST reliable (IC 0.005, failure 44%). A weak
+// top score is a weak regime signal and the UI should say so.
+
+export type Conviction = "low" | "moderate" | "high";
+export const CONVICTION_HIGH = 24;
+export const CONVICTION_LOW = 12;
+
+/** Conviction tier from the RAW (unnormalized) top score. */
+export function convictionFor(topRawScore: number): Conviction {
+  if (topRawScore >= CONVICTION_HIGH) return "high";
+  if (topRawScore >= CONVICTION_LOW) return "moderate";
+  return "low";
+}
+
 export interface GroupShare {
   group: string;
   weightSum: number;
@@ -260,8 +488,9 @@ export function groupWeightShares(weightOverrides: Record<string, number> = {}):
     .sort((a, b) => b.weightSum - a.weightSum || a.group.localeCompare(b.group));
 }
 
-/** Clamp a user-entered weight to the documented 1..5 integer scale. */
+/** Clamp a user-entered weight to the documented 0..5 integer scale.
+ *  0 keeps a row visible and fillable while contributing nothing to the score. */
 export function clampWeight(n: number): number {
   if (!Number.isFinite(n)) return 1;
-  return Math.max(1, Math.min(5, Math.round(n)));
+  return Math.max(0, Math.min(5, Math.round(n)));
 }

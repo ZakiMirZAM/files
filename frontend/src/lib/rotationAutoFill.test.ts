@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Frequency, Metric, SectionData, TrendPoint } from "./types";
-import { METRICS } from "./sectorRotation";
+import { METRICS, clampWeight, scoreMatrix } from "./sectorRotation";
 import {
   autoFillReadings,
   classifySeries,
@@ -381,5 +381,82 @@ describe("autoFillReadings coverage", () => {
     for (const f of result.filled) {
       if (f.rule === "slope") expect(f.reading).toBe("up");
     }
+  });
+});
+
+describe("inflation durability and priced-in gates", () => {
+  const cpiName = seriesNameForRow("cpi") as string;
+  const beName = seriesNameForRow("breakeven5y") as string;
+
+  // Latest 6 months back at 4 after a 6-month dip to 2: the 6-month change is
+  // +2 (up) but the 12-month change is 0, a spike the year does not confirm.
+  const spike = monthlySeries([...flat(108, 4), ...flat(6, 2), ...flat(6, 4)]);
+  // A steady ramp clears its band at both horizons.
+  const durable = monthlySeries(ramp(120, 1, 0.05));
+
+  it("downgrades a 6-month rise the 12-month change does not confirm", () => {
+    const result = autoFillReadings(makeData([makeMetric(cpiName, spike)]), OPTS);
+    expect(result.readings.cpi).toBe("neutral");
+    expect(result.filled.find((f) => f.id === "cpi")?.rule).toBe("durability-gate");
+  });
+
+  it("downgrades durable realized inflation when breakevens are not rising", () => {
+    const result = autoFillReadings(
+      makeData([makeMetric(cpiName, durable), makeMetric(beName, monthlySeries(flat(120, 2.3)))]),
+      OPTS,
+    );
+    expect(result.readings.breakeven5y).toBe("neutral");
+    expect(result.readings.cpi).toBe("neutral");
+    expect(result.filled.find((f) => f.id === "cpi")?.rule).toBe("priced-in-gate");
+  });
+
+  it("keeps a durable rise that breakevens confirm", () => {
+    const result = autoFillReadings(
+      makeData([makeMetric(cpiName, durable), makeMetric(beName, monthlySeries(ramp(120, 1.5, 0.02)))]),
+      OPTS,
+    );
+    expect(result.readings.breakeven5y).toBe("up");
+    expect(result.readings.cpi).toBe("up");
+    expect(result.filled.find((f) => f.id === "cpi")?.rule).toBe("slope");
+  });
+
+  it("skips the priced-in gate when the breakeven row is not derivable", () => {
+    const result = autoFillReadings(makeData([makeMetric(cpiName, durable)]), OPTS);
+    expect(result.readings.breakeven5y).toBeUndefined();
+    expect(result.readings.cpi).toBe("up");
+  });
+
+  it("never touches falling or neutral inflation readings", () => {
+    const falling = monthlySeries(ramp(120, 8, -0.05));
+    const result = autoFillReadings(makeData([makeMetric(cpiName, falling)]), OPTS);
+    expect(result.readings.cpi).toBe("down");
+    expect(result.filled.find((f) => f.id === "cpi")?.rule).toBe("slope");
+  });
+});
+
+describe("commodity rows are informational by default", () => {
+  it("gives the single-commodity price rows weight 0", () => {
+    for (const id of ["oil", "copper", "iron_ore", "wheat", "import_prices"]) {
+      expect(METRICS.find((m) => m.id === id)?.weight).toBe(0);
+    }
+  });
+
+  it("keeps the ratio rows weighted, a ratio is a signal not a price level", () => {
+    expect(METRICS.find((m) => m.id === "copper_gold")?.weight).toBeGreaterThan(0);
+    expect(METRICS.find((m) => m.id === "gold_silver")?.weight).toBeGreaterThan(0);
+  });
+
+  it("scores nothing for a weight-0 row unless the user overrides it", () => {
+    const zeroed = scoreMatrix({ copper: "up" });
+    expect(zeroed.every((s) => s.total === 0)).toBe(true);
+    const overridden = scoreMatrix({ copper: "up" }, { copper: 3 });
+    expect(overridden.some((s) => s.total !== 0)).toBe(true);
+  });
+
+  it("clamps weights to 0..5", () => {
+    expect(clampWeight(0)).toBe(0);
+    expect(clampWeight(-3)).toBe(0);
+    expect(clampWeight(7)).toBe(5);
+    expect(clampWeight(Number.NaN)).toBe(1);
   });
 });

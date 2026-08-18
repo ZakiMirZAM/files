@@ -11,6 +11,8 @@ import { DataStatusBanner, PanelLoadError } from "../components/DataStatusBanner
 import { SectionHeader } from "../components/SectionHeader";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
 import { QualitativeBlock } from "../components/QualitativeBlock";
+import { SECTOR_DEFINE_TITLE } from "../lib/questions";
+import { DefinitionLink } from "../components/individual/DefinitionsBlock";
 import { buildDataContext, isLiveData } from "../lib/aiDataContext";
 import { setPageAiContext, clearPageAiContext } from "../lib/aiContextStore";
 import { PrinciplesBlock } from "../components/PrinciplesBlock";
@@ -106,6 +108,31 @@ export function SectorDetail() {
 
         <PrinciplesBlock topic="sector" />
 
+        <div>
+          <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
+            <span className="text-gold font-mono text-sm">Define This Sector First</span>
+            <span className="flex-1 h-px bg-gold/15" />
+          </h2>
+          <p className="text-sm text-white/55 leading-6 mb-4 max-w-3xl">
+            Before judging any average, establish what this sector actually is: what it sells,
+            who the main players are, and what drives its growth. The financial averages below
+            only mean something once you can explain the businesses behind them.
+          </p>
+          <DefinitionLink number={436} prominent>
+            How to read a sector
+          </DefinitionLink>
+          <div className="mt-4">
+            <QualitativeBlock
+              section="sector"
+              scopeKey={sector}
+              onlyTitles={[SECTOR_DEFINE_TITLE]}
+              storageSuffix="define"
+              hideHeader
+              dataContext={buildDataContext("sector", data, isLiveData(data))}
+            />
+          </div>
+        </div>
+
         <div data-tour="sector-scorecard">
           {!sectorMetrics ? (
             <ScorecardSkeleton label="Loading sector scorecard…" />
@@ -113,7 +140,12 @@ export function SectorDetail() {
             <PanelLoadError what="sector scorecard" onRetry={() => setSectorMetricsRetry((n) => n + 1)} />
           ) : sectorMetrics.status === "ok" && sectorMetrics.data.data[sector] ? (
             <div className="space-y-6">
-              <SectorMetricsPanel data={sectorMetrics.data} sector={sector} />
+              <SectorMetricsPanel
+                data={sectorMetrics.data}
+                sector={sector}
+                questionSection="sector"
+                questionDataContext={buildDataContext("sector", data, isLiveData(data))}
+              />
               <GroupScorePanel
                 data={sectorMetrics.data}
                 group={sector}
@@ -160,6 +192,8 @@ export function SectorDetail() {
               // INDUSTRY definition (323); every other label keeps the sector defs.
               resolveDef={(l) => (l === "Value Score" ? resolveIndustryDef(l) : resolveSectorDef(l))}
               getColumnHref={(ind) => `/app/industry/${encodeURIComponent(ind)}`}
+              questionSection="industry"
+              questionDataContext={buildDataContext("sector", data, isLiveData(data))}
             />
           </div>
         ) : null}
@@ -168,6 +202,7 @@ export function SectorDetail() {
           <QualitativeBlock
             section="sector"
             scopeKey={sector}
+            excludeTitles={[SECTOR_DEFINE_TITLE]}
             dataContext={buildDataContext("sector", data, isLiveData(data))}
           />
         </div>

@@ -37,5 +37,6 @@ industry-aggregate altitude (this industry vs other industries). Mark done `[ ]`
 | [x] | 326 | 326-Justified-PB.md | Justified P/B | The price-to-book the industry's fundamentals warrant. |
 | [x] | 327 | 327-Industry-Life-Cycle-Stage.md | Industry Life Cycle Stage | The industry's position in the emerging, growth, mature, declining cycle. |
 | [x] | 328 | 328-Strategic-Groups.md | Strategic Groups | The industry's internal map of competitive positions and mobility barriers. |
+| [x] | 329 | 329-How-To-Read-An-Industry.md | How to Read an Industry | Concept overview behind the Define This Industry First deck: the work itself, players and strategic groups, unit economics, insider KPIs, growth source, life cycle. Concept format, not the 9-part template. |
 
-28 definitions.
+29 definitions.

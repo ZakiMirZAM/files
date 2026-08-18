@@ -112,7 +112,7 @@ export function IndustryPicker({ basePath, eyebrow, title, subtitle, kind }: Pic
           <div className="mb-3">
             <ScoreExplainer variant="sector" />
           </div>
-          <SectorMetricsTable data={sectorMetrics} />
+          <SectorMetricsTable data={sectorMetrics} questionSection="sector" />
         </div>
       )}
 

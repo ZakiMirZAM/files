@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import type { SectorMetricsData } from "../lib/types";
+import type { SectionKey, SectorMetricsData } from "../lib/types";
 import {
   formatSectorValue,
   rowStats,
@@ -24,6 +24,12 @@ interface SectorMetricsTableProps {
   getColumnHref?: (name: string) => string;
   /** Surface resolver for metric labels + clicked cells (default: sector surface). */
   resolveDef?: (label: string) => number | undefined;
+  /** When set, a clicked cell opens the sidebar with the definition's Part 9
+   *  questions as an answerable deck saved under this section, scoped to the
+   *  clicked column. Absent = the sidebar renders exactly as before. */
+  questionSection?: SectionKey;
+  /** Page figures passed into the deck's per-question AI tutor. */
+  questionDataContext?: string;
 }
 
 
@@ -32,7 +38,12 @@ export function SectorMetricsTable({
   highlightSector,
   getColumnHref,
   resolveDef = resolveSectorDef,
+  questionSection,
+  questionDataContext,
 }: SectorMetricsTableProps) {
+  const questionScope = questionSection
+    ? { section: questionSection, dataContext: questionDataContext }
+    : undefined;
   const stats = useMemo(() => {
     const m: Record<string, RowStats | null> = {};
     for (const met of data.metrics) m[met.key] = rowStats(data, met.key);
@@ -159,11 +170,11 @@ export function SectorMetricsTable({
                           role="button"
                           tabIndex={0}
                           title={hasHistory ? `${s} · ${met.label}, click for history` : met.definition}
-                          onClick={() => openMetricHistory(s, met, col, resolveDef)}
+                          onClick={() => openMetricHistory(s, met, col, resolveDef, questionScope)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              openMetricHistory(s, met, col, resolveDef);
+                              openMetricHistory(s, met, col, resolveDef, questionScope);
                             }
                           }}
                           className={cn(

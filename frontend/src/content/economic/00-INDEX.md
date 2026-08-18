@@ -91,6 +91,10 @@ A reference library of 51 economic and macro metrics for finding the best sector
 
 - [49 - Population Growth Rate](49-Population-Growth-Rate.md)
 
+## Concept Overviews (sidebar-only, no dropdown)
+
+- [70 - How the Economy Works](70-How-The-Economy-Works.md), the working model behind the Understand the Economy First section: debt cycles, productivity, policy transmission, and the big-player economies. Concept format, not the six-part metric template.
+
 ## The Eleven GICS Sectors
 
 Every "What it tells you" table classifies all eleven sectors: Communication Services, Consumer Discretionary, Consumer Staples, Energy, Financials, Health Care, Industrials, Information Technology, Materials, Real Estate, Utilities.

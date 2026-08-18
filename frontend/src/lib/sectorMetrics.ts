@@ -9,6 +9,8 @@ import type {
   SectorMetricUnit,
 } from "./types";
 import { openDefinitionSeries } from "./definitionPanelStore";
+import type { DefinitionQuestionScope } from "./definitionPanelStore";
+import type { SectionKey } from "./types";
 import type { DefinitionSeries } from "./individualSeries";
 
 /** Whether a higher or lower value is "better", drives the heatmap tint. */
@@ -163,6 +165,7 @@ export function openMetricHistory(
   met: SectorMetricDef,
   col: SectorColumn | undefined,
   resolveDef?: (label: string) => number | undefined,
+  questionScope?: { section: SectionKey; dataContext?: string },
 ): void {
   const points = colHistory(col, met.key);
   const series: DefinitionSeries | undefined =
@@ -175,11 +178,29 @@ export function openMetricHistory(
         }
       : undefined;
   const num = resolveDef?.(met.label) ?? 0;
+  // The Part 9 deck's answer scope: one answer set per (group, definition), so
+  // Technology's ROIC-WACC answers never mix with Energy's. Only built when the
+  // page supplied a section; other DefinitionPanel mounts stay deck-free.
+  let scope: DefinitionQuestionScope | undefined;
+  if (questionScope && num > 0) {
+    const latest = col?.[met.key];
+    const figures =
+      `${columnName} ${met.label}: latest ${formatSectorValue(latest ?? null, met.unit)}` +
+      (points && points.length >= 2
+        ? `; history ${points.map((p) => `${p.period}: ${formatSectorValue(p.value, met.unit)}`).join(", ")}`
+        : "");
+    scope = {
+      section: questionScope.section,
+      scopeKey: `${columnName}-def-${num}`,
+      dataContext: [questionScope.dataContext, figures].filter(Boolean).join("\n"),
+    };
+  }
   openDefinitionSeries({
     number: num,
     series,
     title: `${columnName} · ${met.label}`,
     description: num > 0 ? undefined : met.definition,
+    scope,
   });
 }
 

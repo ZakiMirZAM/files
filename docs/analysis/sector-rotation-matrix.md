@@ -118,6 +118,29 @@ the metric rises. Level-and-YoY variants of the same FRED series share a row.
 Confidence: high on the weight tiers and roles (they follow the leading/coincident/
 lagging literature and Ilmanen Ch.26); moderate on individual sector tilts.
 
+### 2026-08 revision — inflation durability and commodity de-weighting
+
+A 54-quarter backtest (2013 Q1 to 2026 Q2) of the auto-filled matrix showed rising
+inflation prints stacking five near-identical rows (breakeven, PPI, CPI, import prices,
+plus the commodity price rows) and heavily favoring Basic Materials and Energy on spikes
+that faded within a year. A temporary reading is not a real sector benefit, so the
+implementation (`frontend/src/lib/sectorRotation.ts` + `rotationAutoFill.ts`) now differs
+from the tables above for the inflation group:
+
+| Row | Table above | Implemented | Why |
+|---|---|---|---|
+| 5-Year Breakeven | 4 | 4 | The market's own forward inflation price; the one high-weight inflation row. |
+| PPI YoY | 4 | 2 | Realized inflation; gated (below). |
+| CPI YoY | 3 | 2 | Realized inflation; gated (below). |
+| Import Price Index YoY | 3 | 0 | Duplicates the realized-inflation vote. |
+| Oil, Copper, Iron Ore, Wheat | 3/3/3/2 | 0 | A commodity price level does not directly drive sector stock returns; informational rows. |
+
+Auto-fill gates on PPI/CPI: a rising reading must (1) also clear its band over 12 months
+and (2) be echoed by a rising 5-year breakeven, or it is set neutral
+(`durability-gate` / `priced-in-gate`). Copper/Gold and Gold/Silver are ratios (growth
+and risk signals), not price levels, and keep their weights. Weight 0 rows stay visible
+and user-editable (scale is now 0..5).
+
 ---
 
 ## Step 1 — Place the cycle (weighted vote)

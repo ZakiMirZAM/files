@@ -43,5 +43,6 @@ sector-aggregate altitude (this sector vs other sectors). Mark done `[ ]` to `[x
 | [x] | 432 | 432-Net-Debt-To-OCF.md | Net Debt To OCF | Years for the sector to repay net debt. |
 | [x] | 433 | 433-Liabilities-To-Equity.md | Liabilities To Equity | The sector's total balance-sheet leverage. |
 | [x] | 435 | 435-Value-Score.md | Value Score | The scorecard's economic-profit-weighted value score (0-100), read against the integrity questions. |
+| [x] | 436 | 436-How-To-Read-A-Sector.md | How to Read a Sector | Concept overview behind the Define This Sector First deck: product, players, growth drivers, value chain, business models, failure modes. Concept format, not the 9-part template. |
 
-34 definitions.
+35 definitions.

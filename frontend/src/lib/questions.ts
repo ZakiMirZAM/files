@@ -1,7 +1,77 @@
 import type { QualitativeGroup, SectionKey } from "./types";
 
+/** Title of the economic synthesis deck, rendered as its own block above the
+ *  full question bank on the Economic page (and excluded from the bank). */
+export const ECON_VERDICT_TITLE = "Sector Verdict: The Questions That Decide";
+
+/** Titles of the two understanding-first decks rendered at the TOP of the
+ *  Economic page, before any metric. The user builds a working model of the
+ *  economy before analyzing it metric by metric. Both are excluded from the
+ *  page-bottom bank. */
+export const ECON_UNDERSTAND_TITLES = [
+  "Understand the Economy First",
+  "How the Big-Player Economies Work",
+];
+
+/** Title of the exclusion synthesis deck, rendered inside the Verdict section
+ *  below the sector verdict deck (and excluded from the bank). */
+export const ECON_EXCLUSION_TITLE = "Exclusion Verdict: Sectors That Are Out";
+
+/** Title of the sector understanding-first deck, rendered at the top of every
+ *  sector page with answers saved per sector. Excluded from the bottom bank. */
+export const SECTOR_DEFINE_TITLE = "Define This Sector First";
+
+/** Title of the industry understanding-first deck, rendered at the top of every
+ *  industry page with answers saved per industry. Excluded from the bottom bank. */
+export const INDUSTRY_DEFINE_TITLE = "Define This Industry First";
+
 export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
   economic: [
+    {
+      title: ECON_VERDICT_TITLE,
+      questions: [
+        { id: "econ.verdict.phase", text: "Which phase of the business cycle is the economy in right now: early recovery, mid cycle, late cycle, or contraction? Read the 10Y-3M and 10Y-2Y spreads, the high-yield credit spread, industrial production, heavy truck sales, and payrolls together. Early recovery favors Consumer Cyclical, Financial Services, and Industrials; mid cycle favors Technology and Communication Services; late cycle favors Energy, Basic Materials, Healthcare, and Consumer Defensive; contraction favors Utilities, Consumer Defensive, and Healthcare." },
+        { id: "econ.verdict.rates", text: "Are interest rates and liquidity moving toward easier or tighter conditions? Read the 10-year yield, the 30-year mortgage rate, the Fed balance sheet, net liquidity, and M2 growth. Falling rates and expanding liquidity favor the long-duration sectors (Technology, Real Estate, Utilities); rising rates favor Financial Services and punish bond-proxy sectors." },
+        { id: "econ.verdict.inflation", text: "Is inflation rising in a way that is durable, meaning the rise holds over a full 12 months AND the 5-year breakeven is rising with it? A spike the market already prices as temporary is not a reason to favor Energy or Basic Materials. Even when inflation is durable, the companies worth owning in those sectors are the ones with pricing power, not the price takers." },
+        { id: "econ.verdict.consumer", text: "Is the consumer strengthening or weakening? Read real hourly earnings, retail sales, consumer sentiment, the savings rate, and unemployment together. A strengthening consumer favors Consumer Cyclical over Consumer Defensive; a weakening one reverses that trade." },
+        { id: "econ.verdict.dollar", text: "Which way is the trade-weighted dollar trending, and what does that mean for sector earnings? A strengthening dollar pressures Technology, Basic Materials, and Energy (foreign revenue and dollar-priced commodities); a weakening dollar is a tailwind for the same sectors." },
+        { id: "econ.verdict.valuation", text: "Is the market priced for high or low forward returns? Read the Shiller CAPE against its own history, the Fed model spread, and the implied equity risk premium. A richly valued market argues for sectors whose earnings justify their price (check the P/E rows on the Sector Financial Averages) over the most expensive growth sectors; a cheap market widens what you can own." },
+        { id: "econ.verdict.matrix", text: "Which three sectors top your Sector Rotation matrix right now, and which sit at the bottom? Where your answers to the six questions above disagree with the matrix, name the disagreement and decide which reading is wrong before moving on. The matrix is the weighted sum of the same data you just read." },
+        { id: "econ.verdict.fundamentals", text: "Which sectors are actually creating value regardless of the cycle? Open the Sector Financial Averages and read the Value Score row and the ROIC minus WACC spread. A macro-favored sector that earns less than its cost of capital is a trade, not an investment; a value-creating sector the macro dislikes this quarter may still be the better multi-year home." },
+        { id: "econ.verdict.psychology_debt", text: "Where are market psychology and the debt cycle right now? For psychology: is fear of missing out, a new-era mentality, or pessimism dominating, and are amateur investors euphoric or absent? For the debt cycle: is credit expanding faster than incomes, is the borrowed money funding productive assets or consumption and speculation, and are debt service burdens rising? Euphoric psychology on top of unproductive credit growth marks a late cycle where the favored trade is crowded and defensive sectors deserve more weight; washed-out psychology with deleveraging behind it marks the base where cyclical sectors are cheapest." },
+        { id: "econ.verdict.final", text: "Combining everything above: rank the two or three sectors you would concentrate research on and the one or two you would avoid, and give the single most important reason for each. State whether each favored sector is favored for a temporary reason or a durable one; a temporary reason is a rotation, not an investment." },
+      ],
+    },
+    {
+      title: ECON_UNDERSTAND_TITLES[0],
+      questions: [
+        { id: "econ.understand.growth_engine", text: "In your own words, how does the economy generate growth right now? Who is spending, who is borrowing, and what are they borrowing for?" },
+        { id: "econ.understand.regime", text: "What regime are we in: where are policy rates, is liquidity expanding or contracting, and is inflation above or below target and heading which way?" },
+        { id: "econ.understand.debt_cycles", text: "Where are we in the short-term debt cycle (easing versus tightening) and in the long-term debt cycle (how much debt relative to income, and how much room policy has left)?" },
+        { id: "econ.understand.growth_source", text: "What is doing the heavy lifting in growth today: productivity, credit expansion, fiscal deficits, or population growth? What happens to growth if the credit component stalls?" },
+        { id: "econ.understand.imbalances", text: "Which imbalances worry professional analysts most right now (deficits, valuations, concentration, housing, bank balance sheets), and what would trigger each one to matter?" },
+        { id: "econ.understand.summary", text: "Write the summary a professional economic analyst would give of the current economy, as complete as you can make it: pull together growth drivers, the policy and liquidity regime, the debt cycle position, and the imbalances into one coherent account. There is no length limit; the goal is the best possible synthesis of everything above. If you cannot write it yet, list what you still need to learn before analyzing any single metric below." },
+      ],
+    },
+    {
+      title: ECON_UNDERSTAND_TITLES[1],
+      questions: [
+        { id: "econ.understand.us", text: "United States: what drives its growth (consumption share, services versus goods), how do the Fed and fiscal policy transmit into markets, and what is its key fragility today?" },
+        { id: "econ.understand.china", text: "China: how does its investment-and-export model work, what shape are property and local-government debt in, and how do its slowdowns transmit into US sectors such as materials, industrials, and technology?" },
+        { id: "econ.understand.europe", text: "Europe: what does the euro area depend on (exports, imported energy), how does the ECB's job differ from the Fed's, and which US sectors feel a European slowdown first?" },
+        { id: "econ.understand.japan", text: "Japan: why do its interest rates matter globally (carry trade funding, large holdings of Treasuries), and what happens to global yields when the Bank of Japan tightens?" },
+        { id: "econ.understand.synthesis", text: "Synthesis: which foreign economy poses the biggest risk to your sector rankings right now, and through which channel: demand, currency, rates, or supply chains?" },
+      ],
+    },
+    {
+      title: ECON_EXCLUSION_TITLE,
+      questions: [
+        { id: "econ.exclude.converging", text: "Across all the metrics above, which sectors are definitively excluded, and which two or more converging readings exclude each one? A single metric is never enough." },
+        { id: "econ.exclude.flip", text: "For each sector you almost excluded, name the single metric that would flip your decision if it changed." },
+        { id: "econ.exclude.horizon", text: "Which of your exclusions are cyclical (bad for the next year) and which are structural (bad for a decade)? How does that change the price at which you would reconsider?" },
+        { id: "econ.exclude.final", text: "Write the final exclusion list with one decisive reason per sector. Check it against your rotation matrix ranking: if an excluded sector sits in the top three there, work out which of the two is wrong." },
+      ],
+    },
     {
       title: "Market Psychology",
       questions: [
@@ -266,6 +336,18 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
 
   sector: [
     {
+      title: SECTOR_DEFINE_TITLE,
+      questions: [
+        { id: "sec.define.sells", text: "What does this sector actually sell, and who are the end buyers? Describe the products in plain words, as if you ran one of these companies." },
+        { id: "sec.define.players", text: "Name the main players and roughly rank them by size. What separates the leaders from the rest of the pack?" },
+        { id: "sec.define.growth_driver", text: "What drives revenue growth here: volume, price, mix, or something structural? What specifically is driving growth right now?" },
+        { id: "sec.define.value_chain", text: "Follow one dollar of customer spending through the value chain. Which layer keeps the most profit, and why is it able to?" },
+        { id: "sec.define.models", text: "What are the dominant business models in this sector, and how does each one make its money?" },
+        { id: "sec.define.killers", text: "What kills companies in this sector: leverage, technology shifts, regulation, commodity swings, or competition? Name a real casualty if you can." },
+        { id: "sec.define.insider", text: "Write the full account an insider who works in this sector would give of its current state: what is selling, who is winning and losing, what the mood is on pricing and capacity, and what everyone in the sector is worried about. No length limit; summarize everything you established in the questions above into the best complete picture you can." },
+      ],
+    },
+    {
       title: "Capital Flows",
       questions: [
         { id: "sec.capital_flow", text: "Where is capital flowing into / out of this sector right now, and why?" },
@@ -321,6 +403,19 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
   ],
 
   industry: [
+    {
+      title: INDUSTRY_DEFINE_TITLE,
+      questions: [
+        { id: "ind.define.what", text: "What does this industry do all day? Describe the product or service, the customer, and how the buying decision gets made, as if you worked here." },
+        { id: "ind.define.players", text: "Who are the main players, and what strategic groups do they form (premium versus low-cost, integrated versus specialist)? Check your answer against the strategic groups map below." },
+        { id: "ind.define.unit_econ", text: "What are the unit economics of one typical sale: price, cost to serve, contribution margin? What scales with volume and what does not?" },
+        { id: "ind.define.kpis", text: "Which KPIs do insiders actually watch (utilization, backlog, same-store sales, ARPU, loss ratios), and where do those stand today?" },
+        { id: "ind.define.growth", text: "What is driving industry growth right now, and is it volume, price, or share shifting between players?" },
+        { id: "ind.define.lifecycle", text: "Where is the industry in its life cycle, and what evidence in the numbers backs that up? Compare with the life-cycle panel below." },
+        { id: "ind.define.refuse", text: "What would make you refuse to invest in this industry at any price?" },
+        { id: "ind.define.researcher", text: "Write the full account a researcher who specializes in this industry would give of its current state: how the industry works end to end, who the players are and how they are positioned, what is driving or dragging growth, and where the industry is heading. No length limit; summarize everything from the questions above into the best complete picture you can." },
+      ],
+    },
     // Sits under the strategic-group map. Drawn from how Porter actually
     // interrogates a map in Competitive Strategy Ch.7 and Ch.2: the axes are a
     // hypothesis, mobility barriers are the engine, empty space is not automatically
@@ -473,6 +568,10 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "ind.biz.segments", text: "How is revenue split across the company's business segments and across geographies?" },
         { id: "ind.biz.valuechain", text: "What does the company do in-house versus buy from suppliers, and where does it sit in its industry's value chain?" },
         { id: "ind.biz.competitors", text: "Who are the company's main competitors, and roughly what is its position or market share among them?" },
+        { id: "ind.overview.products", text: "List every major product or service and who buys each one. Which single product would hurt the company most if it disappeared tomorrow?" },
+        { id: "ind.overview.money", text: "Exactly how does a dollar of revenue get earned? Walk through price, volume, and take-rate for the main business line." },
+        { id: "ind.overview.unit_econ", text: "What are the unit economics of one sale: cost to produce and deliver, contribution margin, and what gets cheaper or more profitable as volume grows?" },
+        { id: "ind.overview.goals", text: "What are the company's broader goals? Where is management steering it over the next 5 to 10 years, and does the capital allocation actually match those words?" },
       ],
     },
     {

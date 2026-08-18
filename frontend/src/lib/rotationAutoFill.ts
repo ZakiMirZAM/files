@@ -22,6 +22,11 @@
 //      "down". The curve rows never escalate down: a flat or inverted stable
 //      curve is exactly the late-cycle signal their neutral vector encodes.
 //
+//   4. Inflation gates, PPI and CPI only: a rising reading must be confirmed
+//      over 12 months (durability) and echoed by a rising 5-year breakeven
+//      (not already priced as transitory), or it downgrades to neutral. See
+//      INFLATION_GATED.
+//
 // autoFillReadings() is pure (inject `now` for determinism); the caller merges
 // `readings` into its state and reports `filled` / `skipped` to the user.
 
@@ -43,7 +48,7 @@ export interface AutoFillEntry {
   band: number;
   /** Latest level's percentile in its trailing window, when computable. */
   levelPercentile?: number;
-  rule: "slope" | "level-override";
+  rule: "slope" | "level-override" | "durability-gate" | "priced-in-gate";
 }
 
 export interface AutoFillSkip {
@@ -101,6 +106,17 @@ const SERIES_NAME_OVERRIDES: Record<string, string> = {
   sp500: "S&P 500 YoY %",
   sp_m2: "S&P 500 / M2 Normalised",
 };
+
+/** Realized-inflation rows whose rising reading only helps cyclical sectors
+ *  when the trend is durable AND the market has not already priced it. An "up"
+ *  here must survive two gates or it downgrades to neutral:
+ *    1. durability: the 12-month change must clear its own band in the same
+ *       direction (a 6-month spike that a year of data does not confirm is
+ *       temporary, and a temporary reading is not a real sector benefit);
+ *    2. priced-in: the 5-year breakeven must also read "up". Breakevens are the
+ *       market's own forward inflation price, so realized inflation against flat
+ *       breakevens is a spike the market already treats as transitory. */
+const INFLATION_GATED = new Set(["ppi", "cpi"]);
 
 /** Rows where a LOW stable level stays neutral instead of escalating to
  *  "down": a flat or inverted yield curve IS the late-cycle regime the
@@ -395,6 +411,42 @@ export function autoFillReadings(
       levelPercentile: cls.levelPercentile ?? undefined,
       rule,
     });
+  }
+
+  // ── Inflation durability + priced-in gates (after the loop, so the breakeven
+  // reading used below is its FINAL one regardless of METRICS order). A gated
+  // downgrade is final: the level overlay must not re-escalate a reading the
+  // gates just called temporary.
+  for (const id of INFLATION_GATED) {
+    if (readings[id] !== "up") continue;
+    const entry = filled.find((f) => f.id === id);
+    if (!entry) continue;
+
+    let gate: AutoFillEntry["rule"] | null = null;
+
+    // Gate 1, durability: the same series must also clear its band over 12
+    // months. Re-resolve is cheap and pure.
+    const resolved = resolveSeries(id, data, byName);
+    if (!("reason" in resolved)) {
+      const yr = classifySeries(resolved.points, resolved.frequency, {
+        ...opts,
+        lookbackMonths: 12,
+      });
+      if ("skip" in yr || yr.reading !== "up") gate = "durability-gate";
+    }
+
+    // Gate 2, priced-in: realized inflation against a breakeven that is not
+    // rising is a spike the market already prices as transitory. Skipped when
+    // the breakeven row itself could not be derived (nothing to test against).
+    if (gate === null && "breakeven5y" in readings && readings.breakeven5y !== "up") {
+      gate = "priced-in-gate";
+    }
+
+    if (gate !== null) {
+      readings[id] = "neutral";
+      entry.reading = "neutral";
+      entry.rule = gate;
+    }
   }
 
   return { readings, filled, skipped };

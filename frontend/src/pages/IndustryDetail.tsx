@@ -14,6 +14,8 @@ import { DataStatusBanner, PanelLoadError } from "../components/DataStatusBanner
 import { SectionHeader } from "../components/SectionHeader";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
 import { QualitativeBlock } from "../components/QualitativeBlock";
+import { INDUSTRY_DEFINE_TITLE } from "../lib/questions";
+import { DefinitionLink } from "../components/individual/DefinitionsBlock";
 import { buildDataContext, isLiveData } from "../lib/aiDataContext";
 import { setPageAiContext, clearPageAiContext } from "../lib/aiContextStore";
 import { PrinciplesBlock } from "../components/PrinciplesBlock";
@@ -226,6 +228,33 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
         <PrinciplesBlock topic={mode === "comparative" ? "comparative" : "industry"} />
 
         {mode === "industry" && (
+          <div>
+            <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
+              <span className="text-gold font-mono text-sm">Define This Industry First</span>
+              <span className="flex-1 h-px bg-gold/15" />
+            </h2>
+            <p className="text-sm text-white/55 leading-6 mb-4 max-w-3xl">
+              Before judging any average, establish how this industry actually works: what it
+              does, who the players are, the unit economics of one sale, and what is driving
+              growth. Aim to know it the way a specialist researcher would.
+            </p>
+            <DefinitionLink number={329} prominent>
+              How to read an industry
+            </DefinitionLink>
+            <div className="mt-4">
+              <QualitativeBlock
+                section="industry"
+                scopeKey={industry}
+                onlyTitles={[INDUSTRY_DEFINE_TITLE]}
+                storageSuffix="define"
+                hideHeader
+                dataContext={buildDataContext("industry", data, isLiveData(data))}
+              />
+            </div>
+          </div>
+        )}
+
+        {mode === "industry" && (
           <div data-tour="industry-scorecard">
             {!industryScorecard ? (
               <ScorecardSkeleton label="Loading industry scorecard…" />
@@ -241,6 +270,8 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
                   sector={industry}
                   title="Industry Scorecard"
                   resolveDef={resolveIndustryDef}
+                  questionSection="industry"
+                  questionDataContext={buildDataContext("industry", data, isLiveData(data))}
                 />
                 <GroupScorePanel
                   data={industryScorecard.data}
@@ -396,7 +427,7 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
             // The strategic-group deck is rendered inside its own section, above.
             // Without this it would render a second time here, in the page-bottom
             // bank, which shows every group that is not excluded.
-            excludeTitles={mode === "industry" ? [STRATEGIC_GROUPS_DECK_TITLE] : undefined}
+            excludeTitles={mode === "industry" ? [STRATEGIC_GROUPS_DECK_TITLE, INDUSTRY_DEFINE_TITLE] : undefined}
             dataContext={buildDataContext(section, data, isLiveData(data))}
           />
         </div>

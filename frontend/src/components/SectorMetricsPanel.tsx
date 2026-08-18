@@ -1,4 +1,4 @@
-import type { SectorMetricsData, SectorMetricDef } from "../lib/types";
+import type { SectionKey, SectorMetricsData, SectorMetricDef } from "../lib/types";
 import { formatSectorValue, colHistory, openMetricHistory } from "../lib/sectorMetrics";
 import { cn } from "../lib/cn";
 import { MetricTerm } from "./individual/DefinitionsBlock";
@@ -14,6 +14,12 @@ interface SectorMetricsPanelProps {
   eyebrow?: string;
   /** Surface resolver for the clickable metric labels (default: sector surface). */
   resolveDef?: (label: string) => number | undefined;
+  /** When set, a clicked value opens the sidebar with the definition's Part 9
+   *  questions as an answerable deck saved under this section. Absent = the
+   *  sidebar renders exactly as before. */
+  questionSection?: SectionKey;
+  /** Page figures passed into the deck's per-question AI tutor. */
+  questionDataContext?: string;
 }
 
 /** A single fundamentals column (a sector or one industry), grouped by category. */
@@ -23,6 +29,8 @@ export function SectorMetricsPanel({
   title = "Sector Scorecard",
   eyebrow = "Current-Year Fundamentals",
   resolveDef = resolveSectorDef,
+  questionSection,
+  questionDataContext,
 }: SectorMetricsPanelProps) {
   const col = data.data[sector];
   if (!col) return null;
@@ -103,7 +111,17 @@ export function SectorMetricsPanel({
                   <button
                     type="button"
                     title={hasHistory ? `${sector} · ${m.label}, click for history` : m.definition}
-                    onClick={() => openMetricHistory(sector, m, col, resolveDef)}
+                    onClick={() =>
+                      openMetricHistory(
+                        sector,
+                        m,
+                        col,
+                        resolveDef,
+                        questionSection
+                          ? { section: questionSection, dataContext: questionDataContext }
+                          : undefined,
+                      )
+                    }
                     className={cn(
                       "font-mono text-sm text-gold whitespace-nowrap shrink-0 rounded-sm px-1 -mx-1",
                       "cursor-pointer transition-shadow hover:ring-1 hover:ring-gold/40",

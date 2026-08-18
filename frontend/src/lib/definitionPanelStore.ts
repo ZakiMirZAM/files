@@ -6,6 +6,18 @@
 // per-(company, metric) series are not part of the numbered definition system.
 
 import type { DefinitionSeries } from "./individualSeries";
+import type { SectionKey } from "./types";
+
+/** Where a definition's Part 9 questions should save their answers. Supplied by
+ *  the opener (a sector/industry matrix cell); absent = the panel renders the
+ *  full markdown exactly as before, questions inert. */
+export interface DefinitionQuestionScope {
+  section: SectionKey;
+  /** e.g. "Technology-def-434": one answer set per (group, definition). */
+  scopeKey: string;
+  /** Page + clicked-series figures for the per-question AI tutor. */
+  dataContext?: string;
+}
 
 export interface OpenDefinition {
   /** Numbered definition to load markdown for (0 when only a series is shown). */
@@ -16,6 +28,9 @@ export interface OpenDefinition {
   title?: string;
   /** Plain-text description shown instead of the numbered markdown. */
   description?: string;
+  /** When present, the panel renders the definition's Part 9 questions as an
+   *  answerable deck saved under this scope. */
+  scope?: DefinitionQuestionScope;
 }
 
 let open: OpenDefinition | null = null;
