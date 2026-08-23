@@ -427,6 +427,10 @@ def fetch_latest_price_yf(ticker: str) -> float | None:
 # FinancialDB
 # ---------------------------------------------------------------------------
 
+# Shared SQLite lock-wait budget (seconds) for every connection this module opens.
+_SQLITE_TIMEOUT_SECONDS = 30.0
+
+
 class FinancialDB:
     """
     SQLite-backed store for annual financial data.
@@ -442,7 +446,16 @@ class FinancialDB:
     # ------------------------------------------------------------------
 
     def _connect(self):
-        return sqlite3.connect(self.db_path)
+        # WAL + a real busy timeout: readers must never be blocked by a writer,
+        # and a writer that has to queue behind another writer waits instead of
+        # failing instantly with "database is locked".
+        conn = sqlite3.connect(self.db_path, timeout=_SQLITE_TIMEOUT_SECONDS)
+        conn.execute(f"PRAGMA busy_timeout = {int(_SQLITE_TIMEOUT_SECONDS * 1000)}")
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.DatabaseError:
+            pass  # read-only media / already locked — plain journal still works
+        return conn
 
     def get_beta(self, ticker: str) -> float | None:
         """Return the cached beta for ``ticker`` (from the tickers table) or
@@ -592,35 +605,56 @@ class FinancialDB:
         per-request network fan-out. A ticker yfinance cannot price keeps its
         existing (filing-date) value — the DB fallback. Intended to be driven by
         the same scheduled refresh that runs ``update_all``."""
-        with self._connect() as conn:
+        # Three phases, deliberately separated: the yfinance fan-out must NOT run
+        # inside a write transaction. Doing so escalates the connection to an
+        # EXCLUSIVE lock on the whole database and holds it for one network
+        # round-trip per ticker (thousands of them), which locks every API reader
+        # out for the entire run ("database is locked" 500s across the site).
+
+        # Phase 1 — short READ transaction: ticker list + latest year per ticker.
+        conn = self._connect()
+        try:
             if tickers is None:
                 tickers = [
                     r[0] for r in conn.execute("SELECT DISTINCT Ticker FROM financials")
                 ]
-            updated = 0
-            skipped = 0
-            for tk in tickers:
-                cap = fetch_latest_market_cap_yf(tk)
-                if cap is None:
-                    skipped += 1
-                    continue
-                yr = conn.execute(
-                    'SELECT MAX(CAST("Calendar Year" AS INTEGER)) FROM financials '
-                    "WHERE Ticker = ? AND \"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'",
-                    (tk,),
-                ).fetchone()
-                if not yr or yr[0] is None:
-                    skipped += 1
-                    continue
-                conn.execute(
+            latest_year = {
+                r[0]: r[1]
+                for r in conn.execute(
+                    'SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) FROM financials '
+                    "WHERE \"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]' GROUP BY Ticker"
+                )
+            }
+        finally:
+            conn.close()
+
+        # Phase 2 — network fan-out with NO database connection open at all.
+        updated = 0
+        skipped = 0
+        pending: list[tuple[float, str, int]] = []
+        for tk in tickers:
+            cap = fetch_latest_market_cap_yf(tk)
+            yr = latest_year.get(tk)
+            if cap is None or yr is None:
+                skipped += 1
+                continue
+            pending.append((cap, tk, int(yr)))
+            updated += 1
+            if verbose and updated % 100 == 0:
+                print(f"  [market-cap] {updated} fetched…", flush=True)
+
+        # Phase 3 — one short WRITE transaction for the whole batch.
+        if pending:
+            conn = self._connect()
+            try:
+                conn.executemany(
                     'UPDATE financials SET "Market Cap" = ? '
                     'WHERE Ticker = ? AND CAST("Calendar Year" AS INTEGER) = ?',
-                    (cap, tk, int(yr[0])),
+                    pending,
                 )
-                updated += 1
-                if verbose and updated % 100 == 0:
-                    print(f"  [market-cap] {updated} refreshed…", flush=True)
-            conn.commit()
+                conn.commit()
+            finally:
+                conn.close()
         if verbose:
             print(
                 f"  [market-cap] done — {updated} refreshed, {skipped} kept DB value",

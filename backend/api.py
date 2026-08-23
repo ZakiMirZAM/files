@@ -280,6 +280,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Unhandled-error handler (must exist for CORS to work on 500s) ────────────
+# Starlette's CORSMiddleware adds Access-Control-Allow-Origin by wrapping `send`.
+# An exception that escapes the endpoint never reaches that wrapper — it unwinds
+# PAST CORSMiddleware to ServerErrorMiddleware, which emits a bare 500 with no
+# CORS header. The browser then reports a phantom "No 'Access-Control-Allow-
+# Origin' header" and the real 500 is invisible. Handling the exception here
+# turns it into a normal response that travels back THROUGH the CORS wrapper.
+from fastapi.responses import JSONResponse
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    log.error("[api] unhandled error on %s: %s", request.url.path, exc, exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "internal server error"})
+
+
 # ── Rate limiting (slowapi) ──────────────────────────────────────────────────
 # Per-IP token buckets. Behind the reverse proxy, run uvicorn with
 # --proxy-headers --forwarded-allow-ips=127.0.0.1 so get_remote_address sees the
@@ -449,14 +465,46 @@ def metric(
     return result
 
 
+# Every API endpoint is read-only against financials.db; the writers are the
+# scheduled refresh jobs. Opening read-only (mode=ro) keeps these handles out of
+# the write-lock queue entirely, and the busy timeout means a reader waits for a
+# checkpointing writer instead of 500-ing with "database is locked".
+_SQLITE_TIMEOUT_SECONDS = 30.0
+
+
+def _ensure_wal() -> None:
+    """Put financials.db in WAL once at import, so readers never block on a
+    writer. Best-effort: a locked or read-only file keeps its current mode."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=_SQLITE_TIMEOUT_SECONDS)
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — never block startup on this
+        log.warning("could not enable WAL on %s: %s", DB_PATH, exc)
+
+
+if DB_PATH.exists():
+    _ensure_wal()
+
+
 @contextmanager
-def db_conn() -> Iterator[sqlite3.Connection]:
+def db_conn(read_only: bool = True) -> Iterator[sqlite3.Connection]:
     if not DB_PATH.exists():
         log.error("financials database not found at %s", DB_PATH)
         raise HTTPException(503, "financials database unavailable")
-    conn = sqlite3.connect(str(DB_PATH))
+    if read_only:
+        conn = sqlite3.connect(
+            f"file:{DB_PATH.as_posix()}?mode=ro",
+            uri=True,
+            timeout=_SQLITE_TIMEOUT_SECONDS,
+        )
+    else:
+        conn = sqlite3.connect(str(DB_PATH), timeout=_SQLITE_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
     try:
+        conn.execute(f"PRAGMA busy_timeout = {int(_SQLITE_TIMEOUT_SECONDS * 1000)}")
         yield conn
     finally:
         conn.close()
