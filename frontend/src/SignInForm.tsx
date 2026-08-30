@@ -1,6 +1,8 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { clearTourDone } from "./lib/tourStorage";
+import { WELCOME_TOUR } from "./lib/tours";
 
 type Flow = "signIn" | "signUp";
 
@@ -147,7 +149,15 @@ export function SignInForm({ onBack }: SignInFormProps) {
       <button
         className="btn-outline w-full py-3 animate-fade-up"
         style={{ animationDelay: "250ms" }}
-        onClick={() => void signIn("anonymous")}
+        onClick={() => {
+          // Anonymous entry always forces the welcome tour. Someone arriving this
+          // way has no account and no history to fall back on, so the guided
+          // start is the whole onboarding. Clearing the done flag before the
+          // sign-in means AppShell mounts fresh and TourOverlay auto-starts it.
+          // Skipping still ends it at once, because skipTour marks it done.
+          clearTourDone(WELCOME_TOUR.id);
+          void signIn("anonymous");
+        }}
       >
         Continue anonymously
       </button>
