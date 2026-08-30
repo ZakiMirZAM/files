@@ -1,13 +1,13 @@
 # Stage 2: the sector
 
-A sector is a large group of similar companies. Technology and energy are two examples. The Sector page is the second step. The page measures each sector and compares them.
+A sector is a large group of similar companies. Technology and energy are two examples. The Sector page measures each sector and lines them up against each other, so you can see which large groups are in good shape before you spend time inside one.
 
-The question this stage answers is which large group looks strong right now. The page shows three kinds of measure for each sector. Growth is how fast revenue is rising. Revenue is the total money a company brings in from sales. Profit margin is the share of revenue kept as profit. Debt level is how much the group has borrowed.
+Three kinds of measure do most of the work here. Growth is how fast revenue is rising, and revenue is the total money a company brings in from sales. Profit margin is the share of that revenue kept as profit. Debt level is how much the group has borrowed. Strong growth with thin margins and heavy debt is a very different picture from steady growth with fat margins and little debt.
 
 ## What you see and click
 
-The page opens with a Scorecard table. Each row is one sector. The columns are the measures above, so you can scan across and compare sectors side by side. Below the table is a search box. Type a sector name to filter the list.
+The page opens with a Scorecard table. Each row is one sector and the columns are the measures above, so you can read across a row for one sector or down a column to compare all of them on a single measure. A search box below the table filters the list by name.
 
-Each sector is also a card. Click a card to open the detail page for that sector. The detail page shows a price chart for the sector, a fuller scorecard for the sector, and a second table called Industry Scorecard.
+Each sector also appears as a card. Click a card to open that sector's own page. There you get a price chart, a fuller scorecard, and a second table called the Industry Scorecard.
 
-The Industry Scorecard breaks the sector into its smaller groups, called industries. Each industry is a column you can click. Clicking a column opens that industry, which is Stage 3.
+The Industry Scorecard breaks the sector into its smaller groups, called industries. Here the industries are the columns and the measures are the rows. Click an industry heading to open it, which takes you into Stage 3.
