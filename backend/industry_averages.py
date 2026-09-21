@@ -29,6 +29,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "data"))
 
 from financial_db import FinancialDB, EXCEL_COLUMNS, capm_discount_rate, RISK_FREE_RATE
+# The upper bound on a market cap used as a weight. Defined once in fx_convert,
+# beside the conversion that puts the cap in USD in the first place.
+from fx_convert import MAX_MARKET_CAP_USD  # noqa: E402
+# The blank-group guard every by-group query carries; see backend/group_sql.py.
+from group_sql import named_group_sql  # noqa: E402
 
 # Bottom-up beta engine (optional). When BETA_RESOLVER=on, the group-DCF SQL
 # below reads resolver betas via LEFT JOIN computed_betas (same financials.db).
@@ -272,10 +277,10 @@ def _compute_averages(
         JOIN tickers t ON t.ticker = f.Ticker
         LEFT JOIN security_map s ON s.symbol = f.Ticker
         {_FX_JOIN_SQL}
-        WHERE t.{group_col} IS NOT NULL
+        WHERE {named_group_sql(f't.{group_col}')}
           AND COALESCE(s.is_primary, 1) = 1
           AND f."Market Cap" > 0
-          AND {_FX_WEIGHT_SQL} < 1e14
+          AND {_FX_WEIGHT_SQL} < {MAX_MARKET_CAP_USD}
         GROUP BY t.{group_col}
         HAVING ticker_count >= {min_tickers}
         ORDER BY t.{group_col}
@@ -319,11 +324,11 @@ def _compute_averages_by_year(
         JOIN tickers t ON t.ticker = f.Ticker
         LEFT JOIN security_map s ON s.symbol = f.Ticker
         {_FX_JOIN_SQL}
-        WHERE t.{group_col} IS NOT NULL
+        WHERE {named_group_sql(f't.{group_col}')}
           AND COALESCE(s.is_primary, 1) = 1
           AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
           AND f."Market Cap" > 0
-          AND {_FX_WEIGHT_SQL} < 1e14
+          AND {_FX_WEIGHT_SQL} < {MAX_MARKET_CAP_USD}
         GROUP BY t.{group_col}, yr
         HAVING ticker_count >= {min_tickers}
         ORDER BY yr, t.{group_col}
@@ -393,7 +398,7 @@ def compute_cape(db: FinancialDB, group_col: str) -> dict[str, float | None]:
                    -- the WEIGHT converts to USD so a JPY/KRW cap is not summed
                    -- against a USD cap at face value (unknown ccy -> NULL ->
                    -- dropped from both sides of the weighted mean).
-                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < 1e14
+                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < {MAX_MARKET_CAP_USD}
                         THEN ({_FX_WEIGHT_SQL}) END AS mktcap
             FROM financials f
             {_FX_JOIN_SQL}
@@ -414,7 +419,7 @@ def compute_cape(db: FinancialDB, group_col: str) -> dict[str, float | None]:
         FROM eps_history eh
         JOIN latest_price lp  ON lp.Ticker = eh.Ticker
         JOIN tickers t        ON t.ticker  = eh.Ticker
-        WHERE t.{group_col} IS NOT NULL
+        WHERE {named_group_sql(f't.{group_col}')}
           AND lp.implied_price > 0
           AND eh.avg_eps > 0
         GROUP BY t.{group_col}
@@ -471,7 +476,7 @@ def compute_dcf(
                    f."Market Cap" / NULLIF(f."Weighted Average Shs Out Dil", 0) AS implied_price,
                    -- weight in USD (see compute_cape note); per-share figures
                    -- stay local so the DCF ratio math is currency-neutral.
-                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < 1e14
+                   CASE WHEN f."Market Cap" > 0 AND ({_FX_WEIGHT_SQL}) < {MAX_MARKET_CAP_USD}
                         THEN ({_FX_WEIGHT_SQL}) END      AS mktcap
             FROM financials f
             {_FX_JOIN_SQL}
@@ -500,7 +505,7 @@ def compute_dcf(
         FROM latest l
         JOIN tickers t ON t.ticker = l.Ticker{beta_join}
         LEFT JOIN security_map s ON s.symbol = l.Ticker
-        WHERE t.{group_col} IS NOT NULL
+        WHERE {named_group_sql(f't.{group_col}')}
           AND COALESCE(s.is_primary, 1) = 1
     """
     conn = sqlite3.connect(db.db_path)

@@ -64,6 +64,22 @@ from valuation import diagnostics as _vdiag  # noqa: E402
 # carries the meaning, so a net inflow must never be drawn as a use of cash.
 import uses_of_cash as _uses_of_cash  # noqa: E402
 
+# Currency reconciliation between a market quote and a per-ordinary-share model
+# value. Pure modules, no network and no database.
+import fx_convert as _fx_convert  # noqa: E402
+try:
+    import price_currency as _pc  # noqa: E402
+except Exception:  # noqa: BLE001 — absence leaves the prior behaviour in place
+    _pc = None  # type: ignore[assignment]
+
+# Financial-sector guard. The same predicate and the same reason wording the
+# connections and industry-structure blocks use, so the credit block does not
+# grow a second opinion about what a bank cannot report.
+try:
+    import financial_guard as _fg  # noqa: E402
+except Exception:  # noqa: BLE001 — a missing guard must not break the snapshot
+    _fg = None  # type: ignore[assignment]
+
 # Bottom-up beta engine (backend/betas). Optional: when the package is missing
 # or BETA_RESOLVER=off, every beta below stays the stored regression value.
 try:
@@ -530,6 +546,13 @@ class IndividualSnapshot:
     # Fundamental metric history: {metric_key: {year: value}} (drives the trends grid)
     metric_history: dict[str, dict[int, Optional[float]]] = field(default_factory=dict)
 
+    # Whether the market quote and the model's per-ordinary-share value are the
+    # same kind of number, and in which currencies. Always present. When
+    # applicable is False the margin of safety, the reverse DCF and every other
+    # price-against-value figure are empty by design, not by accident, and the
+    # reason says which two units could not be reconciled. JSON-safe.
+    price_comparison: Optional[dict] = None
+
     # Deep-value asset floors (Graham Number / NCAV / Net-Net), latest year. JSON-safe.
     valuation_anchors: Optional[dict] = None
 
@@ -604,6 +627,18 @@ class IndividualSnapshot:
     # reported as SOURCES, never as uses. JSON-safe.
     uses_of_cash: Optional[dict] = None
 
+    # Business profile (plan 3.1): yfinance description, website, country,
+    # employees, EDGAR segments, 10-K extract. JSON-safe.
+    business_profile: Optional[dict] = None
+
+    # Cost structure vs strategic group (plan 3.2): company and group medians
+    # for COGS/Rev, SGA/Rev, R&D/Rev, DA/Rev, operating margin. JSON-safe.
+    cost_structure: Optional[dict] = None
+
+    # Generic competitive strategy (plan 3.3): raw figures with industry rank
+    # and count, no percentile or grid placement. JSON-safe.
+    generic_strategy: Optional[dict] = None
+
     # Verdict
     strengths: list[str] = field(default_factory=list)
     weaknesses: list[str] = field(default_factory=list)
@@ -626,9 +661,13 @@ def _yoy_pct(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
 
 
 def _row_val(row: sqlite3.Row, col: str) -> Optional[float]:
-    if col not in row.keys():
+    # sqlite3.Row raises IndexError for an unknown column name (a dict raises
+    # KeyError); catching it beats `col in row.keys()`, which materialises the
+    # full column list on every call (3.9M list builds per industry ranking).
+    try:
+        v = row[col]
+    except (IndexError, KeyError):
         return None
-    v = row[col]
     if v is None:
         return None
     try:
@@ -637,11 +676,110 @@ def _row_val(row: sqlite3.Row, col: str) -> Optional[float]:
         return None
 
 
-def _row_str(row: sqlite3.Row, col: str) -> Optional[str]:
-    if col not in row.keys():
+def _effective_price(
+    price: Optional[float],
+    market_cap: Optional[float],
+    shares: Optional[float],
+    price_unusable: bool = False,
+) -> Optional[float]:
+    """The per-ordinary-share price a model compares its value against.
+
+    The live quote when there is one, otherwise the stored market cap over
+    diluted shares, which is denominated the way the rows are.
+
+    ``price_unusable`` is the depositary-receipt case: the quote is for a
+    receipt in a currency the statements are not in and the number of ordinary
+    shares per receipt is not on file, so there is no price to compare and the
+    stale fallback is NOT a substitute for it. The warehouse's stored cap for
+    exactly those filers has been observed holding the receipt's USD value
+    under the filer's own currency code, so falling back would trade one wrong
+    comparison for another.
+    """
+    if price_unusable:
         return None
-    v = row[col]
+    if price is not None and price > 0:
+        return price
+    return _safe_div(market_cap, shares)
+
+
+def _row_str(row: sqlite3.Row, col: str) -> Optional[str]:
+    try:
+        v = row[col]
+    except (IndexError, KeyError):
+        return None
     return str(v) if v is not None else None
+
+
+# ── Price multiples: stored-vs-computed selection + sanity band ─────────────
+# A price multiple collapses when its denominator approaches zero, and both the
+# stored columns and the computed ratios carry that tail. Measured over the
+# whole warehouse: |market cap / revenue| > 1000 on 1.76 percent of rows,
+# |market cap / OCF| > 1000 on 1.82 percent, |market cap / FCF| > 1000 on 2.11
+# percent, with the distributions flat either side of the cut. Above it the
+# number is reporting a near-zero denominator, not a valuation.
+_MULTIPLE_MAX = 1000.0
+
+# SG&A over revenue is a share of sales. The stored column holds 14,449 rows
+# above 1.0, 2,492 negatives and a maximum of 7.96e7; rendered with the "%"
+# formatter a row at 1,515 prints as 151,500 percent. Everything genuine sits in
+# [0, 2]: above 1.0 belongs to a company spending more on overhead than it sells
+# (real, and the reason the ceiling is not 1.0), while 340,728 of 353,388 stored
+# rows (96.4 percent) already fall inside the band.
+_SGA_REVENUE_MAX = 2.0
+
+# A computed multiple more than this many times away from the stored one is a
+# basis mismatch, not a price move, so the stored figure is kept.
+_MULTIPLE_DIVERGENCE = 3.0
+
+
+def _sane_share(value: Optional[float], ceiling: float) -> Optional[float]:
+    """A ratio that is meant to be a SHARE of something, kept inside [0, ceiling].
+
+    Outside that band the stored figure is a data error rather than a small or
+    large share, and the "%" display unit turns it into an unreadable headline.
+    """
+    if value is None or value < 0.0 or value > ceiling:
+        return None
+    return value
+
+
+def _price_multiple(
+    row: sqlite3.Row,
+    stored_col: str,
+    market_cap: Optional[float],
+    denominator: Optional[float],
+) -> Optional[float]:
+    """One price multiple (P/S, P/OCF, P/FCF), choosing between the stored column
+    and ``market cap / denominator``.
+
+    The stored ratio is frozen at the fiscal-year pull while Market Cap is
+    refreshed to spot weekly, so for a USD filer the computed figure is the
+    current one (AAPL: stored 9.18 against a computed 10.73). For a foreign
+    filer the two are not always on the same basis — TSM computes 0.58 against a
+    stored P/S of 10.55, NVO 0.65 against 4.68 — so outside USD the stored ratio
+    wins. A USD filer whose two figures diverge by more than 3x is the same
+    mismatch wearing a USD label, and keeps the stored figure too.
+
+    A stored value of zero or less is MISSING data, not a free company (19,031
+    rows store a P/S of exactly 0), and a non-positive result is not a usable
+    multiple, so both return None rather than guessing.
+    """
+    computed = None
+    if market_cap is not None and denominator:
+        computed = market_cap / denominator
+    stored = _row_val(row, stored_col)
+    if stored is not None and stored <= 0:
+        stored = None
+
+    is_usd = (_row_str(row, "Reported Currency") or "USD").strip().upper() == "USD"
+    value = stored
+    if is_usd and computed is not None and computed > 0:
+        diverged = stored is not None and max(computed / stored, stored / computed) > _MULTIPLE_DIVERGENCE
+        value = stored if diverged else computed
+
+    if value is None or value <= 0 or value > _MULTIPLE_MAX:
+        return None
+    return value
 
 
 # Sectors/industries where a free-cash-flow-to-firm (FCFF) DCF and EVA are the
@@ -898,6 +1036,7 @@ def _compute_dcf(
     rf: float | None = None,
     erp: float | None = None,
     price: float | None = None,
+    price_unusable: bool = False,
 ) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
     """Legacy FCF-per-share DCF → (intrinsic, implied_price, margin_of_safety,
     growth_used). This discounts an EQUITY cash flow (FCF/share), so the correct
@@ -938,7 +1077,12 @@ def _compute_dcf(
     pv_terminal = terminal_value / (1 + wacc) ** DCF_PROJECTION_YEARS
 
     intrinsic = pv_fcf + pv_terminal
-    implied_price = price if (price is not None and price > 0) else market_cap / shares
+    # The same refusal the damodaran engine applies: with no price that is the
+    # same kind of number as this per-ordinary-share value, there is no margin
+    # of safety to report, and the stored cap is not a substitute.
+    implied_price = _effective_price(price, market_cap, shares, price_unusable)
+    if implied_price is None or implied_price <= 0:
+        return round(intrinsic, 2), None, None, round(growth, 4)
     mos = (intrinsic - implied_price) / implied_price
     return round(intrinsic, 2), round(implied_price, 2), round(mos, 4), round(growth, 4)
 
@@ -1285,6 +1429,20 @@ _FALLBACK_DEBT_SPREAD = 0.0160   # ~BBB, used when interest coverage isn't compu
 # USD via fx_rates (usd_per_unit — the same convention as the ranking paths in api.py)
 # so a weak-currency filer is not misrouted onto the large-firm table.
 _FX_RATES_CACHE: Optional[dict[str, float]] = None
+
+def _company_profile_peers(conn: sqlite3.Connection, industry: str) -> Any:
+    """The industry's latest-year peer set, from the ONE shared 30-min cache.
+
+    ``connections/sector_cache.py`` already caches the industry panel for the
+    connections bundle, and the panel's latest-year PeerSet is the same object
+    ``load_peers`` would rebuild. Keeping a second cache here doubled the
+    memory for every industry a reader visits and let the two copies disagree
+    after a refresh. Imported lazily: ``connections`` imports only
+    ``industry_structure``, so there is no cycle back to this module, and the
+    lazy import keeps it that way if that ever changes.
+    """
+    from company_profile.common import industry_peer_set
+    return industry_peer_set(conn, industry)
 
 
 def _fx_rates_for_conversion() -> dict[str, float]:
@@ -1741,6 +1899,8 @@ def compute_forecast(
     lease_debt: float = 0.0,
     industry_norms: dict | None = None,
     gdp_growth: float | None = None,
+    price_unusable: bool = False,
+    price_unusable_reason: str | None = None,
 ) -> Optional[dict]:
     """Damodaran FCFF firm valuation + EVA valuation, every input derived from
     the ticker's own financials.db history (its own effective tax rate, a true
@@ -1943,10 +2103,21 @@ def compute_forecast(
     else:
         # ── Stage-structured valuation: every applicable 1/2/3-stage variant,
         # a per-firm recommendation, and Ch.12's stable-phase discipline ──────
+        # Memoised per beta: every input other than beta is fixed for the life
+        # of this forecast, and the reverse-DCF scan re-walks the same stage
+        # schedule (same betas) for ~70 trial growth rates. Without this cache
+        # one industry ranking recomputed WACC ~1,000x per company (530k calls
+        # for Semiconductors) and timed out at the tunnel.
+        _wacc_memo: dict[Optional[float], Optional[float]] = {}
+
         def _wacc_of_beta(b, _latest=latest, _rf=rf, _erp=erp, _tax=tax,
-                          _lease=lease_debt):
-            w, _ = compute_wacc(_latest, b, _rf, _erp, _tax, lease_debt=_lease)
-            return w
+                          _lease=lease_debt, _memo=_wacc_memo):
+            try:
+                return _memo[b]
+            except KeyError:
+                w, _ = compute_wacc(_latest, b, _rf, _erp, _tax, lease_debt=_lease)
+                _memo[b] = w
+                return w
         wacc_stable_probe = _wacc_of_beta(
             _vstages.stable_beta(beta, from_high_growth=True))
         roic_stable, roic_stable_source = _vstages.stable_return(
@@ -2008,7 +2179,13 @@ def compute_forecast(
             roic_stable=(roic_stable if reinvest_method == "earnings" else None),
             roic_stable_source=roic_stable_source,
             reinvest_method=reinvest_method, sales_to_capital=s2c_used,
-            equity_adjust=equity_adjust, shares=shares, price=price,
+            # None when the quote cannot be compared with a per-ordinary-share
+            # value, so every stage variant's own margin of safety comes back
+            # empty rather than repeating the mismatch three more times. The
+            # engine already treats a missing price that way; nothing inside
+            # backend/valuation needs to know about currencies.
+            equity_adjust=equity_adjust, shares=shares,
+            price=(None if price_unusable else price),
             track=track, recommended_stages=choice.stages)
         rec_key = "3" if track == "nstage" else str(choice.stages)
         order = [rec_key] + [k for k in ("3", "2", "1") if k != rec_key]
@@ -2061,15 +2238,22 @@ def compute_forecast(
         }
 
     intrinsic = base["intrinsicPerShare"]
-    current_price = price if (price is not None and price > 0) else _safe_div(market_cap, shares)
+    current_price = _effective_price(price, market_cap, shares, price_unusable)
     mos = None
     if current_price is not None and current_price > 0:
         mos = (intrinsic - current_price) / current_price
 
     # Reverse DCF (Penman Ch.4): what growth does today's price already assume?
     # Additive companion to the forward model above — same engine, inverted.
+    #
+    # It inverts the SAME model against the SAME price, so it inherits the same
+    # currency problem: solved against a receipt's US dollar quote while the
+    # model runs in the filer's own currency, the "growth the price implies" is
+    # an answer to a question nobody asked. It is refused with the price.
     reverse_dcf: Optional[dict] = None
-    if current_price is not None and current_price > 0:
+    if price_unusable:
+        reverse_dcf = {"applicable": False, "reason": price_unusable_reason}
+    elif current_price is not None and current_price > 0:
         try:
             if _engine == "legacy":
                 reverse_dcf = _reverse_dcf_scan(
@@ -2272,6 +2456,13 @@ def compute_forecast(
         "intrinsicPerShare": intrinsic,
         "currentPrice": round(current_price, 2) if current_price is not None else None,
         "marginOfSafety": round(mos, 4) if mos is not None else None,
+        # Why there is no price and no margin of safety, when that is the case.
+        # Absent (None) whenever the comparison was made, so a reader never has
+        # to work out which of the two situations they are in.
+        "priceComparison": (
+            {"applicable": False, "reason": price_unusable_reason}
+            if price_unusable else None
+        ),
         "exitCrossCheckPerShare": exit_cross_check,
         "evEbitdaCrossCheckPerShare": ev_cross_check,
         "evEbitdaImpliedGrowth": ev_implied_growth,
@@ -2303,6 +2494,7 @@ DISPLAY_METRICS: list[tuple[str, str, str, str]] = [
     ("asset_turnover", "Asset Turnover", "DuPont", "x"),
     ("equity_multiplier", "Equity Multiplier", "DuPont", "x"),
     ("operating_margin", "Operating Margin", "Profitability & EVA", "%"),
+    ("sga_revenue", "SG&A / Sales", "Profitability & EVA", "%"),
     ("eva_margin", "EVA Margin", "Profitability & EVA", "%"),
     ("roic_wacc_spread", "ROIC − WACC Spread", "Profitability & EVA", "%"),
     ("sales_invested_capital", "Sales / Invested Capital", "Capital Efficiency", "x"),
@@ -2327,6 +2519,8 @@ DISPLAY_METRICS: list[tuple[str, str, str, str]] = [
     ("ev_ebit", "EV / EBIT", "Valuation Multiples", "x"),
     ("pfcf", "P / FCF", "Valuation Multiples", "x"),
     ("pb", "P / B", "Valuation Multiples", "x"),
+    ("ps", "P / Sales", "Valuation Multiples", "x"),
+    ("pocf", "P / OCF", "Valuation Multiples", "x"),
     # Earnings-quality / forensic trend metrics (Schilit; Sloan 1996; Lev & Gu).
     ("income_quality", "Income Quality (CFO/NI)", "Earnings Quality", "x"),
     ("sloan_accruals", "Sloan Accruals Ratio", "Earnings Quality", "%"),
@@ -2551,8 +2745,22 @@ def _compute_one_metric(
         "ev_ebitda": _row_val(row, "Enterprise Value Over EBITDA")
         or _safe_div(_row_val(row, "Enterprise Value"), ebitda),
         "ev_ebit": _safe_div(ev, op_inc),
-        "pfcf": _row_val(row, "PFCF Ratio") or _safe_div(market_cap, fcf),
+        # The three price multiples share one selector so they cannot disagree
+        # about which source they trust (see _price_multiple).
+        "pfcf": _price_multiple(row, "PFCF Ratio", market_cap, fcf),
         "pb": pb,
+        "ps": _price_multiple(row, "Price To Sales Ratio", market_cap, rev),
+        "pocf": _price_multiple(row, "POCF Ratio", market_cap, ocf),
+        # The stored column is already a decimal fraction (AAPL FY2025 = 0.06632,
+        # matching SG&A 27.601B / Revenue 416.161B), so no /100 rescale is needed
+        # for the "%" display unit. Outside [0, _SGA_REVENUE_MAX] the stored
+        # figure is not a share of sales at all, so it is dropped rather than
+        # rendered as a six-figure percentage.
+        "sga_revenue": _sane_share(
+            _row_val(row, "Sales General And Administrative To Revenue")
+            or _safe_div(_row_val(row, "Selling General And Administrative Expenses"), rev),
+            _SGA_REVENUE_MAX,
+        ),
         "income_quality": income_quality,
         "sloan_accruals": sloan_accruals,
         "sbc_revenue": sbc_revenue,
@@ -3750,6 +3958,7 @@ def _residual_income(
     erp: float | None = None,
     horizon: int = RI_HORIZON_YEARS,
     price: float | None = None,
+    price_unusable: bool = False,
 ) -> Optional[dict]:
     """Residual-income (excess-return) equity valuation, the correct intrinsic
     model for Financials/REITs where an FCFF firm model misprices (a bank's debt
@@ -3795,7 +4004,7 @@ def _residual_income(
     retention = 1.0 - payout
 
     actual_pb = _col_or(latest, "PB Ratio", _safe_div(market_cap, equity0))
-    current_price = price if (price is not None and price > 0) else _safe_div(market_cap, shares)
+    current_price = _effective_price(price, market_cap, shares, price_unusable)
 
     if bvps0 is None or bvps0 <= 0 or ke is None or roe_used is None:
         return {
@@ -4039,6 +4248,7 @@ def _dividend_discount_model(
     erp: float | None = None,
     horizon: int = EQUITY_MODEL_HORIZON_YEARS,
     price: float | None = None,
+    price_unusable: bool = False,
 ) -> Optional[dict]:
     """Two-stage dividend discount model (Damodaran, Ch.21 — HSBC / State Bank of
     India). For a financial firm, dividends are observable so the model sidesteps
@@ -4058,7 +4268,7 @@ def _dividend_discount_model(
     rf_eff = RISK_FREE_RATE if rf is None else rf
     shares = _row_val(latest, "Weighted Average Shs Out Dil")
     market_cap = _row_val(latest, "Market Cap")
-    current_price = price if (price is not None and price > 0) else _safe_div(market_cap, shares)
+    current_price = _effective_price(price, market_cap, shares, price_unusable)
     ok, _reason = fcff_applicable(latest)
 
     if (eps0 is None or eps0 <= 0 or ke is None or roe_used is None
@@ -4150,6 +4360,7 @@ def _fcfe_regulatory_capital(
     erp: float | None = None,
     horizon: int = EQUITY_MODEL_HORIZON_YEARS,
     price: float | None = None,
+    price_unusable: bool = False,
 ) -> Optional[dict]:
     """Free-cash-flow-to-equity model where reinvestment is redefined as the
     equity a financial firm must retain to grow its (regulatory) capital base
@@ -4177,7 +4388,7 @@ def _fcfe_regulatory_capital(
     bvps0 = _row_val(latest, "Book Value Per Share")
     if bvps0 is None and equity0 is not None and shares not in (None, 0):
         bvps0 = equity0 / shares
-    current_price = price if (price is not None and price > 0) else _safe_div(market_cap, shares)
+    current_price = _effective_price(price, market_cap, shares, price_unusable)
     equity_ratio = _safe_div(equity0, assets0)   # the "$5 per $100" constraint
     ok, _reason = fcff_applicable(latest)
 
@@ -4573,6 +4784,26 @@ def _bank_credit_view(latest: sqlite3.Row, bank_profitability: Optional[dict]) -
     }
 
 
+def _guarded_rating(rating: dict) -> dict:
+    """The synthetic-rating block with every coverage-derived figure nulled.
+
+    The keys stay so the payload shape never changes and the page can render
+    "not applicable" in the tile that held the letter. ``spread`` keeps its
+    fallback value because the cost of debt still needs one; it is the LETTER,
+    the investment-grade flag and the coverage that are being withdrawn.
+    """
+    reasons = _fg.NOT_APPLICABLE_REASONS if _fg is not None else {}
+    return {
+        **rating,
+        "letter": None,
+        "investmentGrade": None,
+        "interestCoverage": None,
+        "spread": _FALLBACK_DEBT_SPREAD,
+        "headline": "Synthetic rating not applicable",
+        "reason": reasons.get("syntheticRating", rating.get("reason")),
+    }
+
+
 def _credit_score(rating: dict, metrics: list[dict], capacity: dict) -> dict:
     """Composite 0-100 credit-quality score, magnitude-aware with hard caps so a
     negative-FCF or sub-1x-coverage name can never score well."""
@@ -4641,16 +4872,37 @@ def _credit_analysis(rows: list[sqlite3.Row],
 
     if not is_corporate:
         bank = _bank_credit_view(latest, bank_profitability)
-        summary = _credit_score(rating, bank["metrics"], {"band": "na"})
-        return {
+        # A LENDER's interest expense is its cost of funding, not a fixed charge
+        # covered out of operating income, so the coverage ratio that drives the
+        # synthetic rating means something else entirely. JPM read 0.74x
+        # coverage and came back Caa/CCC on a table calibrated on manufacturers,
+        # and that letter then supplied half the composite score and tripped the
+        # sub-1x hard cap. The rating goes, the bank's own capital-adequacy,
+        # ROA and net-interest-margin metrics stay, and the score is built from
+        # those alone. Real estate keeps its rating: a REIT's interest cover is
+        # an ordinary fixed-charge cover, which is why the guard is asked
+        # without real estate while the TRACK choice (fcff_applicable) is not.
+        lender = _fg is not None and _fg.is_financial(
+            _row_str(latest, "t_sector"), _row_str(latest, "t_industry"),
+            include_real_estate=False,
+        )
+        bank_rating = _guarded_rating(rating) if lender else rating
+        summary = _credit_score(bank_rating, bank["metrics"], {"band": "na"})
+        out = {
             "applicable": True, "kind": "bank", "notApplicableReason": na_reason,
-            "rating": rating, "summary": summary,
+            "rating": bank_rating, "summary": summary,
             "metrics": bank["metrics"], "bank": bank,
             "debtCapacity": None, "capitalStructure": None,
             "forensic": {"altmanZ": _find_score(shenanigans, "altman_z"),
                          "beneishM": _find_score(shenanigans, "beneish_m")},
             "source": source,
+            "isFinancial": bool(lender),
+            "notApplicable": (
+                _fg.not_applicable_map(_fg.CREDIT_BANK_GUARDED_FIELDS)
+                if lender and _fg is not None else {}
+            ),
         }
+        return out
 
     # Corporate track.
     ebitda = _row_val(latest, "EBITDA")
@@ -4693,6 +4945,10 @@ def _credit_analysis(rows: list[sqlite3.Row],
         "forensic": {"altmanZ": _find_score(shenanigans, "altman_z"),
                      "beneishM": _find_score(shenanigans, "beneish_m")},
         "source": source,
+        # Present and empty on the corporate track so the two tracks carry the
+        # same shape and the frontend never branches on a missing key.
+        "isFinancial": False,
+        "notApplicable": {},
     }
 
 
@@ -5259,11 +5515,89 @@ def _capital_base(row: sqlite3.Row, wacc: Optional[float]) -> dict:
     }
 
 
+_MAINT_CAPEX_FLOOR_OF_DDA = 0.25  # below this share of D&A the Greenwald estimate is not credible
+
+
+def _maintenance_capex(rows: list[sqlite3.Row], i: int) -> tuple[Optional[float], str]:
+    """Maintenance capital spending for the row at index i, Greenwald's method:
+    the share of capex that supported this year's revenue growth is stripped out
+    at the firm's own average PP&E-to-sales ratio, and what remains is upkeep.
+    Falls back to depreciation and amortization when there is no prior year.
+
+    The ratio uses NET property, plant and equipment because the warehouse has no
+    gross PP&E column. Net PP&E is smaller than gross, so the ratio understates
+    the capital a dollar of new sales needs, which understates growth capex and
+    therefore leaves MORE of capex classified as maintenance. The bias runs one
+    way: maintenance capex too high, owner earnings too low.
+
+    Three method labels, so a reader can tell why a fallback ran:
+      greenwald                 the estimate stands
+      dda_proxy_floor           it came in under the D&A floor
+      dda_proxy_insufficient    inputs missing, or the prior row is not the
+                                immediately preceding fiscal year
+    """
+    capex = _row_val(rows[i], "Capital Expenditure")
+    dda = _row_val(rows[i], "Depreciation And Amortization")
+    rev_i = _row_val(rows[i], "Revenue")
+    year_i = _row_val(rows[i], "Calendar Year")
+    rev_prev = _row_val(rows[i - 1], "Revenue") if i > 0 else None
+    year_prev = _row_val(rows[i - 1], "Calendar Year") if i > 0 else None
+
+    # A gap in the fiscal-year history turns a multi-year revenue change into one
+    # year of growth capex, which overstates it and understates upkeep. There is
+    # no way to apportion it, so the year falls back to the proxy.
+    consecutive = (
+        year_i is not None and year_prev is not None and round(year_i - year_prev) == 1
+    )
+
+    ratios: list[float] = []
+    for r in rows[max(0, i - 5):i]:
+        ppe = _row_val(r, "Property Plant Equipment Net")
+        rev = _row_val(r, "Revenue")
+        year = _row_val(r, "Calendar Year")
+        if ppe is None or rev is None or rev <= 0:
+            continue
+        # Five CALENDAR years back, not five rows back: with gaps in the history
+        # the last five rows can reach a decade into the past, and a decade-old
+        # PP&E-to-sales ratio is not this firm's current capital intensity.
+        if year_i is not None and (year is None or not (0 < year_i - year <= 5)):
+            continue
+        ratios.append(ppe / rev)
+    ratio = (sum(ratios) / len(ratios)) if ratios else None
+
+    if capex is None or rev_i is None or rev_prev is None or ratio is None or not consecutive:
+        if dda is not None:
+            return dda, "dda_proxy_insufficient"
+        return None, "unavailable"
+
+    growth_capex_est = max(0.0, ratio * (rev_i - rev_prev))
+    maint = min(max(abs(capex) - growth_capex_est, 0.0), abs(capex))
+    # A fast grower can push the estimate to nearly zero, which would charge no
+    # upkeep at all. Below a quarter of D&A the estimate is not credible, so the
+    # D&A proxy is used instead and the method label says so.
+    #
+    # The floor only applies when growth capex was actually subtracted. A firm
+    # whose revenue FELL has growth_capex_est = 0, so the estimate already IS the
+    # whole of capex: there is nothing for the floor to protect against, and
+    # applying it replaces a correct answer with a wrong one. PSTV spends 67,000
+    # on upkeep while carrying D&A of 445,000, and the floor was publishing the
+    # D&A figure, nearly seven times too much.
+    if (
+        growth_capex_est > 0.0
+        and dda is not None
+        and dda > 0
+        and maint < _MAINT_CAPEX_FLOOR_OF_DDA * dda
+    ):
+        return dda, "dda_proxy_floor"
+    return maint, "greenwald"
+
+
 def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
     """Owner earnings (Buffett, 1986 letter): reported earnings plus depreciation
     and amortization, minus maintenance capital spending and any working capital
-    the business had to absorb. Maintenance capex is proxied by D&A, and the
-    proxy is stated in the payload rather than hidden."""
+    the business had to absorb. Maintenance capex is estimated with Greenwald's
+    method (see _maintenance_capex), and the method used is stated in the payload
+    rather than hidden."""
     latest = rows[-1]
     ni = _row_val(latest, "Net Income")
     dda = _row_val(latest, "Depreciation And Amortization")
@@ -5275,11 +5609,22 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
         return {"applicable": False,
                 "reason": "Net income or depreciation and amortization is unavailable."}
 
-    maint_capex = dda  # stated proxy: upkeep spending ≈ the wear the accounts recognize
+    maint_capex, maint_method = _maintenance_capex(rows, len(rows) - 1)
+    if maint_capex is None:
+        return {"applicable": False,
+                "reason": "Maintenance capital spending cannot be estimated."}
     oe = ni + dda - maint_capex + (wc_change or 0.0)
-    growth_capex = None
+    # Spending beyond upkeep is growth. On the D&A fallback the upkeep estimate
+    # can exceed the year's actual capex (a firm spending less than it wears
+    # out), and "negative growth capex" is not a thing: the gap is under-
+    # investment, so it is clamped to zero and reported as its own term. That
+    # keeps one identity true in both directions and hides nothing:
+    #     capex + underInvestment = maintenance + growth
+    # with at most one of the two extra terms non-zero.
+    growth_capex = under_investment = None
     if capex is not None:
-        growth_capex = abs(capex) - dda  # spending beyond upkeep = investment in growth
+        growth_capex = max(abs(capex) - maint_capex, 0.0)
+        under_investment = max(maint_capex - abs(capex), 0.0)
     per_share = _safe_div(oe, shares)
 
     # Look-through flag: when a large share of pretax profit arrives from outside
@@ -5292,30 +5637,44 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
         other is not None and pretax is not None and pretax > 0 and abs(other) / pretax > 0.10
     )
     history = []
-    for r in rows[-5:]:
+    for idx in range(max(0, len(rows) - 5), len(rows)):
+        r = rows[idx]
         ni_y = _row_val(r, "Net Income")
         dda_y = _row_val(r, "Depreciation And Amortization")
         wc_y = _row_val(r, "Change In Working Capital")
         if ni_y is None or dda_y is None:
             continue
+        maint_y, _ = _maintenance_capex(rows, idx)
+        if maint_y is None:
+            continue
         history.append({"year": int(r["Calendar Year"]),
-                        "ownerEarnings": round(ni_y + (wc_y or 0.0), 2)})
+                        "ownerEarnings": round(ni_y + dda_y - maint_y + (wc_y or 0.0), 2)})
     return {
         "applicable": True,
         "netIncome": round(ni, 2),
         "depreciationAmortization": round(dda, 2),
         "maintenanceCapexProxy": round(maint_capex, 2),
+        "maintenanceCapexMethod": maint_method,
         "workingCapitalChange": round(wc_change, 2) if wc_change is not None else None,
         "ownerEarnings": round(oe, 2),
         "ownerEarningsPerShare": round(per_share, 2) if per_share is not None else None,
         "freeCashFlow": round(fcf, 2) if fcf is not None else None,
         "growthCapex": round(growth_capex, 2) if growth_capex is not None else None,
+        "capitalExpenditure": round(abs(capex), 2) if capex is not None else None,
+        "underInvestment": round(under_investment, 2) if under_investment is not None else None,
         "lookThroughFlag": lookthrough_flag,
         "history": history,
         "assumption": (
-            "Maintenance capital spending is estimated with depreciation and "
-            "amortization. The estimate treats the wear the accounts recognize as "
-            "the cost of standing still, so spending beyond it counts as growth."
+            "Maintenance capital spending is estimated with Greenwald's method. "
+            "It takes capital spending for the year and removes the spending "
+            "needed to support this year's revenue growth, sized at the firm's "
+            "average ratio of net property, plant and equipment to sales. What "
+            "is left is the cost of standing still, so spending beyond it counts "
+            "as growth. Depreciation and amortization is the fallback when the "
+            "history is too short to measure that ratio, or when a fiscal year "
+            "is missing from it. Where upkeep comes out above the year's actual "
+            "capital spending, the shortfall is shown as under-investment rather "
+            "than as negative growth spending."
         ),
         "note": (
             "Owner earnings measure the cash an owner could take out each year "
@@ -5413,9 +5772,44 @@ def build_individual_snapshot(
                 beta_meta["betaShadowValue"] = _res.value
     # Most recent market price (yfinance spot quote) for the intrinsic-vs-price
     # comparison; None when offline → models fall back to Market Cap / shares.
-    live_price = db.get_latest_price(ticker) if db is not None else None
+    #
+    # The quote's own currency rides along, from the same FastInfo payload, and
+    # is reconciled against the filer's reporting currency BEFORE any model
+    # sees it. Every per-share figure below is per ORDINARY share in the
+    # reporting currency; a US depositary receipt's quote is neither, and
+    # comparing the two as raw numbers is what made TSM read +357.95 percent.
+    live_price: Optional[float] = None
+    quote_ccy: Optional[str] = None
+    if db is not None:
+        try:
+            live_price, quote_ccy = db.get_latest_price_currency(ticker)
+        except Exception as exc:  # noqa: BLE001 — a quote fetch must not break the snapshot
+            log.warning("price fetch failed for %s: %s", ticker.upper(), exc)
+    # The reporting currency is taken from the latest row that HAS one: the
+    # newest row can carry NULL (NVDA's FY2026 row does) and a NULL there must
+    # not be read as "this filer changed currency".
+    reporting_ccy: Optional[str] = None
+    for _r in reversed(rows):
+        _c = _row_str(_r, "Reported Currency")
+        if _c and _fx_convert.normalize_currency(_c) is not None:
+            reporting_ccy = _c
+            break
+    price_comparison = None
+    if _pc is not None:
+        try:
+            _rates = db.get_fx_rates() if db is not None else None
+        except Exception as exc:  # noqa: BLE001
+            log.warning("fx rates failed for %s: %s", ticker.upper(), exc)
+            _rates = None
+        price_comparison = _pc.reconcile_price(
+            ticker, live_price, quote_ccy, reporting_ccy, _rates)
+        live_price = price_comparison.price
+    price_unusable = price_comparison is not None and not price_comparison.applicable
+    price_unusable_reason = price_comparison.reason if price_unusable else None
     if valuation_engine() == "legacy":
-        intrinsic, implied_price, mos, growth_used = _compute_dcf(rows, beta=beta, rf=rf, erp=erp, price=live_price)
+        intrinsic, implied_price, mos, growth_used = _compute_dcf(
+            rows, beta=beta, rf=rf, erp=erp, price=live_price,
+            price_unusable=price_unusable)
     else:
         # The damodaran engine fills these from the chosen model below; the
         # legacy clamped per-share DCF no longer runs at all.
@@ -5452,7 +5846,9 @@ def build_individual_snapshot(
     try:
         forecast = compute_forecast(rows, beta=beta, rf=rf, erp=erp, price=live_price,
                                     lease_debt=lease_pv, industry_norms=industry_norms,
-                                    gdp_growth=gdp_growth)
+                                    gdp_growth=gdp_growth,
+                                    price_unusable=price_unusable,
+                                    price_unusable_reason=price_unusable_reason)
     except Exception as exc:  # noqa: BLE001 — never let a forecast edge case break the snapshot
         log.warning("forecast failed for %s: %s", ticker.upper(), exc)
         forecast = None
@@ -5541,17 +5937,20 @@ def build_individual_snapshot(
         log.warning("growth viability failed for %s: %s", ticker.upper(), exc)
         growth_viability = None
     try:
-        residual_income = _residual_income(rows, beta=beta, rf=rf, erp=erp, price=live_price)
+        residual_income = _residual_income(rows, beta=beta, rf=rf, erp=erp, price=live_price,
+                                           price_unusable=price_unusable)
     except Exception as exc:  # noqa: BLE001
         log.warning("residual income failed for %s: %s", ticker.upper(), exc)
         residual_income = None
     try:
-        dividend_discount = _dividend_discount_model(rows, beta=beta, rf=rf, erp=erp, price=live_price)
+        dividend_discount = _dividend_discount_model(rows, beta=beta, rf=rf, erp=erp, price=live_price,
+                                                     price_unusable=price_unusable)
     except Exception as exc:  # noqa: BLE001
         log.warning("dividend discount failed for %s: %s", ticker.upper(), exc)
         dividend_discount = None
     try:
-        fcfe_regulatory = _fcfe_regulatory_capital(rows, beta=beta, rf=rf, erp=erp, price=live_price)
+        fcfe_regulatory = _fcfe_regulatory_capital(rows, beta=beta, rf=rf, erp=erp, price=live_price,
+                                                   price_unusable=price_unusable)
     except Exception as exc:  # noqa: BLE001
         log.warning("fcfe regulatory failed for %s: %s", ticker.upper(), exc)
         fcfe_regulatory = None
@@ -5612,8 +6011,9 @@ def build_individual_snapshot(
             tax=_effective_tax_rate(latest),
             wacc=(wb or {}).get("wacc"),
             dcf_intrinsic=(forecast or {}).get("intrinsicPerShare") if isinstance(forecast, dict) else None,
-            price=live_price if (live_price is not None and live_price > 0)
-                  else _safe_div(_row_val(latest, "Market Cap"), _row_val(latest, "Weighted Average Shs Out Dil")),
+            price=_effective_price(
+                live_price, _row_val(latest, "Market Cap"),
+                _row_val(latest, "Weighted Average Shs Out Dil"), price_unusable),
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("epv failed for %s: %s", ticker.upper(), exc)
@@ -5681,6 +6081,59 @@ def build_individual_snapshot(
         log.warning("capital base failed for %s: %s", ticker.upper(), exc)
         capital_base = None
 
+    # ── Company profile (plan 3.1-3.3) ─────────────────────────────────────
+    business_profile = None
+    cost_structure = None
+    generic_strategy = None
+    _snap_sector = latest["t_sector"] if "t_sector" in latest.keys() else None
+    _snap_industry = latest["t_industry"] if "t_industry" in latest.keys() else None
+    if db is not None and _snap_industry:
+        try:
+            _cp_conn = sqlite3.connect(db.db_path, timeout=5.0)
+            _cp_conn.row_factory = sqlite3.Row
+            # The scheduled refresh jobs write to this file; wait for a lock
+            # instead of failing the block.
+            _cp_conn.execute("PRAGMA busy_timeout = 5000")
+        except Exception:  # noqa: BLE001
+            _cp_conn = None
+        if _cp_conn is not None:
+            try:
+                from company_profile.profile import get_business_profile
+                business_profile = get_business_profile(_cp_conn, ticker.upper())
+            except Exception as exc:  # noqa: BLE001
+                log.warning("business profile failed for %s: %s", ticker.upper(), exc)
+                business_profile = None
+            _cp_segment_count: Optional[int] = None
+            if isinstance(business_profile, dict):
+                _segs = business_profile.get("segments")
+                if isinstance(_segs, list) and _segs:
+                    _cp_segment_count = len(_segs)
+            _cp_peers: Any = None
+            try:
+                _cp_peers = _company_profile_peers(_cp_conn, _snap_industry)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("peer load for company profile failed for %s: %s",
+                            ticker.upper(), exc)
+            if _cp_peers is not None:
+                try:
+                    from company_profile.cost_structure import build_cost_structure
+                    cost_structure = build_cost_structure(
+                        ticker.upper(), _cp_peers, _snap_sector, _snap_industry,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("cost structure failed for %s: %s", ticker.upper(), exc)
+                    cost_structure = None
+                try:
+                    from company_profile.generic_strategy import build_generic_strategy
+                    generic_strategy = build_generic_strategy(
+                        ticker.upper(), _cp_peers, _cp_segment_count,
+                        _snap_sector, _snap_industry,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("generic strategy failed for %s: %s", ticker.upper(), exc)
+                    generic_strategy = None
+            _cp_conn.close()
+
     net_income_growth_latest = horizontal_income["Net Income"].get(years[-1])
     strengths, weaknesses, quality_score, verdict = _build_verdict({
         "ratios": ratios,
@@ -5717,6 +6170,8 @@ def build_individual_snapshot(
         forecast=forecast,
         growth_viability=growth_viability,
         metric_history=metric_hist,
+        price_comparison=(price_comparison.to_dict()
+                          if price_comparison is not None else None),
         valuation_anchors=valuation_anchors,
         shenanigans=shenanigans,
         residual_income=residual_income,
@@ -5737,6 +6192,9 @@ def build_individual_snapshot(
         dupont=dupont,
         leverage_roe=leverage_roe,
         uses_of_cash=uses_of_cash,
+        business_profile=business_profile,
+        cost_structure=cost_structure,
+        generic_strategy=generic_strategy,
         strengths=strengths,
         weaknesses=weaknesses,
         verdict=verdict,

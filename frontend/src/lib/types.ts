@@ -17,6 +17,13 @@ export interface QualitativeGroup {
 export interface RuntimeQuestion extends QualitativeQuestion {
   dataContext?: string;
   severity?: IntegritySeverity;
+  /**
+   * Hidden tutor guidance. It is NEVER rendered. QuestionField sends it ahead
+   * of the question text in the AI request, because the server's contract has
+   * no instruction slot: `data` is treated as figures to be checked
+   * numerically, so instructions have to travel in the question slot.
+   */
+  guidance?: string;
 }
 
 export interface RuntimeGroup {
@@ -77,10 +84,49 @@ export interface RecessionBand {
 
 // ── Individual analysis (full IndividualSnapshot) ────────────────────────────
 
+/**
+ * Whether the market quote and the model's per-share value are the same kind
+ * of number.
+ *
+ * Every per-share figure the backend produces is per ORDINARY share in the
+ * filer's reporting currency. The quote is in whatever the LISTING trades in.
+ * For a foreign filer's US depositary receipt those differ twice over, in the
+ * currency and in the unit, and compared raw TSM read a margin of safety of
+ * +357.95 percent: 1990.55 TWD per ordinary share against a 434.67 dollar
+ * receipt. `applicable: false` means the comparison was refused, and every
+ * price-against-value figure on the page is empty by design.
+ */
+export interface PriceComparison {
+  applicable: boolean;
+  /** Why the two could not be compared. Null when they could. */
+  reason: string | null;
+  /** The quote per ORDINARY share in the reporting currency, when reconciled.
+   *  Null when there was no quote, or when the comparison was refused. */
+  price: number | null;
+  /** The quote exactly as it arrived, in its own currency. */
+  quotePrice: number | null;
+  quoteCurrency: string | null;
+  reportingCurrency: string | null;
+  /** The deposit ratio used, when one was on file. 1 for an interlisted
+   *  ordinary share, where one for one is how the listing works rather than an
+   *  assumption about the company. */
+  ordinarySharesPerReceipt: number | null;
+  /** noQuote | unverified | sameCurrency | fxOnly | interlistedOrdinary |
+   *  adrRatio | receiptNoRatio | noRate | storedMarketValue |
+   *  storedReceiptNoRatio */
+  method: string;
+  /** Which rule ran, in plain words, e.g. "interlisted ordinary share,
+   *  converted by exchange rate only". */
+  basis?: string;
+}
+
 export interface IndividualValuation {
   dcfIntrinsicPerShare: number | null;
   impliedPrice: number | null;
   marginOfSafety: number | null;  // decimal: 0.20 = 20% upside
+  /** Present on every payload. When `applied: false` the two figures above are
+   *  null on purpose and `reason` says which units could not be reconciled. */
+  priceComparison?: PriceComparison | null;
   fcfGrowthUsed: number | null;   // decimal: 0.08 = 8% measured growth
   // Under the damodaran engine these are the CHOSEN MODEL's actual values
   // (null when no model is solvable); legacy echoes its old constants.
@@ -261,6 +307,10 @@ export interface WaccBuild {
   weightDebt: number;
   marketValueEquity: number | null;
   bookValueDebt: number;
+  /** Total debt before the operating-lease present value is added. */
+  conventionalDebt?: number | null;
+  /** The present value of operating leases folded into the debt weight. */
+  leaseDebt?: number | null;
   beta: number | null;
   riskFreeRate: number;
   equityRiskPremium: number;
@@ -355,6 +405,9 @@ export interface IndividualForecast {
   lifecycle?: CompanyLifecycle | null;
   // Reverse DCF (Penman): the growth today's price implies, same engine inverted.
   reverseDcf?: ReverseDcf | null;
+  /** Set only when the quote could not be compared with a per-ordinary-share
+   *  value, which is why `currentPrice` and `marginOfSafety` are null. */
+  priceComparison?: { applicable: false; reason: string | null } | null;
   baseYear: number;
   years: number[];
   rows: ForecastRow[];
@@ -723,13 +776,16 @@ export interface EsgBlock {
 
 export interface ReverseDcf {
   applicable: boolean;
-  status: "solved" | "below_band" | "above_band";
-  impliedGrowth: number | null;
+  /** Why the inversion was refused. Present only when applicable is false. */
+  reason?: string | null;
+  status?: "solved" | "below_band" | "above_band";
+  impliedGrowth?: number | null;
   multipleRoots?: boolean;
   roots?: number[] | null;
-  baseGrowth: number;
+  baseGrowth?: number;
   historicalGrowth?: number | null;
-  priceUsed: number;
+  /** Absent when the inversion was refused: there was no usable price. */
+  priceUsed?: number;
   beyondModelCap?: boolean;
   beyondDiagnosticBand?: boolean;
   diagnosticBandHigh?: number;
@@ -814,39 +870,6 @@ export interface IndustryLifecycle {
   yearsUsed?: number;
   reading?: string;
   note?: string;
-}
-
-// ── Strategic groups ──────────────────────
-
-export interface StrategicGroupPoint {
-  ticker: string;
-  operatingMargin: number;
-  marketCapUsd: number;
-  logMcap: number;
-  leverage?: number | null;
-  revenueGrowth?: number | null;
-  group?: string;
-  badges?: string[];
-}
-
-export interface StrategicGroups {
-  applicable: boolean;
-  reason?: string;
-  industry?: string;
-  asOf?: string | null;
-  axes?: {
-    marginMedian: number;
-    mcapMedianUsd: number;
-    logMcapMedian: number | null;
-  };
-  points?: StrategicGroupPoint[];
-  groups?: { key: string; label: string; members: string[] }[];
-  unclassified?: string[];
-  /** How many companies this map was built from. */
-  limit?: number;
-  /** How many the industry could actually supply, so the UI stops offering more. */
-  available?: number;
-  limitOptions?: number[];
 }
 
 // ── Business-events feed (Lev & Gu Ch.4): recent 8-K / 6-K filings ────────────
@@ -941,6 +964,12 @@ export interface CreditAnalysis {
   bank: CreditBankView | null;
   forensic: { altmanZ: ForensicScore | null; beneishM: ForensicScore | null };
   source: string;
+  /** True for a lender or insurer. The synthetic rating is read off an
+   *  interest-coverage table calibrated on non-financial firms, so it is
+   *  withdrawn rather than printed. Real estate keeps its rating. */
+  isFinancial?: boolean;
+  /** {field: reason} for every figure the financial-sector guard withdrew. */
+  notApplicable?: Record<string, string>;
 }
 
 export interface IndividualAnalysis {
@@ -955,6 +984,10 @@ export interface IndividualAnalysis {
   perShareGrowth: Record<string, number | null>;
   cashGeneration: CashGenerationRow[];
   valuation: IndividualValuation;
+  /** Whether the market quote and the model's per-ordinary-share value are the
+   *  same kind of number, and in which currencies. The page reads this rather
+   *  than fetching /api/quote for the currency alone. */
+  priceComparison?: PriceComparison | null;
   horizontal: {
     income: HorizontalTable;
     balance: HorizontalTable;
@@ -1270,7 +1303,10 @@ export interface IndustryEntry {
 
 // ── Sector current-year fundamentals matrix ─────────────────────────────────
 
-export type SectorMetricUnit = "$" | "%" | "x" | "d" | "yrs" | "b" | "n" | "#";
+/** "pts" is percentage POINTS, a difference between two percentages, and is
+ *  client-side only: no backend payload sends it. It exists so a column whose
+ *  definition says "in percentage points" does not print a percent sign. */
+export type SectorMetricUnit = "$" | "%" | "x" | "d" | "yrs" | "b" | "n" | "#" | "pts";
 
 /** One point in a comparative-matrix cell's history (company × metric × year). */
 export interface SectorCellPoint {

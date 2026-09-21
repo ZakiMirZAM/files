@@ -27,13 +27,16 @@ interface QualitativeBlockProps {
    *  the static deck for `section`; each question may carry its own dataContext
    *  and a severity flag. `onlyTitles`/`excludeTitles` do not apply. */
   groups?: RuntimeGroup[];
+  /** Expand every group the first time this deck is seen. A reader who has
+   *  collapsed it since keeps their own state: the stored set wins. */
+  defaultOpen?: boolean;
 }
 
 function groupSlug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups }: QualitativeBlockProps) {
+export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups, defaultOpen = false }: QualitativeBlockProps) {
   const groups: RuntimeGroup[] = runtimeGroups
     ? runtimeGroups
     : QUALITATIVE_QUESTIONS[section].filter((g) =>
@@ -49,29 +52,61 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
   }, [saved]);
 
   // Collapsible groups so a long question bank is not overwhelming. The open set
-  // persists per section, so the user's place survives navigation; all groups
-  // start collapsed.
+  // persists per section, so the user's place survives navigation. A deck starts
+  // collapsed unless it asked for `defaultOpen`, and even then only until the
+  // reader has opened or closed something, because their own state is stored.
   const storageKey = `ifed.qual.open.${section}${storageSuffix ? `.${storageSuffix}` : ""}`;
+  // Read as stored, with no filtering. A runtime deck's groups arrive with the
+  // page's data, so on the first render there are no titles to filter against
+  // and every stored title was being dropped; the write below then saved that
+  // empty set over the reader's own. The stale titles are dropped once, in the
+  // effect underneath, when the deck's real titles exist.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const titles = new Set(groups.map((g) => g.title));
-        return new Set((JSON.parse(raw) as string[]).filter((t) => titles.has(t)));
-      }
+      if (raw) return new Set(JSON.parse(raw) as string[]);
     } catch {
       // ignore
     }
     return new Set();
   });
 
+  // A deck whose groups arrive with the page's data is empty on the first
+  // render, so the seeding, the filtering and the write all wait for titles.
+  const titlesKey = groups.map((g) => g.title).join("|");
+  const [seeded, setSeeded] = useState(false);
+  const [reconciled, setReconciled] = useState(false);
+
   useEffect(() => {
+    if (reconciled || titlesKey === "") return;
+    const titles = new Set(titlesKey.split("|"));
+    setOpenGroups((prev) => {
+      const next = new Set([...prev].filter((t) => titles.has(t)));
+      return next.size === prev.size ? prev : next;
+    });
+    setReconciled(true);
+  }, [reconciled, titlesKey]);
+
+  useEffect(() => {
+    if (!defaultOpen || seeded || titlesKey === "") return;
+    setSeeded(true);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(storageKey);
+    } catch {
+      // ignore
+    }
+    if (stored === null) setOpenGroups(new Set(titlesKey.split("|")));
+  }, [defaultOpen, seeded, titlesKey, storageKey]);
+
+  useEffect(() => {
+    if (!reconciled || titlesKey === "") return;
     try {
       localStorage.setItem(storageKey, JSON.stringify([...openGroups]));
     } catch {
       // ignore
     }
-  }, [openGroups, storageKey]);
+  }, [openGroups, storageKey, titlesKey, reconciled]);
 
   const toggle = (title: string) =>
     setOpenGroups((prev) => {
@@ -154,8 +189,11 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
               {isOpen && (
                 <div id={bodyId} className="px-5 pb-5 pt-1 border-t border-gold/10 space-y-4">
                   {group.questions.map((q) => (
+                    // Keyed by the scope too: the page decks stay mounted while
+                    // the route's subject changes (one company to the next), and
+                    // a reused field would keep the previous subject's text.
                     <QuestionField
-                      key={q.id}
+                      key={`${scopeKey}:${q.id}`}
                       questionId={q.id}
                       question={q.text}
                       hint={q.hint}
@@ -164,6 +202,7 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
                       // Per-question context (integrity figures) wins; else the block's.
                       dataContext={q.dataContext ?? dataContext}
                       severity={q.severity}
+                      guidance={q.guidance}
                       initialAnswer={savedMap.get(q.id) ?? ""}
                       onSave={async (value) =>
                         await saveAnswer({

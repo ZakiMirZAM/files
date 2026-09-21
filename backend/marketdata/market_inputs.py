@@ -322,8 +322,15 @@ def historical_implied_erp_series(
 ) -> dict[int, float]:
     """Year-by-year implied ERP, persisted to ``macro_series`` as ``ERP_IMPLIED``.
 
-    Reuses the two-stage solver on each year-end S&P 500 fundamentals (Shiller)
-    and that year's year-end 10y Treasury (FRED ``DGS10``). Returns {year: erp}."""
+    Reuses the two-stage solver on each year's last COMPLETE S&P 500 fundamentals
+    row (Shiller) and that year's year-end 10y Treasury (FRED ``DGS10``). Returns
+    {year: erp}.
+
+    Each point is stored under the date of the Shiller observation it was solved
+    from. Shiller's series is monthly and its dividend/earnings columns lag the
+    price by a quarter or so, so the CURRENT year's last complete row is a
+    mid-year month. Stamping every point ``YYYY-12-01`` put the latest
+    observation months into the future on the economic chart."""
     from .shiller_data import ShillerData, read_stored
     from .fred_client import read_series
 
@@ -339,6 +346,7 @@ def historical_implied_erp_series(
         rf_by_year[int(o.date[:4])] = o.value / 100.0
 
     out: dict[int, float] = {}
+    asof_by_year: dict[int, str] = {}
     for yr in sorted(row_by_year):
         if yr < since:
             continue
@@ -355,11 +363,19 @@ def historical_implied_erp_series(
             growth=growth, dividend=row.dividend)
         if erp is not None:
             out[yr] = erp
+            asof_by_year[yr] = row.date
 
     if store and out:
         from .schema import ensure_external_schema
         ensure_external_schema(conn)
         now = _dt.datetime.now().isoformat(timespec="seconds")
+        # Drop any other date already stored for these years so a point written
+        # under the old December stamp does not linger beside the corrected one.
+        conn.executemany(
+            "DELETE FROM macro_series WHERE series_id='ERP_IMPLIED' "
+            "AND date LIKE ? AND date <> ?",
+            [(f"{yr}-%", asof_by_year[yr]) for yr in out],
+        )
         conn.executemany(
             """INSERT INTO macro_series
                    (series_id, date, value, source, label, unit, fetched_at)
@@ -367,7 +383,7 @@ def historical_implied_erp_series(
                        'Implied ERP (Shiller 2-stage)', 'decimal', ?)
                ON CONFLICT(series_id, date) DO UPDATE SET
                    value=excluded.value, fetched_at=excluded.fetched_at""",
-            [(f"{yr}-12-01", erp, now) for yr, erp in out.items()],
+            [(asof_by_year[yr], erp, now) for yr, erp in out.items()],
         )
         conn.commit()
     return out

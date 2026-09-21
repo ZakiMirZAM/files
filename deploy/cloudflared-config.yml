@@ -13,6 +13,12 @@
 #   cloudflared tunnel --config deploy/cloudflared-config.yml run
 
 tunnel: 17d8ac00-70dc-442c-825b-4c7187d78b76
+
+# http2 instead of the default quic. On this Windows host quic periodically
+# dies with "wsasendto: ... system lacked sufficient buffer space" (UDP send
+# buffer exhaustion), which drops the tunnel connection and surfaces as failed
+# API calls until cloudflared reconnects. http2 runs over TCP and is immune.
+protocol: http2
 credentials-file: C:\Users\Zaki_Mir\.cloudflared\17d8ac00-70dc-442c-825b-4c7187d78b76.json
 
 ingress:

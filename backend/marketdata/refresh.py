@@ -130,6 +130,28 @@ def _is_stale(age: float | None, gate: float) -> bool:
     return age is None or age >= gate
 
 
+# FRED staleness is probed one series per catalog GROUP. The probe takes
+# MAX(fetched_at) over the ids it is given, so a group that has NEVER been
+# fetched is invisible behind a sibling group refreshed yesterday: the whole
+# catalog reads fresh and the new group never downloads. credit_spreads shipped
+# after this probe was written and had exactly that problem, so BAMLH0A0HYM2
+# (High-Yield OAS) now stands for it and the group refreshes on its own merits.
+_FRED_PROBE_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("DGS1", "DGS10", "T10YIE", "USEPUINDXD"),
+    ("BAMLH0A0HYM2",),
+)
+
+
+def _fred_is_stale(conn, *, force: bool = False) -> bool:
+    """True when ANY probed catalog group has aged past GATE_FRED."""
+    if force:
+        return True
+    return any(
+        _is_stale(_age_days(_newest_macro(conn, list(group))), GATE_FRED)
+        for group in _FRED_PROBE_GROUPS
+    )
+
+
 # ── orchestration ─────────────────────────────────────────────────────────────
 
 
@@ -138,10 +160,7 @@ def run_due(*, force: bool = False) -> bool:
     ran = False
     conn = connect()
     try:
-        fred_stale = force or _is_stale(
-            _age_days(_newest_macro(conn, ["DGS1", "DGS10", "T10YIE", "USEPUINDXD"])),
-            GATE_FRED,
-        )
+        fred_stale = _fred_is_stale(conn, force=force)
         shiller_stale = force or _is_stale(
             _age_days(_newest_single(conn, "SELECT MAX(fetched_at) FROM shiller_sp500")),
             GATE_SHILLER,
@@ -224,6 +243,17 @@ def refresh_all(*, force: bool = True) -> bool:
 # ── scheduler ─────────────────────────────────────────────────────────────────
 
 
+# Cache key prefixes dropped after a refresh actually wrote something. The
+# economic panel caches under "econ", but /api/connections reads the same FRED
+# series through the generic DB prefix ("db:connections_endpoint" — see the
+# `cached` decorator's key format in backend/api.py), so invalidating "econ"
+# alone left the connection layer serving figures up to 30 minutes older than
+# the page beside it. "db" on its own would also drop every sector, industry and
+# ranking payload, which no macro refresh can change, so the prefix is narrowed
+# to that one endpoint.
+INVALIDATE_PREFIXES: tuple[str, ...] = ("econ", "db:connections_endpoint")
+
+
 def _loop(invalidate_cb: Callable[[str], object] | None) -> None:
     time.sleep(_STARTUP_DELAY)
     first = True
@@ -232,7 +262,8 @@ def _loop(invalidate_cb: Callable[[str], object] | None) -> None:
             ran = run_due(force=False)
             if ran and invalidate_cb is not None:
                 try:
-                    invalidate_cb("econ")
+                    for prefix in INVALIDATE_PREFIXES:
+                        invalidate_cb(prefix)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("[marketdata] cache invalidation callback failed: %s", exc)
         except Exception as e:  # noqa: BLE001

@@ -11,6 +11,7 @@ import {
 import type { IndividualAnalysis, UseOfCashKey, UsesOfCashYear } from "../../lib/types";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
 import { QualitativeBlock } from "../QualitativeBlock";
+import { compactLadder, moneySign, type CompactTier } from "../../lib/format";
 
 interface UsesOfCashSectionProps {
   analysis: IndividualAnalysis;
@@ -36,13 +37,17 @@ const USES: ReadonlyArray<{ key: UseOfCashKey; label: string; short: string; col
 
 const AXIS_TICK = { fill: "rgba(255,255,255,0.45)", fontSize: 11 };
 
+/** No thousands step: a line of a cash flow statement below a million prints in
+ *  whole dollars here, which keeps a small buyback readable beside a large one. */
+const USES_OF_CASH_TIERS: readonly CompactTier[] = [
+  { at: 1e12, digits: 2, suffix: "T" },
+  { at: 1e9, digits: 1, suffix: "B" },
+  { at: 1e6, digits: 0, suffix: "M" },
+];
+
 function usd(v: number | null | undefined): string {
   if (v === null || v === undefined) return "not reported";
-  const a = Math.abs(v);
-  if (a >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${v.toFixed(0)}`;
+  return compactLadder(v, USES_OF_CASH_TIERS, "$", (x) => `${moneySign(x)}$${Math.abs(x).toFixed(0)}`);
 }
 
 function pct(v: number | null | undefined): string {

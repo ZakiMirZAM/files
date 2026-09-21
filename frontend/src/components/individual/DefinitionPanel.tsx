@@ -7,6 +7,7 @@ import { formatPercent } from "../../lib/format";
 import { formatSectorValue } from "../../lib/sectorMetrics";
 import {
   closeDefinition,
+  derivePanelScope,
   getOpenDefinition,
   subscribeDefinition,
 } from "../../lib/definitionPanelStore";
@@ -93,7 +94,10 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
   const overrideSeries = openState?.series;
   const overrideTitle = openState?.title;
   const overrideDescription = openState?.description;
-  const questionScope = openState?.scope;
+  // The opener's scope (a clicked matrix cell) wins; a clicked label has none,
+  // so one is derived from the page in view.
+  const questionScope =
+    openState?.scope ?? derivePanelScope(openNumber, getPageAiContext());
 
   const def = openNumber != null && openNumber > 0 ? anyDefByNumber(openNumber) : undefined;
   const block = !overrideSeries && openNumber != null ? metricBlocks?.get(openNumber) : undefined;
@@ -115,13 +119,12 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  // When the opener supplied a question scope (a sector/industry matrix cell),
-  // split the definition's Part 9 questions out of the markdown and render them
-  // as an answerable deck below the body. No scope = the markdown renders whole,
-  // so every other DefinitionPanel mount behaves exactly as before.
+  // The closing question list always comes out of the markdown, so the sidebar
+  // can render it as an answerable deck below the body whenever it has a scope
+  // to save the answers under.
   const split = useMemo(
-    () => (questionScope && markdown !== null ? splitSurfaceDefinition(markdown) : null),
-    [questionScope, markdown],
+    () => (markdown !== null ? splitSurfaceDefinition(markdown) : null),
+    [markdown],
   );
   // Widen the panel for long, table-heavy definitions (e.g. the economic
   // metrics). Off by default so every other page keeps the 440px column.
@@ -316,7 +319,13 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                   split && questionScope && split.questions.length > 0 ? (
                     <>
                       <Markdown content={split.body} />
+                      {/* Keyed by the scope, so a deck whose SUBJECT changes
+                          while the same definition stays open is a new deck.
+                          Without this React reuses the textareas and the next
+                          company's questions open holding the last company's
+                          answers. */}
                       <DefinitionQuestions
+                        key={`${questionScope.section}:${questionScope.scopeKey}`}
                         section={questionScope.section}
                         scopeKey={questionScope.scopeKey}
                         questions={split.questions}

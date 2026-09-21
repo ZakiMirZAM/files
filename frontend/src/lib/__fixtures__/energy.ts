@@ -1,0 +1,96 @@
+// Regenerated verbatim from the live GET /api/connections payload
+// (sec_energy, September 2026). Exposure rows are trimmed to the
+// first five. Do not hand-edit: re-fetch and regenerate instead.
+
+import type { ConnectionsData } from "../connectionsTypes";
+
+export const energyFixture = {
+  "economy": {
+    "tenYearYield": {
+      "value": 4.94,
+      "change12m": 0.88,
+      "asOf": "2026-09-17",
+      "priorDate": "2025-09-17",
+      "priorValue": 4.06,
+      "stale": false,
+      "reason": null
+    },
+    "oneYearYield": {
+      "value": 4.4,
+      "change12m": 0.8,
+      "asOf": "2026-09-17",
+      "priorDate": "2025-09-17",
+      "priorValue": 3.6,
+      "stale": false,
+      "reason": null
+    },
+    "curveSlope": 0.54,
+    "breakeven10y": {
+      "value": 2.33,
+      "change12m": -0.05,
+      "asOf": "2026-09-18",
+      "priorDate": "2025-09-18",
+      "priorValue": 2.38,
+      "stale": false,
+      "reason": null
+    }
+  },
+  "credit": {
+    "highYieldSpread": {
+      "value": 2.7,
+      "change12m": -0.09,
+      "asOf": "2026-09-17",
+      "priorDate": "2025-09-17",
+      "priorValue": 2.79,
+      "stale": false,
+      "reason": null
+    },
+    "investmentGradeSpread": {
+      "value": 0.78,
+      "change12m": 0.02,
+      "asOf": "2026-09-17",
+      "priorDate": "2025-09-17",
+      "priorValue": 0.76,
+      "stale": false,
+      "reason": null
+    },
+    "baaSpread": {
+      "value": 1.44,
+      "change12m": -0.26,
+      "asOf": "2026-09-17",
+      "priorDate": "2025-09-17",
+      "priorValue": 1.7,
+      "stale": false,
+      "reason": null
+    }
+  },
+  "sector": {
+    "name": "Energy",
+    "fiscalYear": 2025,
+    "coverage": 0.9197,
+    "firmCount": 767,
+    "duplicateListingsDropped": 0,
+    "nullIndustryRowsDropped": 0,
+    "valueScore": null,
+    "valueRank": null,
+    "sectorCount": null,
+    "medianInterestCoverage": 2.49,
+    "medianNetDebtToEbitda": 0.96,
+    "shareCoverageBelow2": 0.4526,
+    "firmsWithInterest": 718,
+    "revenueChange2020": -0.1754,
+    "grossMargin": {
+      "2020": 0.149,
+      "2021": 0.1972,
+      "2022": 0.2221,
+      "2023": 0.2335
+    },
+    "medianOperatingMargin": 0.0587,
+    "medianOperatingMargin5yAgo": 0.0137,
+    "isFinancial": false,
+    "notApplicable": {}
+  },
+  "industry": null,
+  "company": null,
+  "exposures": null
+} as const satisfies ConnectionsData;

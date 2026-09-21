@@ -1,8 +1,9 @@
 import type { EpvBlock, TobinsQBlock, OwnerEarningsBlock } from "../../lib/types";
-import { formatCurrency } from "../../lib/format";
+import { formatCurrency, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
 import { Gauge, Factory, HandCoins } from "lucide-react";
+import { NotApplicable } from "../NotApplicable";
 
 interface ValueLensesSectionProps {
   epv?: EpvBlock | null;
@@ -12,7 +13,7 @@ interface ValueLensesSectionProps {
 
 const money = (v: number | null | undefined): string =>
   v == null ? "n/a" : formatCurrency(v, { compact: true });
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const ps = (v: number | null | undefined): string => formatPerShare(v);
 
 function CardShell({
   icon,
@@ -77,7 +78,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
                 <Tile label="Capitalized at WACC" value={epv.wacc == null ? "n/a" : `${(epv.wacc * 100).toFixed(3)}%`} />
               </div>
             ) : (
-              <p className="text-sm text-white/55">{epv.reason}</p>
+              <NotApplicable reason={epv.reason} />
             )}
           </CardShell>
         )}
@@ -117,7 +118,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
                 )}
               </>
             ) : (
-              <p className="text-sm text-white/55">{tobinsQ.reason}</p>
+              <NotApplicable reason={tobinsQ.reason} />
             )}
           </CardShell>
         )}
@@ -138,7 +139,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
                 <dl className="mt-3 space-y-1 text-[0.75rem] font-mono text-white/55">
                   <div className="flex justify-between"><dt className="text-white/45">Net income</dt><dd>{money(ownerEarnings.netIncome)}</dd></div>
                   <div className="flex justify-between"><dt className="text-white/45">+ D&amp;A</dt><dd>{money(ownerEarnings.depreciationAmortization)}</dd></div>
-                  <div className="flex justify-between"><dt className="text-white/45">− upkeep capex (proxy)</dt><dd>{money(ownerEarnings.maintenanceCapexProxy)}</dd></div>
+                  <div className="flex justify-between"><dt className="text-white/45">− upkeep capex (est.)</dt><dd>{money(ownerEarnings.maintenanceCapexProxy)}</dd></div>
                   <div className="flex justify-between"><dt className="text-white/45">± working capital</dt><dd>{money(ownerEarnings.workingCapitalChange)}</dd></div>
                 </dl>
                 {ownerEarnings.lookThroughFlag && (
@@ -146,7 +147,7 @@ export function ValueLensesSection({ epv, tobinsQ, ownerEarnings }: ValueLensesS
                 )}
               </>
             ) : (
-              <p className="text-sm text-white/55">{ownerEarnings.reason}</p>
+              <NotApplicable reason={ownerEarnings.reason} />
             )}
           </CardShell>
         )}

@@ -1,10 +1,16 @@
-import { Link } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { SectionHeader } from "../components/SectionHeader";
 import { QualitativeBlock } from "../components/QualitativeBlock";
+import { SynthesisReview } from "../components/connections/SynthesisReview";
+import { setPageAiContext, clearPageAiContext } from "../lib/aiContextStore";
+import { searchTickers, type TickerHit } from "../lib/api";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { REPORT_PICKER } from "../lib/connectionsCopy";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
-import { ScrollText } from "lucide-react";
+import { Search, ScrollText } from "lucide-react";
 
 /**
  * Final Review Questions. Replaces the old free-form final report with the exact
@@ -19,6 +25,92 @@ import { ScrollText } from "lucide-react";
 export function ReportPage() {
   const policy = useQuery(api.policy.getPolicy);
 
+  // The company page's next-stage link arrives as /app/report?ticker=XYZ, and
+  // the picker keeps the choice in the URL so the page can be shared or
+  // reloaded on the same company.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reviewTicker = (searchParams.get("ticker") ?? "").toUpperCase();
+
+  const [tickerInput, setTickerInput] = useState("");
+  const [suggestions, setSuggestions] = useState<TickerHit[]>([]);
+  const [notFound, setNotFound] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  const setReviewTicker = useCallback(
+    (ticker: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (ticker) next.set("ticker", ticker);
+      else next.delete("ticker");
+      setSearchParams(next, { replace: false });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  useEffect(() => {
+    if (tickerInput.trim().length < 1) {
+      setSuggestions([]);
+      return;
+    }
+    let active = true;
+    const id = window.setTimeout(async () => {
+      const hits = await searchTickers(tickerInput);
+      if (active) setSuggestions(hits.slice(0, 6));
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(id);
+    };
+  }, [tickerInput]);
+
+  // Free text is checked against the same ticker search the suggestions use
+  // before anything is fetched, so a typo says so instead of loading a panel
+  // full of fallback lines.
+  const loadTyped = useCallback(async () => {
+    const typed = tickerInput.trim().toUpperCase();
+    if (!typed) return;
+    setChecking(true);
+    setNotFound(false);
+    const hits = await searchTickers(typed);
+    setChecking(false);
+    const match =
+      hits.find((h) => h.ticker.toUpperCase() === typed) ?? null;
+    if (!match) {
+      setNotFound(true);
+      return;
+    }
+    setReviewTicker(match.ticker.toUpperCase());
+    setTickerInput("");
+    setSuggestions([]);
+  }, [tickerInput, setReviewTicker]);
+
+  // The company's sector and industry, so the synthesis review can show the
+  // answers written at those two stages. The ticker search already returns
+  // both, so no second endpoint is needed.
+  const [place, setPlace] = useState<{ sector: string; industry: string } | null>(null);
+  useEffect(() => {
+    if (!reviewTicker) {
+      setPlace(null);
+      return;
+    }
+    let active = true;
+    searchTickers(reviewTicker).then((hits) => {
+      if (!active) return;
+      const hit = hits.find((h) => h.ticker.toUpperCase() === reviewTicker);
+      setPlace(hit ? { sector: hit.sector ?? "", industry: hit.industry ?? "" } : null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [reviewTicker]);
+
+  useEffect(() => {
+    setPageAiContext({
+      section: "final_review",
+      subject: reviewTicker || "the final review",
+    });
+    return () => clearPageAiContext();
+  }, [reviewTicker]);
+
   return (
     <div>
       <SectionHeader
@@ -28,8 +120,74 @@ export function ReportPage() {
         actions={<PageTourButton tourId="report" />}
       />
 
+      <StageGoalPanel stage="report" />
+
+      <div className="panel-soft p-4 mt-4 mb-6 space-y-3">
+        <p className="eyebrow">{REPORT_PICKER.eyebrow}</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+            <input
+              className="field field-mono uppercase pl-9 text-sm py-2 w-40"
+              placeholder={REPORT_PICKER.placeholder}
+              value={tickerInput}
+              onChange={(e) => {
+                setTickerInput(e.target.value);
+                setNotFound(false);
+              }}
+              maxLength={6}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck="false"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn-outline text-sm py-2"
+            disabled={!tickerInput.trim() || checking}
+            onClick={() => void loadTyped()}
+          >
+            {REPORT_PICKER.load}
+          </button>
+          {reviewTicker && (
+            <span className="text-sm text-white/60">
+              {REPORT_PICKER.reviewing}{" "}
+              <span className="font-mono text-gold">{reviewTicker}</span>
+            </span>
+          )}
+        </div>
+        {notFound && (
+          <p className="text-sm text-white/55">{REPORT_PICKER.notFound}</p>
+        )}
+        {suggestions.length > 0 && (
+          <div className="panel-soft overflow-hidden max-w-sm">
+            <ul>
+              {suggestions.map((s) => (
+                <li key={s.ticker}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewTicker(s.ticker.toUpperCase());
+                      setTickerInput("");
+                      setSuggestions([]);
+                      setNotFound(false);
+                    }}
+                    className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-white/[0.04] transition-colors text-sm"
+                  >
+                    <span>
+                      <span className="font-mono text-white font-medium">{s.ticker}</span>
+                      <span className="text-white/55 ml-2">{s.name}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
       {policy ? (
-        <div className="panel-soft p-4 mb-6">
+        <div className="panel-soft p-4 mt-6 mb-6">
           <p className="eyebrow mb-2 inline-flex items-center gap-2">
             <ScrollText className="w-4 h-4" /> Your Investment Policy
           </p>
@@ -62,7 +220,7 @@ export function ReportPage() {
           </p>
         </div>
       ) : policy === null ? (
-        <div className="panel-soft p-4 mb-6">
+        <div className="panel-soft p-4 mt-6 mb-6">
           <p className="text-sm text-white/55 inline-flex items-center gap-2 flex-wrap">
             <ScrollText className="w-4 h-4 text-gold/70" />
             No Investment Policy Statement on file yet. Professionals write the policy before the
@@ -73,6 +231,14 @@ export function ReportPage() {
           </p>
         </div>
       ) : null}
+
+      {reviewTicker && (
+        <SynthesisReview
+          sector={place?.sector ?? ""}
+          industry={place?.industry ?? ""}
+          ticker={reviewTicker}
+        />
+      )}
 
       <QualitativeBlock section="final_review" scopeKey="global" hideHeader />
     </div>

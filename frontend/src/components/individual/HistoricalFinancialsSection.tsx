@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Metric, RecessionBand } from "../../lib/types";
-import { formatCurrency, formatNumber, formatPercent } from "../../lib/format";
+import { formatUnitValue } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { MetricBlock } from "../MetricBlock";
 import { MetricTrendQuestion } from "../MetricTrendQuestion";
@@ -16,13 +16,6 @@ const STATEMENT_TREND_DEF_NUMBERS = [82, 84, 94, 100, 93, 24, 25, 127, 140, 148,
 interface HistoricalFinancialsSectionProps {
   metrics: Metric[];
   recessionBands?: RecessionBand[];
-}
-
-function formatValue(v: number, unit: Metric["unit"]): string {
-  if (unit === "$") return formatCurrency(v);
-  if (unit === "%") return formatPercent(v);
-  if (unit === "x") return `${v.toFixed(3)}x`;
-  return formatNumber(v);
 }
 
 /** Change since the first point, % for $/x metrics, percentage-points for % metrics. */
@@ -89,7 +82,7 @@ export function HistoricalFinancialsSection({ metrics, recessionBands = [] }: Hi
               </div>
               <Sparkline values={m.trend.map((t) => t.value)} variant="bar" />
               <div className="flex items-baseline justify-between gap-2 mt-2">
-                <span className="font-mono text-sm text-gold tabular-nums">{formatValue(m.latestValue, m.unit)}</span>
+                <span className="font-mono text-sm text-gold tabular-nums">{formatUnitValue(m.latestValue, m.unit)}</span>
                 {delta && (
                   <span className={cn("font-mono text-[0.7rem]", delta.positive ? "text-gain-strong" : "text-loss-strong")}>
                     {delta.text}

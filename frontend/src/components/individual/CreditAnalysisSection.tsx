@@ -54,6 +54,11 @@ export function CreditAnalysisSection({ credit }: CreditAnalysisSectionProps) {
 
   const { rating, summary, metrics, debtCapacity, capitalStructure, forensic } = credit;
   const bandStyle = BAND_STYLE[summary.band] ?? BAND_STYLE.na;
+  // The backend withdraws the synthetic rating for a lender or insurer and
+  // names the reason. Treat the reason as the switch, not the null letter: a
+  // letter can also be absent because EBIT or interest expense is missing,
+  // which is a different sentence.
+  const ratingWithheld = credit.notApplicable?.syntheticRating ?? null;
 
   return (
     <section className="animate-fade-up">
@@ -98,9 +103,18 @@ export function CreditAnalysisSection({ credit }: CreditAnalysisSectionProps) {
               </span>
             )}
           </div>
-          <p className="text-2xl font-mono font-semibold text-white mt-1 tabular-nums">
-            {rating.letter ?? "n/a"}
-          </p>
+          {ratingWithheld ? (
+            /* The rating is not missing, it is withdrawn, and the sentence
+               says which reading it would have been. Printing "n/a" here left
+               the reader to guess whether the data was absent. */
+            <p className="text-sm text-white/60 leading-snug mt-1">
+              Not applicable. {ratingWithheld}
+            </p>
+          ) : (
+            <p className="text-2xl font-mono font-semibold text-white mt-1 tabular-nums">
+              {rating.letter ?? "n/a"}
+            </p>
+          )}
         </div>
       </div>
 

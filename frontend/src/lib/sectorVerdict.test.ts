@@ -12,7 +12,7 @@ describe("Sector Verdict question deck", () => {
 
   it("exists as the first economic group with ten questions", () => {
     expect(QUALITATIVE_QUESTIONS.economic[0]?.title).toBe(ECON_VERDICT_TITLE);
-    expect(group?.questions).toHaveLength(10);
+    expect(group?.questions).toHaveLength(11);
   });
 
   it("uses stable econ.verdict.* ids ending in the final verdict", () => {

@@ -1,6 +1,7 @@
 import type { IndustryLifecycle } from "../../lib/types";
 import { cn } from "../../lib/cn";
 import { Sprout, TrendingUp, Landmark, TrendingDown, HelpCircle } from "lucide-react";
+import { NotApplicable } from "../NotApplicable";
 
 interface LifecyclePanelProps {
   lifecycle?: IndustryLifecycle | null;
@@ -48,7 +49,7 @@ export function LifecyclePanel({ lifecycle }: LifecyclePanelProps) {
         <p className="eyebrow mb-2 inline-flex items-center gap-2">
           <HelpCircle className="w-4 h-4" /> Industry Life Cycle
         </p>
-        <p className="text-sm text-white/55">{lifecycle.reason}</p>
+        <NotApplicable reason={lifecycle.reason} />
       </div>
     );
   }

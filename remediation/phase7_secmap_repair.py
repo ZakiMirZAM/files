@@ -10,6 +10,16 @@ Four repairs, all audited into rekey_audit:
                  symbol (most financials rows; tie: SEC-listed one).
   4. preferred — a preferred-kind symbol flagged primary while a common-kind
                  sibling exists: promote the best common sibling.
+  5. no-cik    — a symbol with no CIK and no sibling row (nothing shares its
+                 Yahoo or FMP symbol) is the only listing of its company, so
+                 it IS the primary. Phase 2 assigned primaries per CIK and left
+                 every CIK-less symbol at 0 — which is every foreign-exchange
+                 listing (Samsung, Xiaomi, Kyocera, ... 24.7k symbols with
+                 financials). Every group query filters COALESCE(is_primary,1)=1,
+                 so all industry/sector averages and comparative rankings had
+                 silently shrunk to US filers. The daily universe_sync job
+                 already treats a CIK-less symbol as primary; this brings the
+                 bulk map in line with it.
 
 Usage:
     python remediation/phase7_secmap_repair.py <db_path>
@@ -25,11 +35,35 @@ def _fin_rows(cur: sqlite3.Cursor, symbol: str) -> int:
     ).fetchone()[0]
 
 
-def _audit(cur: sqlite3.Cursor, cik: str, action: str,
+def _audit(cur: sqlite3.Cursor, cik: str | None, action: str,
            sym_from: str | None, sym_to: str | None) -> None:
     cur.execute(
         "INSERT INTO rekey_audit VALUES (?,?,?,?,NULL,datetime('now'))",
         (cik, action, sym_from, sym_to))
+
+
+def _promote_cikless_singletons(cur: sqlite3.Cursor) -> int:
+    """Repair 5. A row is a sibling of another when they share a CIK (handled
+    by repairs 2-4) or a non-null Yahoo/FMP symbol. A CIK-less common-kind row
+    with no such sibling cannot be a duplicate of anything, so demoting it only
+    hides its company. Promote it; audited as no_cik_singleton_promoted.
+    Preferred, unit and warrant rows are never a company's primary listing."""
+    rows = cur.execute(
+        """
+        SELECT a.symbol FROM security_map a
+        WHERE a.cik IS NULL AND COALESCE(a.is_primary, 0) = 0
+          AND COALESCE(a.kind, 'common') = 'common'
+          AND NOT EXISTS (
+              SELECT 1 FROM security_map b
+              WHERE b.symbol <> a.symbol
+                AND ((a.symbol_yf IS NOT NULL AND b.symbol_yf = a.symbol_yf)
+                  OR (a.symbol_fmp IS NOT NULL AND b.symbol_fmp = a.symbol_fmp)))
+        """
+    ).fetchall()
+    for (sym,) in rows:
+        cur.execute("UPDATE security_map SET is_primary=1 WHERE symbol=?", (sym,))
+        _audit(cur, None, "no_cik_singleton_promoted", None, sym)
+    return len(rows)
 
 
 def run(db_path: str) -> None:
@@ -104,6 +138,10 @@ def run(db_path: str) -> None:
         _audit(cur, cik, "preferred_primary_flipped", psym, best)
         flipped += 1
     print(f"preferred primaries flipped to common: {flipped} of {len(pref)}")
+
+    # 5. CIK-less symbol with no sibling -> it is its company's only listing
+    promoted_nocik = _promote_cikless_singletons(cur)
+    print(f"cik-less singleton listings promoted: {promoted_nocik}")
 
     con.commit()
 

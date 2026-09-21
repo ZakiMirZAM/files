@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchIndividual, fetchIndividualBenchmarks, searchTickers, tickerExists, type IndividualResult, type TickerHit } from "../lib/api";
+import { fetchIndividual, fetchIndividualBenchmarks, type IndividualResult } from "../lib/api";
 import { SectionHeader } from "../components/SectionHeader";
 import { QualitativeBlock } from "../components/QualitativeBlock";
 import { buildDataContext } from "../lib/aiDataContext";
@@ -37,43 +37,30 @@ import { ShenanigansSection } from "../components/individual/ShenanigansSection"
 import { CreditAnalysisSection } from "../components/individual/CreditAnalysisSection";
 import { UsesOfCashSection } from "../components/individual/UsesOfCashSection";
 import { ChecklistBlock } from "../components/individual/ChecklistBlock";
+import { CompanyNotFound } from "../components/individual/CompanyNotFound";
+import { TickerSearchForm } from "../components/individual/TickerSearchForm";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { DefinitionLink } from "../components/individual/DefinitionsBlock";
-import { DataStatusBanner } from "../components/DataStatusBanner";
+import { DataStatusBanner, PanelLoadError } from "../components/DataStatusBanner";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { NextStagePanel } from "../components/connections/NextStagePanel";
+import { PeerRankingTable } from "../components/PeerRankingTable";
+import { PEER_RANKING } from "../lib/connectionsCopy";
 import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
+import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
 import type { IndividualBenchmarks } from "../lib/types";
-import { AlertTriangle, ChevronLeft, Search } from "lucide-react";
-import { PageTourButton } from "../components/onboarding/PageTourButton";
-import { HelpBadge } from "../components/onboarding/HelpBadge";
+import { Search } from "lucide-react";
 
 export function IndividualPage() {
   const params = useParams();
   const navigate = useNavigate();
   const ticker = params.ticker?.toUpperCase();
-  const [input, setInput] = useState("");
   const [result, setResult] = useState<IndividualResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<TickerHit[]>([]);
 
-  // Live ticker autocomplete as the user types (in the search form)
-  useEffect(() => {
-    if (ticker || input.trim().length < 1) {
-      setSuggestions([]);
-      return;
-    }
-    let active = true;
-    const id = window.setTimeout(async () => {
-      const hits = await searchTickers(input);
-      if (active) setSuggestions(hits.slice(0, 6));
-    }, 200);
-    return () => {
-      active = false;
-      window.clearTimeout(id);
-    };
-  }, [input, ticker]);
-
-  // Load the selected ticker
+  // Load the selected ticker. `attempt` is bumped by the retry the rate-limit
+  // notice offers, which is the one failure the reader can act on.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!ticker) return;
     setResult(null);
@@ -84,7 +71,7 @@ export function IndividualPage() {
     return () => {
       active = false;
     };
-  }, [ticker]);
+  }, [ticker, attempt]);
 
   // Industry + sector averages for the definition sidebar's comparison block.
   // Best effort: null (backend down, unknown ticker) just hides the block.
@@ -101,58 +88,78 @@ export function IndividualPage() {
     };
   }, [ticker]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const t = input.trim().toUpperCase();
-    if (!t) return;
-    setSubmitting(true);
-    setValidationError(null);
-
-    // Pre-validate against /api/tickers/search so users get instant feedback
-    // for typos / non-existent tickers, instead of navigating to a 404 page.
-    const exists = await tickerExists(t);
-    setSubmitting(false);
-
-    if (exists === false) {
-      setValidationError(
-        `"${t}" isn't in financials.db. Try a different ticker, or use the suggestions below.`,
-      );
-      return;
-    }
-    // exists === null (API down) or true → navigate anyway; the detail page
-    // will show "not found" or "API offline · mock data" appropriately.
-    navigate(`/app/individual/${encodeURIComponent(t)}`);
-  };
-
   // Current ticker's data (real or mock), and the definition-number -> live
   // series index the sidebar panel uses to draw a graph beside a definition.
-  const detailData = result?.status === "ok" ? result.data
-                   : result?.status === "api_down" ? result.mock
-                   : null;
-  const seriesIndex = useMemo(() => buildSeriesIndex(detailData), [detailData]);
+  const data = result?.status === "ok" ? result.data
+             : result?.status === "api_down" ? result.mock
+             : null;
+  const seriesIndex = useMemo(() => buildSeriesIndex(data), [data]);
   // Benchmarks only pair with LIVE data: against the offline mock the numbers
   // would compare fabricated figures with real group averages.
   const benchmarkIndex = useMemo(
     () =>
       buildBenchmarkIndex(
         result?.status === "ok" ? benchmarks : null,
-        detailData?.analysis?.metricMeta ?? null,
+        data?.analysis?.metricMeta ?? null,
       ),
-    [result, benchmarks, detailData],
+    [result, benchmarks, data],
   );
 
   // Publish this company's live figures so the "Explain using AI" question + highlight
   // buttons can answer about it specifically. Computed here (before early returns) to
   // satisfy the rules of hooks.
-  const aiDataContext = buildDataContext("individual", detailData, result?.status === "ok");
+  const aiDataContext = buildDataContext("individual", data, result?.status === "ok");
+
+  // The connect deck names the company's own sector and industry, so it waits
+  // for the snapshot that carries them.
+  const analysis = data?.analysis;
+
+  // The symbol the BACKEND answered under. An alias route (/GOOGL, /BRK.B, /GS)
+  // is folded onto its primary listing before any lookup, so the payload comes
+  // back as GOOG, BRK-A, GS-PA. Anything matched against another backend
+  // payload, the peer ranking's rows above all, has to use this one; the raw
+  // route ticker would find no row and mark nothing.
+  const resolvedTicker = analysis?.ticker?.toUpperCase() ?? ticker;
+
+  // The company's plain name. NOT `data.title`, which is the backend's
+  // "TICKER {em dash} Name" heading: interpolated into a question it would put
+  // an em dash into rendered copy.
+  const companyName = analysis?.name ?? ticker;
+
+  const connectDeck = useMemo(
+    () =>
+      ticker && analysis?.sector && analysis?.industry
+        ? buildConnectDeck("company", {
+            sector: analysis.sector,
+            industry: analysis.industry,
+            company: companyName,
+          })
+        : [],
+    [ticker, analysis?.sector, analysis?.industry, companyName],
+  );
+
+  // The ROUTE ticker, not the resolved one, is what every answer on this page
+  // is saved under: the connect deck, the section decks, the checklist and the
+  // sidebar's derived scope all key off it, and readers already have answers
+  // stored that way. Re-keying to the primary symbol would merge /GOOGL with
+  // /GOOG at the cost of orphaning everything written under GOOGL, so the raw
+  // ticker stays the single answer key per page and the resolved symbol is used
+  // only where a backend payload has to be matched.
   useEffect(() => {
-    if (ticker) setPageAiContext({ section: "individual", subject: ticker, dataContext: aiDataContext });
+    if (ticker) {
+      setPageAiContext({
+        section: "individual",
+        subject: ticker,
+        subjectKey: ticker,
+        dataContext: aiDataContext,
+      });
+    }
     return () => clearPageAiContext();
   }, [ticker, aiDataContext]);
 
   // Growth-viability due-diligence deck: every question always, with this
   // company's own figures deciding which ones carry a flag.
-  const growthChecks = detailData?.analysis?.growthViability?.checks;
+  const growthChecks = data?.analysis?.growthViability?.checks;
   const growthDeck = useMemo(
     () => buildGrowthViabilityDeck(growthChecks, ticker ?? "", aiDataContext),
     [growthChecks, ticker, aiDataContext],
@@ -162,170 +169,12 @@ export function IndividualPage() {
   ).length;
 
   // ──────────────────────── Search-form view ────────────────────────
-  if (!ticker) {
-    return (
-      <div>
-        <SectionHeader
-          eyebrow="Stage 05"
-          title="Individual Stock Analysis"
-          subtitle="Enter a ticker to load the company's financial statements, vertical analysis, and qualitative checklist."
-          actions={<PageTourButton tourId="individual" />}
-        />
-
-        <form onSubmit={handleSubmit} className="panel p-8 max-w-2xl">
-          <div className="flex items-center gap-1 mb-3">
-            <label htmlFor="ticker-input" className="label">
-              Ticker symbol
-            </label>
-            <HelpBadge topic="tickerSearch" />
-          </div>
-          <div className="relative" data-tour="ticker-search">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input
-              id="ticker-input"
-              className="field field-mono uppercase pl-11 text-lg py-4"
-              placeholder="AAPL"
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                setValidationError(null);
-              }}
-              autoFocus
-              maxLength={6}
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck="false"
-            />
-          </div>
-
-          {validationError && (
-            <div className="mt-3 px-3 py-2 rounded-sm border border-loss/40 bg-loss-ghost text-sm text-loss-strong flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{validationError}</span>
-            </div>
-          )}
-
-          {/* Suggestions */}
-          {suggestions.length > 0 && (
-            <div className="mt-3 panel-soft overflow-hidden">
-              <p className="px-3 pt-2 text-[0.65rem] uppercase tracking-wider text-white/40 font-mono">
-                Matches in financials.db
-              </p>
-              <ul>
-                {suggestions.map((s) => (
-                  <li key={s.ticker}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate(`/app/individual/${encodeURIComponent(s.ticker)}`);
-                      }}
-                      className="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-white/[0.04] transition-colors"
-                    >
-                      <span>
-                        <span className="font-mono text-white font-medium">{s.ticker}</span>
-                        <span className="text-white/55 text-sm ml-3">{s.name}</span>
-                      </span>
-                      <span className="text-[0.65rem] font-mono text-white/35">
-                        {s.sector ?? s.industry ?? ""}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <p className="text-[0.7rem] text-white/35 mt-2">
-            Examples: AAPL, MSFT, NVDA, BRK.B · {suggestions.length === 0 && !validationError && "type to search"}
-          </p>
-          <button
-            type="submit"
-            className="btn-gold w-full mt-6 py-3"
-            disabled={!input.trim() || submitting}
-          >
-            {submitting ? "Validating..." : (
-              <>
-                Analyze {input.trim().toUpperCase() || "stock"}
-                <span aria-hidden>→</span>
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-10 max-w-2xl">
-          <p className="label mb-3">Quick picks</p>
-          <div className="flex flex-wrap gap-3">
-            {["AAPL", "MSFT", "NVDA", "GOOGL", "META", "BRK-B", "JPM", "XOM"].map((t) => (
-              <button
-                key={t}
-                onClick={() => navigate(`/app/individual/${t}`)}
-                className="btn-outline py-2 px-4 text-sm font-mono"
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!ticker) return <TickerSearchForm />;
 
   // ──────────────────────── Detail view ────────────────────────
 
   // Ticker not in financials.db, show error panel and offer way back
-  if (result?.status === "not_found") {
-    return (
-      <div>
-        <button
-          onClick={() => navigate("/app/individual")}
-          className="btn-ghost mb-6 -ml-2"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Back to search
-        </button>
-        <SectionHeader
-          eyebrow="Stock not found"
-          title={ticker}
-          subtitle={`This ticker isn't in financials.db.`}
-        />
-        <article className="panel p-8 max-w-2xl border-loss/30">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="w-12 h-12 rounded-sm bg-loss-ghost border border-loss/30 flex items-center justify-center text-loss-strong flex-shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-display text-xl font-semibold text-white mb-1.5">
-                No data for &ldquo;{ticker}&rdquo;
-              </h2>
-              <p className="text-white/65 text-sm leading-relaxed">
-                The ticker symbol isn't in the project's financials.db. This could mean:
-              </p>
-              <ul className="mt-3 space-y-1.5 text-sm text-white/65 list-disc pl-5">
-                <li>The ticker is misspelled (try the search again with autocomplete)</li>
-                <li>The company hasn't been ingested into the database yet</li>
-                <li>The ticker format is different (e.g. <span className="font-mono text-gold">BRK-B</span> not <span className="font-mono">BRK.B</span>)</li>
-              </ul>
-              <p className="mt-3 text-sm text-white/55">
-                You can add more tickers by running <span className="font-mono text-gold">data/daily_update.py</span> with <span className="font-mono">--ticker {ticker}</span>.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3 pt-4">
-            <button
-              onClick={() => navigate("/app/individual")}
-              className="btn-gold"
-            >
-              <Search className="w-4 h-4" />
-              Search a different ticker
-            </button>
-          </div>
-        </article>
-      </div>
-    );
-  }
-
-  // Otherwise: render the data (real or mock fallback)
-  const data = detailData;
+  if (result?.status === "not_found") return <CompanyNotFound ticker={ticker} />;
 
   return (
     <div className="flex gap-0 lg:gap-6">
@@ -333,7 +182,7 @@ export function IndividualPage() {
       <SectionHeader
         eyebrow="Individual Stock Analysis"
         title={ticker}
-        subtitle={data?.subtitle ?? "Loading..."}
+        subtitle={data?.subtitle ?? (result?.status === "rate_limited" ? "" : "Loading...")}
         actions={
           <button onClick={() => navigate("/app/individual")} className="btn-outline">
             <Search className="w-4 h-4" />
@@ -342,8 +191,54 @@ export function IndividualPage() {
         }
       />
 
+      <StageGoalPanel stage="company" />
+
+      {connectDeck.length > 0 && (
+        <div className="mt-6 mb-6">
+          <ErrorBoundary compact>
+            <QualitativeBlock
+              section="individual"
+              scopeKey={ticker}
+              groups={connectDeck}
+              storageSuffix="connect"
+              defaultOpen
+              hideHeader
+              dataContext={aiDataContext}
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* The same ranking table, with the same data, that the Comparative page
+          shows. It sits directly under the connect deck, where the old exposure
+          table used to, and stays closed until the reader wants it: a cold
+          ranking call takes several seconds and this page is already heavy. */}
+      {analysis?.industry && (
+        <div className="mb-6">
+          <ErrorBoundary compact>
+            <PeerRankingTable
+              industry={analysis.industry}
+              heading={PEER_RANKING.heading}
+              highlightTicker={resolvedTicker}
+              collapsible
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
       <div className="space-y-6">
         {result?.status === "api_down" && <DataStatusBanner />}
+
+        {/* A rate limit is not an outage, and simulated figures in its place
+            would tell the reader the wrong thing. It says so and offers the
+            retry that is all the reader needs. */}
+        {result?.status === "rate_limited" && (
+          <PanelLoadError
+            what="company analysis"
+            message={result.message}
+            onRetry={() => setAttempt((n) => n + 1)}
+          />
+        )}
 
         <PrinciplesBlock topic="individual" />
 
@@ -493,11 +388,11 @@ export function IndividualPage() {
             sits at the seam between the quantitative cluster and the interpretive
             one, because the chart is a record and the deck below it is the reading. */}
         {data?.analysis && ticker && (
-          <UsesOfCashSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
+          <UsesOfCashSection analysis={data.analysis} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis && ticker && (
-          <StrategicResourcesSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
+          <StrategicResourcesSection analysis={data.analysis} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis?.normalizedEarnings && (
@@ -505,28 +400,28 @@ export function IndividualPage() {
         )}
 
         {data?.analysis?.earningsBridge && ticker && (
-          <EarningsBridgeSection data={data.analysis.earningsBridge} ticker={ticker} companyName={data.title} />
+          <EarningsBridgeSection data={data.analysis.earningsBridge} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis?.esg && ticker && (
           <EsgSection
             data={data.analysis.esg}
             ticker={ticker}
-            companyName={data.title}
+            companyName={companyName}
             sector={data.analysis.sector}
           />
         )}
 
         {data?.analysis?.managementComp && ticker && (
-          <ManagementCompSection data={data.analysis.managementComp} ticker={ticker} companyName={data.title} />
+          <ManagementCompSection data={data.analysis.managementComp} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis?.events && ticker && (
-          <EventsSection events={data.analysis.events} ticker={ticker} companyName={data.title} />
+          <EventsSection events={data.analysis.events} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis && ticker && (
-          <PowersSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
+          <PowersSection analysis={data.analysis} ticker={ticker} companyName={companyName} />
         )}
 
         {data?.analysis?.shenanigans && (
@@ -534,7 +429,7 @@ export function IndividualPage() {
         )}
 
         {data?.analysis && ticker && (
-          <CatalystTrapSection analysis={data.analysis} ticker={ticker} companyName={data.title} />
+          <CatalystTrapSection analysis={data.analysis} ticker={ticker} companyName={companyName} />
         )}
 
         <div className="pt-2">
@@ -557,6 +452,7 @@ export function IndividualPage() {
               // Rendered inside UsesOfCashSection. Without this it would also render
               // here, in the page-bottom bank, and the deck would appear twice.
               "Capital Allocation",
+              CONNECT_DECK_TITLE.company,
             ]}
             dataContext={aiDataContext}
           />
@@ -565,9 +461,14 @@ export function IndividualPage() {
         <div className="pt-2" data-tour="individual-checklist">
           <ChecklistBlock ticker={ticker} />
         </div>
+
+        <NextStagePanel page="company" ticker={ticker} />
       </div>
       </div>
-      <DefinitionPanel seriesIndex={seriesIndex} benchmarks={benchmarkIndex} />
+      <DefinitionPanel
+        seriesIndex={seriesIndex}
+        benchmarks={benchmarkIndex}
+      />
     </div>
   );
 }

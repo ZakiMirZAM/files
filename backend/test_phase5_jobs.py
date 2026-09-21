@@ -413,3 +413,190 @@ def test_build_report_runs_end_to_end(tmp_path):
     assert "fx rates" in report
     assert "ttm rows" in report
     assert "job runs" in report
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# market_weekly: resumable, budget-bounded market-cap sweep
+# ══════════════════════════════════════════════════════════════════════════════
+import market_cap_refresh as mcr  # noqa: E402
+import market_weekly as mw  # noqa: E402
+
+
+def _caps_db(path, tickers, years=(2023, 2024)):
+    conn = sqlite3.connect(path)
+    conn.execute('CREATE TABLE financials (Ticker TEXT, "Calendar Year" TEXT, '
+                 '"Market Cap" REAL)')
+    conn.executemany('INSERT INTO financials VALUES (?, ?, ?)',
+                     [(t, str(y), 1.0) for t in tickers for y in years])
+    conn.commit()
+    conn.close()
+    return str(path)
+
+
+class _FakeFetcher:
+    """Records every ticker asked for; returns a distinct cap per ticker."""
+
+    def __init__(self, missing=(), raises=()):
+        self.calls = []
+        self._missing, self._raises = set(missing), set(raises)
+
+    def __call__(self, ticker):
+        self.calls.append(ticker)
+        if ticker in self._raises:
+            raise RuntimeError("boom")
+        if ticker in self._missing:
+            return None
+        return 100.0 + len(ticker)
+
+
+def _caps(db, ticker, year):
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute('SELECT "Market Cap" FROM financials WHERE Ticker = ? '
+                            'AND "Calendar Year" = ?', (ticker, str(year))).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _progress_rows(db):
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM market_cap_progress").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_market_cap_sweep_resumes_without_refetching(tmp_path):
+    """The killed run used to throw away 14,800 fetched tickers and start over."""
+    db = _caps_db(tmp_path / "f.db", [f"T{i}" for i in range(1, 6)])
+    fetch = _FakeFetcher()
+
+    first = mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=2, verbose=False)
+    assert first["complete"] is False
+    assert first["done"] == 2 and first["remaining"] == 3
+    assert _progress_rows(db) == 2          # the work is durable mid-run
+
+    second = mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=2, verbose=False)
+    assert second["run_date"] == first["run_date"]
+    assert second["done"] == 2 and second["remaining"] == 1
+
+    third = mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=2, verbose=False)
+    assert third["complete"] is True
+    assert third["run_updated"] == 5
+    # The scratch is KEPT: it is the record that this run finished, so a re-run
+    # in the same week is a no-op instead of a second full sweep.
+    assert _progress_rows(db) == 5
+    again = mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=2, verbose=False)
+    assert again["complete"] is True and again["done"] == 0
+
+    # Each ticker fetched exactly once across the three batches.
+    assert sorted(fetch.calls) == ["T1", "T2", "T3", "T4", "T5"]
+    assert len(fetch.calls) == len(set(fetch.calls))
+    # Only the LATEST year is restated.
+    assert _caps(db, "T1", 2024) == 102.0
+    assert _caps(db, "T1", 2023) == 1.0
+
+
+def test_market_cap_sweep_writes_job_run_only_on_completion(tmp_path):
+    db = _caps_db(tmp_path / "f.db", [f"T{i}" for i in range(1, 4)])
+    fetch = _FakeFetcher()
+
+    mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=1, verbose=False)
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM job_runs").fetchone()[0] == 0
+    conn.close()
+
+    for _ in range(3):
+        res = mcr.refresh_market_caps_resumable(db, fetch=fetch, batch_size=1, verbose=False)
+    assert res["complete"] is True
+    conn = sqlite3.connect(db)
+    try:
+        jobs_rows = conn.execute("SELECT job FROM job_runs").fetchall()
+    finally:
+        conn.close()
+    assert [j[0] for j in jobs_rows] == [mcr.JOB_NAME]
+    # Upsert, not insert: a later completed run must not crash on the PK.
+    mcr._write_job_run(sqlite3.connect(db))
+
+
+def test_market_cap_sweep_budget_stops_the_batch(tmp_path):
+    db = _caps_db(tmp_path / "f.db", [f"T{i}" for i in range(1, 4)])
+    res = mcr.refresh_market_caps_resumable(db, fetch=_FakeFetcher(), batch_size=10,
+                                            budget_seconds=0, verbose=False)
+    assert res["complete"] is False
+    assert res["done"] == 1 and res["remaining"] == 2
+
+
+def test_market_cap_sweep_abandons_a_stale_run(tmp_path):
+    db = _caps_db(tmp_path / "f.db", ["AAA"])
+    old = (date.today() - __import__("datetime").timedelta(days=30)).isoformat()
+    conn = sqlite3.connect(db)
+    mcr.ensure_tables(conn)
+    conn.execute("INSERT INTO market_cap_progress VALUES (?, 'AAA', 1.0, 'updated', ?)",
+                 [old, old])
+    conn.commit()
+    conn.close()
+
+    fetch = _FakeFetcher()
+    res = mcr.refresh_market_caps_resumable(db, fetch=fetch, verbose=False)
+    assert res["run_date"] == date.today().isoformat()
+    assert fetch.calls == ["AAA"]          # not treated as already done
+
+
+def test_market_cap_sweep_counts_a_failing_fetch_as_skipped(tmp_path):
+    db = _caps_db(tmp_path / "f.db", ["AAA", "BBB"])
+    res = mcr.refresh_market_caps_resumable(
+        db, fetch=_FakeFetcher(raises=("AAA",)), verbose=False)
+    assert res["complete"] is True
+    assert res["failed"] == 1 and res["skipped"] == 1 and res["updated"] == 1
+    assert _caps(db, "AAA", 2024) == 1.0   # untouched: the DB value is kept
+
+
+def _job_run_count(db, job):
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM job_runs WHERE job = ?", [job]).fetchone()[0]
+    except sqlite3.OperationalError:
+        return 0       # table not created yet
+    finally:
+        conn.close()
+
+
+def test_market_weekly_returns_nonzero_when_every_step_fails(tmp_path):
+    db = _caps_db(tmp_path / "f.db", ["AAA"])
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("no network")
+
+    class _BadDB:
+        def __init__(self, _path):
+            pass
+
+        def refresh_fx_rates(self):
+            raise RuntimeError("no network")
+
+    assert mw.main(db, cap_refresher=_boom, db_factory=_BadDB) == 1
+
+
+def test_market_weekly_withholds_the_marker_while_the_sweep_resumes(tmp_path):
+    db = _caps_db(tmp_path / "f.db", ["AAA"])
+
+    class _OkDB:
+        def __init__(self, _path):
+            pass
+
+        def refresh_fx_rates(self):
+            return 3
+
+    def _partial(*_a, **_k):
+        return {"complete": False, "remaining": 12, "run_date": "2026-09-20"}
+
+    assert mw.main(db, cap_refresher=_partial, db_factory=_OkDB) == 0
+    assert _job_run_count(db, mw.JOB_NAME) == 0
+
+    def _done(*_a, **_k):
+        return {"complete": True, "remaining": 0, "run_date": "2026-09-20"}
+
+    assert mw.main(db, cap_refresher=_done, db_factory=_OkDB) == 0
+    assert _job_run_count(db, mw.JOB_NAME) == 1

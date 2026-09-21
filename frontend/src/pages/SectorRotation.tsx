@@ -29,12 +29,12 @@ import {
 } from "../lib/sectorRotation";
 
 import {
-  ROTATION_DIRECTIONS_KEY as KEY,
   ROTATION_WEIGHTS_KEY as WKEY,
   ROTATION_NORMALIZED_KEY as NKEY,
   loadRotationDirections as loadDirections,
   loadRotationNormalized as loadNormalized,
   loadRotationWeights as loadWeights,
+  saveRotationDirections,
 } from "../lib/rotationState";
 
 const READINGS: Reading[] = ["up", "neutral", "down"];
@@ -64,12 +64,26 @@ export function SectorRotation() {
   }, []);
   const econBlocks = useMemo(() => buildEconomicMetricBlocks(econData), [econData]);
 
+  // A Carried Forward reading on any later stage links here as
+  // /app/rotation#<metric id>. The row exists only after the matrix renders,
+  // so the scroll runs once the metric rows are in the document.
   useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(dirs));
-    } catch {
-      // ignore
-    }
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const target = document.getElementById(decodeURIComponent(id));
+    if (!target) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "center",
+    });
+  }, []);
+
+  // One writer for the directions map: the reading picker in a metric dropdown
+  // writes through the same helper, so a reading set on the Economic page and
+  // one set here cannot end up in two different shapes.
+  useEffect(() => {
+    saveRotationDirections(dirs);
   }, [dirs]);
   useEffect(() => {
     try {
@@ -436,7 +450,11 @@ export function SectorRotation() {
                 {rows.map((m) => {
                   const r = dirs[m.id];
                   return (
-                    <tr key={m.id} className="hover:bg-white/[0.015]">
+                    <tr
+                      key={m.id}
+                      id={m.id}
+                      className="hover:bg-white/[0.015] target:bg-gold/[0.06]"
+                    >
                       <th
                         scope="row"
                         className="sticky left-0 z-10 bg-ink-900 text-left px-3 py-1.5 border-b border-r border-white/[0.06] font-normal"

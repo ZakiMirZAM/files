@@ -1,14 +1,17 @@
-// Splits a sector/industry surface definition into its body (Parts 1-8) and the
-// "Part 9: Precise qualitative questions" list, so the sidebar can render the
-// questions as answerable fields instead of inert markdown. Mirrors the economic
-// surface's splitDefinition (lib/economicDefinitions.ts), whose heading regex
-// matches "Ten Precise Qualitative Questions" and stays untouched.
+// Splits a definition into its body (Parts 1-8) and its closing question list,
+// so the sidebar can render the questions as answerable fields instead of inert
+// markdown. Mirrors the economic surface's splitDefinition
+// (lib/economicDefinitions.ts), which stays untouched.
 //
-// The audit of content/sector/4*.md and content/industry/3*.md found exactly one
-// heading spelling across all files. If a future file drifts, widen this regex,
-// never the files.
+// Two headings exist across the four surfaces this serves. The individual,
+// comparative, industry and sector files write "Part 9: Precise qualitative
+// questions"; the economic and credit files write "Ten Precise Qualitative
+// Questions". Both are matched here, because the sidebar opens definitions from
+// any surface. A test walks every definition file and fails on a third spelling,
+// so widen this regex, never the files.
 
-const SURFACE_QUESTIONS_HEADING = /\n#{2,3}\s+Part\s*9:\s*Precise\s+qualitative\s+questions\s*\n/i;
+const SURFACE_QUESTIONS_HEADING =
+  /\n#{2,3}\s+(?:Part\s*9:\s*Precise\s+qualitative\s+questions|Ten\s+Precise\s+Qualitative\s+Questions)\s*\n/i;
 
 export interface SplitSurfaceDefinition {
   /** Parts 1-8, rendered as the sidebar's markdown body. */

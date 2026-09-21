@@ -441,3 +441,123 @@ def test_store_is_atomic_across_the_three_series():
         assert left == 0, "partial AAII write survived; store() is not atomic"
     finally:
         real.close()
+
+
+# ── refresh scheduler: staleness probe + cache invalidation ───────────────────
+
+
+class _ProbeConn:
+    """Stands in for the market_data connection: answers MAX(fetched_at) from a
+    {series_id: timestamp} map, mirroring _newest_macro's single-row query."""
+
+    def __init__(self, fetched: dict[str, str]):
+        self._fetched = fetched
+
+    def execute(self, sql, params=()):
+        newest = max((self._fetched[s] for s in params if s in self._fetched),
+                     default=None)
+
+        class _R:
+            @staticmethod
+            def fetchone():
+                return (newest,)
+
+        return _R()
+
+
+def test_credit_spreads_have_their_own_staleness_probe():
+    """A group that has never been fetched must not hide behind a fresh sibling:
+    MAX(fetched_at) over one combined id list reads fresh and the new series
+    never downloads."""
+    import datetime as dt
+
+    from . import refresh
+
+    fresh = dt.datetime.now().isoformat(timespec="seconds")
+    assert ("BAMLH0A0HYM2",) in refresh._FRED_PROBE_GROUPS
+
+    # Treasuries fetched minutes ago, credit spreads never fetched at all.
+    conn = _ProbeConn({"DGS1": fresh, "DGS10": fresh, "T10YIE": fresh,
+                       "USEPUINDXD": fresh})
+    assert refresh._fred_is_stale(conn) is True
+
+    # Everything fresh, including the credit probe: nothing to do.
+    conn = _ProbeConn({"DGS1": fresh, "DGS10": fresh, "T10YIE": fresh,
+                       "USEPUINDXD": fresh, "BAMLH0A0HYM2": fresh})
+    assert refresh._fred_is_stale(conn) is False
+    assert refresh._fred_is_stale(conn, force=True) is True
+
+
+def test_refresh_invalidates_the_connections_cache_too():
+    """/api/connections caches under the generic "db" prefix, so invalidating
+    "econ" alone left it serving pre-refresh macro figures."""
+    from . import refresh
+
+    assert "econ" in refresh.INVALIDATE_PREFIXES
+    assert "db:connections_endpoint" in refresh.INVALIDATE_PREFIXES
+    # Narrow, not the whole "db" namespace: a macro refresh cannot change a
+    # sector/industry/ranking payload.
+    assert "db" not in refresh.INVALIDATE_PREFIXES
+
+
+# ── implied-ERP history: the stored date is the observation's own date ───────
+
+
+def _erp_conn(monkeypatch, shiller_rows, rf_by_year):
+    """A market-data DB seeded with Shiller rows and DGS10, with the ERP solver
+    stubbed so the test is about the DATE, not the arithmetic."""
+    conn = sqlite3.connect(":memory:")
+    schema.ensure_external_schema(conn)
+    monkeypatch.setattr(mi, "compute_implied_erp",
+                        lambda **kw: (0.045, {"method": "stub"}))
+    monkeypatch.setattr("marketdata.shiller_data.read_stored",
+                        lambda _c: shiller_rows)
+    monkeypatch.setattr("marketdata.fred_client.read_series",
+                        lambda _c, _s: [
+                            type("Obs", (), {"date": f"{y}-12-31", "value": v * 100.0})()
+                            for y, v in rf_by_year.items()])
+    return conn
+
+
+def _shiller(date):
+    return ShillerRow(date=date, sp500=5000.0, dividend=70.0, earnings=200.0,
+                      cpi=None, long_rate=None, real_price=None,
+                      real_dividend=None, real_earnings=None, cape=30.0)
+
+
+def test_implied_erp_history_is_dated_by_its_own_observation(monkeypatch):
+    """Shiller's dividend/earnings columns lag price, so the CURRENT year's last
+    complete row is mid-year. Stamping it December put the latest point months
+    into the future on the economic chart."""
+    rows = [_shiller("2024-11-01"), _shiller("2024-12-01"),
+            _shiller("2025-06-01")]
+    conn = _erp_conn(monkeypatch, rows, {2024: 0.042, 2025: 0.043})
+    try:
+        out = mi.historical_implied_erp_series(conn, since=2024)
+        assert set(out) == {2024, 2025}
+        stored = conn.execute(
+            "SELECT date FROM macro_series WHERE series_id='ERP_IMPLIED' "
+            "ORDER BY date").fetchall()
+        assert [r[0] for r in stored] == ["2024-12-01", "2025-06-01"]
+    finally:
+        conn.close()
+
+
+def test_implied_erp_history_replaces_a_previously_mislabelled_point(monkeypatch):
+    """Re-running after the fix must not leave the old December stamp beside the
+    corrected one; the chart would show the year twice."""
+    rows = [_shiller("2025-06-01")]
+    conn = _erp_conn(monkeypatch, rows, {2025: 0.043})
+    try:
+        conn.execute(
+            "INSERT INTO macro_series (series_id, date, value, source, label,"
+            " unit, fetched_at) VALUES ('ERP_IMPLIED', '2025-12-01', 0.039,"
+            " 'computed', 'old', 'decimal', '2026-01-01')")
+        conn.commit()
+        mi.historical_implied_erp_series(conn, since=2025)
+        stored = conn.execute(
+            "SELECT date FROM macro_series WHERE series_id='ERP_IMPLIED'"
+        ).fetchall()
+        assert [r[0] for r in stored] == ["2025-06-01"]
+    finally:
+        conn.close()

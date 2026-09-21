@@ -1,4 +1,5 @@
 import type { ResidualIncome } from "../../lib/types";
+import { formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { DefinitionLink } from "./DefinitionsBlock";
 
@@ -6,7 +7,7 @@ interface ResidualIncomeSectionProps {
   residualIncome?: ResidualIncome | null;
 }
 
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const ps = (v: number | null | undefined): string => formatPerShare(v);
 const rate = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
 const x = (v: number | null | undefined): string => (v == null ? "n/a" : `${v.toFixed(3)}x`);
 

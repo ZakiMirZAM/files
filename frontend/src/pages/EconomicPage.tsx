@@ -3,6 +3,9 @@ import { fetchEconomicResult, fetchSectorMetrics } from "../lib/api";
 import type { Metric, SectionData, SectorMetricsData } from "../lib/types";
 import { ECON_EXCLUSION_TITLE, ECON_UNDERSTAND_TITLES, ECON_VERDICT_TITLE } from "../lib/questions";
 import { currentRotationRanking } from "../lib/rotationState";
+import type { SectorTotal } from "../lib/sectorRotation";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { NextStagePanel } from "../components/connections/NextStagePanel";
 import { DataStatusBanner } from "../components/DataStatusBanner";
 import { SectionHeader } from "../components/SectionHeader";
 import { MetricDropdown } from "../components/MetricDropdown";
@@ -82,6 +85,8 @@ export function EconomicPage() {
         subtitle="The tide that lifts or sinks every boat. Read the macro environment before touching a single income statement."
         actions={<PageTourButton tourId="economic" />}
       />
+
+      <StageGoalPanel stage="economic" />
 
       <div className="space-y-6">
         {!isLive && <DataStatusBanner />}
@@ -203,6 +208,11 @@ export function EconomicPage() {
           />
         </div>
       </div>
+
+      <NextStagePanel
+        page="economic"
+        sectorOrder={currentRotationRanking()?.map((s: SectorTotal) => ({ sector: s.sector, total: s.total })) ?? undefined}
+      />
       </div>
       <DefinitionPanel />
     </div>

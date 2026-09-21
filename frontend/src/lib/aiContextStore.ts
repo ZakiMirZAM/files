@@ -8,6 +8,14 @@ export interface PageAiContext {
   section?: SectionKey;
   /** Human label of the subject in view, e.g. "NVDA", "the US economy". */
   subject?: string;
+  /**
+   * The subject as the scorecard names its own column: the sector name on a
+   * sector page, the industry name on an industry or comparative page, the
+   * ticker on a company page. A clicked metric LABEL has no column name of its
+   * own, so it saves its Part 9 answers under this, which is exactly the key a
+   * clicked CELL of the page's own column builds.
+   */
+  subjectKey?: string;
   /** Compact summary of the subject's live computed figures (undefined if mock/absent). */
   dataContext?: string;
 }

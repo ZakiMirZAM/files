@@ -3,6 +3,7 @@
 // panel shows them) instead of silently falling back. The server is the rag/
 // folder's server.py on port 3001.
 import type { SectionKey } from "./types";
+import { budgetWaitMessage, canAsk, recordAsk, secondsUntilAllowed } from "./askBudget";
 
 const AI_BASE = (import.meta.env.VITE_AI_BASE as string | undefined) ?? "http://localhost:3001";
 
@@ -240,6 +241,13 @@ export function parseVerification(raw: string | undefined): VerificationReport |
 
 /** Answer a framework question about the subject currently in view (Prompt A, Sonnet). */
 export async function askQuestion(params: AskParams): Promise<AiResult> {
+  // The one place /ask is fired, so the one place the per-minute budget is
+  // kept. A request the server would refuse is never sent; the buttons read
+  // the same record and disable themselves before it gets this far.
+  if (!canAsk()) {
+    throw new Error(budgetWaitMessage(secondsUntilAllowed()));
+  }
+  recordAsk();
   const body = {
     question: params.question,
     context: params.context,
@@ -281,7 +289,16 @@ function withToken(
   return typeof token === "string" && token ? { ...report, token } : report;
 }
 
-/** Explain a highlighted statement, using the subject's data when available (Prompt B, Haiku). */
+/**
+ * Explain a highlighted statement, using the subject's data when available.
+ *
+ * It does NOT record against the ask budget, and that is deliberate: nginx
+ * meters /explain in its own zone at six a minute with a burst of three, while
+ * /ask gets three a minute with a burst of two. Counting an explanation
+ * against the question budget would refuse questions the server would have
+ * answered, and counting a question against the explanation budget would do
+ * the reverse. Each route is limited where it is limited.
+ */
 export async function explainSelection(params: ExplainParams): Promise<AiResult> {
   const body = {
     selection: params.selection,

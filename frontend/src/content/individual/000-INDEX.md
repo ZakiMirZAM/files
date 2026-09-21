@@ -69,7 +69,7 @@ Mark a definition done by changing `[ ]` to `[x]` when its file lands.
 Net Margin is covered by 005 Return On Sales; Asset Turnover by 007. The 036 explainer
 references both by name instead of redefining them.
 
-## Fundamental Trends tiles (043–070; 064–070 spare)
+## Fundamental Trends tiles (043–070; 067–070 spare)
 
 | Done | # | File | Title shown | Batch |
 |---|---|---|---|---|
@@ -94,6 +94,9 @@ references both by name instead of redefining them.
 | [x] | 061 | 061-Price-To-Earnings.md | Price To Earnings | 14 |
 | [x] | 062 | 062-EV-To-EBITDA.md | EV To EBITDA | 14 |
 | [x] | 063 | 063-Price-To-FCF.md | Price To FCF | 15 |
+| [x] | 064 | 064-Price-To-Sales.md | Price To Sales | 41 |
+| [x] | 065 | 065-Price-To-Operating-Cash-Flow.md | Price To Operating Cash Flow | 41 |
+| [x] | 066 | 066-SGA-To-Revenue.md | SG&A To Revenue | 41 |
 
 Tiles already defined elsewhere are not redefined: Operating Margin → 039, ROE → 002,
 Interest Coverage → 011, Net Debt / EBITDA → 014, FCF / Total Debt → 020, P / B → 016,

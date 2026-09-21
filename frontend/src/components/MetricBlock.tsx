@@ -18,12 +18,15 @@ import {
 import type { Metric, RecessionBand, TrendPoint } from "../lib/types";
 import { buildRecessionAreas, visibleRecessions, RecessionLegend } from "./RecessionOverlay";
 import {
+  compactLadder,
   formatCurrency,
   formatNumber,
   formatPercent,
   isMaterialChange,
+  moneySign,
   pctChange,
   toYoYSeries,
+  type CompactTier,
 } from "../lib/format";
 import { cn } from "../lib/cn";
 import { MetricTerm } from "./individual/DefinitionsBlock";
@@ -37,27 +40,51 @@ const LOSS_STROKE = "#c87672";
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** A series the payload delivers in billions of dollars under the unit "$B"
+ *  (bank reserves on the Credit and Banking page). The declared unit type does
+ *  not list it, so it is matched as a string. */
+const BILLIONS_UNIT = "$B";
+const BILLION = 1e9;
+
+/**
+ * One value in this chart's own unit. A "$B" figure is scaled to dollars first,
+ * so 3051.5 reads as $3.05T and not as the bare number 3.1K.
+ */
 function formatValue(v: number, unit: Metric["unit"]): string {
+  if ((unit as string) === BILLIONS_UNIT) return formatCurrency(v * BILLION);
   if (unit === "$") return formatCurrency(v);
   if (unit === "%") return formatPercent(v);
   if (unit === "x") return `${v.toFixed(3)}x`;
   return formatNumber(v);
 }
 
+/** A figure shown against a tick, where the space is a few characters wide.
+ *  Deliberately coarser than the prose ladder: whole billions, not two
+ *  decimals. */
+const AXIS_MONEY_TIERS: readonly CompactTier[] = [
+  { at: 1e12, digits: 1, suffix: "T" },
+  { at: 1e9, digits: 0, suffix: "B" },
+  { at: 1e6, digits: 0, suffix: "M" },
+  { at: 1e3, digits: 0, suffix: "K" },
+];
+
+/** The same for a tick with no currency. It has no trillions step, so a figure
+ *  that large reads as thousands of billions, which is what these axes have
+ *  always shown. */
+const AXIS_PLAIN_TIERS: readonly CompactTier[] = [
+  { at: 1e9, digits: 1, suffix: "B" },
+  { at: 1e6, digits: 0, suffix: "M" },
+  { at: 1e3, digits: 0, suffix: "K" },
+];
+
 function formatAxisValue(v: number, unit: Metric["unit"]): string {
+  if ((unit as string) === BILLIONS_UNIT) return formatAxisValue(v * BILLION, "$");
   if (unit === "$") {
-    if (Math.abs(v) >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-    if (Math.abs(v) >= 1e9) return `$${(v / 1e9).toFixed(0)}B`;
-    if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-    if (Math.abs(v) >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
-    return `$${v.toFixed(0)}`;
+    return compactLadder(v, AXIS_MONEY_TIERS, "$", (x) => `${moneySign(x)}$${Math.abs(x).toFixed(0)}`);
   }
   if (unit === "%") return `${v.toFixed(0)}%`;
   if (unit === "x") return `${v.toFixed(1)}x`;
-  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
-  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(0)}M`;
-  if (Math.abs(v) >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
-  return v.toFixed(0);
+  return compactLadder(v, AXIS_PLAIN_TIERS, "", (x) => x.toFixed(0));
 }
 
 /** Pretty period: "2024" for annual, "Mar 2024" for monthly/quarterly, "Mar 15, 2024" for daily. */

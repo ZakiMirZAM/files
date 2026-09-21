@@ -53,9 +53,68 @@ describe("splitSurfaceDefinition", () => {
     expect(questions).toEqual(["Only one?"]);
   });
 
-  test("does not match the economic surface's heading", () => {
+  test("matches the economic and credit surfaces' heading too", () => {
     const md = "# T\n\nBody.\n\n## Ten Precise Qualitative Questions\n\n1. Economic style.\n";
     const { questions } = splitSurfaceDefinition(md);
-    expect(questions).toHaveLength(0);
+    expect(questions).toEqual(["Economic style."]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Every definition file on disk. A file that carries a questions heading must
+// yield at least one question, so a differently worded heading cannot silently
+// fall back to a plain list of text the reader cannot answer.
+// ---------------------------------------------------------------------------
+
+const FILES = import.meta.glob(
+  [
+    "../content/individual/*.md",
+    "../content/comparative/*.md",
+    "../content/industry/*.md",
+    "../content/sector/*.md",
+    "../content/economic/*.md",
+    "../content/credit/*.md",
+    "!**/000-INDEX.md",
+    "!**/00-INDEX.md",
+  ],
+  { query: "?raw", import: "default", eager: true },
+) as Record<string, string>;
+
+/**
+ * A heading in the family the splitter exists for: the numbered "Part 9" close
+ * of the metric template, and the "Precise ... Questions" close the economic
+ * and credit files use. It is deliberately wider than the splitter's own
+ * regex, so a file that drifts to "Part 9 - Precise Qualitative Questions" or
+ * "Nine Precise Qualitative Questions" fails here instead of silently
+ * rendering as plain text.
+ *
+ * It does not match a prose heading that merely contains the word questions,
+ * such as content/individual/522-Growth-Viability.md's "The five questions
+ * this section asks", which introduces a deck the page builds itself.
+ */
+const LOOKS_LIKE_QUESTIONS = /^#{2,4}\s+(?:Part\s*9\b.*|.*\bPrecise\b.*\bQuestions?\b.*)$/im;
+
+describe("the splitter over every definition file", () => {
+  test("the glob found the definition files", () => {
+    expect(Object.keys(FILES).length).toBeGreaterThan(400);
+  });
+
+  test("every file with a questions heading yields at least one question", () => {
+    const failed: string[] = [];
+    for (const [path, markdown] of Object.entries(FILES)) {
+      const heading = LOOKS_LIKE_QUESTIONS.exec(markdown);
+      if (!heading) continue;
+      const { questions } = splitSurfaceDefinition(markdown);
+      if (questions.length === 0) failed.push(`${path}  ${heading[0].trim()}`);
+    }
+    expect(failed, "these headings are not matched by the splitter").toEqual([]);
+  });
+
+  test("a split never loses the body", () => {
+    for (const [path, markdown] of Object.entries(FILES)) {
+      const { body, questions } = splitSurfaceDefinition(markdown);
+      if (questions.length === 0) continue;
+      expect(body.length, path).toBeGreaterThan(200);
+    }
   });
 });

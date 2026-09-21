@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { BookOpen, ChevronDown, Database } from "lucide-react";
 import type { Metric, RecessionBand, SectionKey } from "../lib/types";
 import { ECON_PANEL_OFFSET, type EconomicMetricDef } from "../lib/economicDefinitions";
@@ -6,8 +6,15 @@ import { openDefinition } from "../lib/definitionPanelStore";
 import { MetricBlock } from "./MetricBlock";
 import { MetricQuestions } from "./MetricQuestions";
 import { ChartSkeleton } from "./Skeletons";
-import { formatCurrency, formatNumber, formatPercent } from "../lib/format";
+import { formatUnitValue } from "../lib/format";
 import { cn } from "../lib/cn";
+
+// The picker pulls in the generated metric-sector dataset, which is large. It
+// is lazy so the Economic page's main bundle carries none of it: nothing is
+// fetched until a reader opens a metric.
+const ReadingPicker = lazy(() =>
+  import("./ReadingPicker").then((m) => ({ default: m.ReadingPicker })),
+);
 
 interface MetricDropdownProps {
   def: EconomicMetricDef;
@@ -25,13 +32,6 @@ interface MetricDropdownProps {
   /** Definition-panel number offset for this surface (economic 600, credit 700).
    *  The Define button opens `panelOffset + def.number`. Defaults to economic. */
   panelOffset?: number;
-}
-
-function formatValue(v: number, unit: Metric["unit"]): string {
-  if (unit === "$") return formatCurrency(v);
-  if (unit === "%") return formatPercent(v);
-  if (unit === "x") return `${v.toFixed(3)}x`;
-  return formatNumber(v);
 }
 
 export function MetricDropdown({
@@ -87,7 +87,7 @@ export function MetricDropdown({
           {hasChart && (
             <span className="hidden sm:block text-right shrink-0">
               <span className="block font-mono text-base text-gold">
-                {formatValue(metric!.latestValue, metric!.unit)}
+                {formatUnitValue(metric!.latestValue, metric!.unit, metric!.name)}
               </span>
             </span>
           )}
@@ -129,6 +129,19 @@ export function MetricDropdown({
               </p>
             </div>
           )}
+
+          {/* Between the chart and the questions: the reader names the reading.
+              `loading` matters: without it an absent metric during the fetch
+              reads as "this metric has no series", and the line says the
+              reading is not determined and then changes under the reader. */}
+          <Suspense fallback={null}>
+            <ReadingPicker
+              surface={section === "credit" ? "credit" : "economic"}
+              defNumber={def.number}
+              metric={metric}
+              loading={isLoading}
+            />
+          </Suspense>
 
           <MetricQuestions metricNumber={def.number} questions={def.questions} dataContext={dataContext} metric={metric} section={section} />
         </div>

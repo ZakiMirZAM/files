@@ -60,6 +60,15 @@ FRED_CATALOG: dict[str, list[tuple[str, str, str]]] = {
     "national_accounts": [
         ("GDP", "Nominal GDP (quarterly level)", "$B"),
     ],
+    # Corporate credit risk premia. The two ICE BofA option-adjusted spreads are
+    # the market's live compensation for default risk over Treasuries, and the
+    # Baa minus 10-Year Treasury series is the long-run investment-grade version
+    # of the same idea.
+    "credit_spreads": [
+        ("BAMLH0A0HYM2", "High-Yield OAS", "%"),
+        ("BAMLC0A0CM", "Investment-Grade OAS", "%"),
+        ("BAA10Y", "Baa minus 10Y Treasury", "%"),
+    ],
 }
 
 

@@ -94,6 +94,17 @@ export const DEFAULT_AUTO_FILL_OPTIONS: AutoFillOptions = {
   annualStaleDays: 950,
 };
 
+/**
+ * How old the newest observation may be before this reader skips the series,
+ * by frequency. One limit, defined once: the reading under the chart and the
+ * matrix must not disagree about whether a series still describes now.
+ */
+export function staleDaysFor(frequency: Frequency): number {
+  return frequency === "annual"
+    ? DEFAULT_AUTO_FILL_OPTIONS.annualStaleDays
+    : DEFAULT_AUTO_FILL_OPTIONS.staleDays;
+}
+
 /** Rows whose ECON_LINK definition charts a different series than the row
  *  means. If the named series is absent (offline mock), the row SKIPS rather
  *  than falling back to a wrong-semantics series. */
@@ -141,12 +152,59 @@ export function sameReadings(a: Record<string, Reading>, b: Record<string, Readi
   return ak.length === Object.keys(b).length && ak.every((k) => a[k] === b[k]);
 }
 
-/** Parse a trend period: "YYYY" (mock annual), "YYYY-MM", or an ISO date. */
+/**
+ * Parse a trend period: "YYYY" (mock annual), "YYYY-MM", or an ISO date.
+ *
+ * Everything here is UTC. It used to build the two coarse forms in the
+ * machine's local time while an ISO date string parses as UTC, so the same
+ * payload bucketed into different months, and the ten-year percentile moved by
+ * a point or two, depending on the reader's time zone. Two readers must not see
+ * different readings of the same series.
+ *
+ * A period that is not a non-empty string is no period at all. `new Date(null)`
+ * is the epoch, and a point silently dated 1970 joined the percentile window.
+ */
 export function parsePeriod(p: string): Date | null {
-  if (/^\d{4}$/.test(p)) return new Date(Number(p), 11, 31);
-  if (/^\d{4}-\d{2}$/.test(p)) return new Date(Number(p.slice(0, 4)), Number(p.slice(5, 7)), 0);
-  const d = new Date(p);
+  if (typeof p !== "string") return null;
+  const s = p.trim();
+  if (s.length === 0) return null;
+  if (/^\d{4}$/.test(s)) return new Date(Date.UTC(Number(s), 11, 31));
+  // Day 0 of the NEXT month index is the last day of the month named.
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    return new Date(Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)), 0));
+  }
+  const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The FIRST instant a period names: "2026" is the first of January, "2026-09"
+ * is the first of September, an ISO date is that day.
+ *
+ * `parsePeriod` deliberately dates a coarse period at its END, which is what
+ * the arithmetic wants, but it makes the CURRENT month look like the future.
+ * A point is in the future only when the period it names has not started.
+ */
+export function periodStart(p: string): Date | null {
+  if (typeof p !== "string") return null;
+  const s = p.trim();
+  if (s.length === 0) return null;
+  if (/^\d{4}$/.test(s)) return new Date(Date.UTC(Number(s), 0, 1));
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    return new Date(Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, 1));
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * True when the period has not begun yet. The implied equity risk premium
+ * arrives with a point stamped for the December still ahead of us; read as the
+ * latest observation it would date today's reading in the future.
+ */
+export function isFuturePeriod(p: string, now: Date): boolean {
+  const start = periodStart(p);
+  return start !== null && start.getTime() > now.getTime();
 }
 
 /** The payload series name a matrix row reads, for callers and tests. Null =
@@ -160,7 +218,8 @@ export function seriesNameForRow(id: string): string | null {
 }
 
 interface Pt {
-  date: Date;
+  /** The period parsed to a UTC timestamp. */
+  time: number;
   value: number;
   period: string;
 }
@@ -171,30 +230,55 @@ function toPts(points: TrendPoint[]): Pt[] {
     if (!Number.isFinite(p.value)) continue;
     const date = parsePeriod(p.period);
     if (!date) continue;
-    out.push({ date, value: p.value, period: p.period });
+    out.push({ time: date.getTime(), value: p.value, period: p.period });
   }
-  return out.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return out.sort((a, b) => a.time - b.time);
 }
 
-/** Last point of each calendar month, mirroring economicSeries#toAnnual. */
-function toMonthly(pts: Pt[]): Pt[] {
-  const byMonth = new Map<string, Pt>();
-  for (const p of pts) byMonth.set(`${p.date.getFullYear()}-${p.date.getMonth()}`, p);
-  return [...byMonth.values()];
+// ── The three date helpers, shared with the reading engine ────────────────
+//
+// readingRules/engine.ts reads the same payload series against the same
+// calendar and has to agree with this classifier on what "six months earlier"
+// means, so it calls these rather than keeping its own copies. They take a
+// numeric `time` so either side's point type satisfies them as it stands.
+
+/** Last point of each calendar month, mirroring economicSeries#toAnnual. UTC. */
+export function toMonthly<T extends { time: number }>(points: readonly T[]): T[] {
+  const byMonth = new Map<string, T>();
+  for (const p of points) {
+    const d = new Date(p.time);
+    byMonth.set(`${d.getUTCFullYear()}-${d.getUTCMonth()}`, p);
+  }
+  return [...byMonth.values()].sort((a, b) => a.time - b.time);
 }
 
-function monthsBefore(d: Date, months: number): number {
-  const nd = new Date(d.getTime());
-  nd.setMonth(nd.getMonth() - months);
-  return nd.getTime();
+/** The same instant `months` earlier, in UTC. Date.UTC rolls a short month
+ *  over exactly as Date#setMonth did, so the arithmetic is unchanged. */
+export function monthsBefore(time: number, months: number): number {
+  const d = new Date(time);
+  return Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth() - months,
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+    d.getUTCSeconds(),
+    d.getUTCMilliseconds(),
+  );
 }
 
-/** Index of the point nearest `target`, or -1 when none lands within `tolMs`. */
-function nearestIndex(pts: Pt[], target: number, tolMs: number): number {
+/** Index of the point nearest `target`, or -1 when none lands within `tolMs`.
+ *  `end` bounds the search, for a caller that may only look backwards. */
+export function nearestIndex(
+  points: readonly { time: number }[],
+  target: number,
+  tolMs: number,
+  end: number = points.length,
+): number {
   let best = -1;
   let bestDist = Infinity;
-  for (let i = 0; i < pts.length; i++) {
-    const dist = Math.abs(pts[i].date.getTime() - target);
+  for (let i = 0; i < end; i++) {
+    const dist = Math.abs(points[i].time - target);
     if (dist < bestDist) {
       best = i;
       bestDist = dist;
@@ -223,16 +307,18 @@ export function classifySeries(
   options?: Partial<AutoFillOptions>,
 ): SeriesClassification | SeriesSkip {
   const opts = { ...DEFAULT_AUTO_FILL_OPTIONS, ...options };
-  const raw = toPts(points);
+  const now = opts.now ?? new Date();
+  // A point stamped for a period that has not started is not an observation of
+  // anything yet, and it must never be taken as the latest one.
+  const raw = toPts(points).filter((p) => !isFuturePeriod(p.period, now));
   if (raw.length === 0) return { skip: "no-series", detail: "empty series" };
 
   const annual = frequency === "annual";
   const pts = frequency === "daily" ? toMonthly(raw) : raw;
   const latest = pts[pts.length - 1];
 
-  const now = opts.now ?? new Date();
   const staleDays = annual ? opts.annualStaleDays : opts.staleDays;
-  if (now.getTime() - latest.date.getTime() > staleDays * MS_PER_DAY) {
+  if (now.getTime() - latest.time > staleDays * MS_PER_DAY) {
     return { skip: "stale-series", detail: `latest point ${latest.period}` };
   }
 
@@ -242,15 +328,15 @@ export function classifySeries(
   // would pass off 3-month changes as 6-month ones and underestimate the band.
   const minSpanMs = 0.75 * lookback * 30.44 * MS_PER_DAY;
 
-  const cutoff = monthsBefore(latest.date, HISTORY_MONTHS);
-  const hist = pts.filter((p) => p.date.getTime() >= cutoff);
+  const cutoff = monthsBefore(latest.time, HISTORY_MONTHS);
+  const hist = pts.filter((p) => p.time >= cutoff);
 
   // Historical same-horizon changes, excluding the latest point's own change
   // so the observation being classified does not feed its own neutral band.
   const changes: number[] = [];
   for (let i = 0; i < hist.length - 1; i++) {
-    const j = nearestIndex(hist, monthsBefore(hist[i].date, lookback), tolMs);
-    if (j >= 0 && hist[i].date.getTime() - hist[j].date.getTime() >= minSpanMs) {
+    const j = nearestIndex(hist, monthsBefore(hist[i].time, lookback), tolMs);
+    if (j >= 0 && hist[i].time - hist[j].time >= minSpanMs) {
       changes.push(hist[i].value - hist[j].value);
     }
   }
@@ -259,8 +345,8 @@ export function classifySeries(
     return { skip: "too-few-points", detail: `${changes.length} comparable changes` };
   }
 
-  const thenIdx = nearestIndex(hist, monthsBefore(latest.date, lookback), tolMs);
-  if (thenIdx < 0 || latest.date.getTime() - hist[thenIdx].date.getTime() < minSpanMs) {
+  const thenIdx = nearestIndex(hist, monthsBefore(latest.time, lookback), tolMs);
+  if (thenIdx < 0 || latest.time - hist[thenIdx].time < minSpanMs) {
     return { skip: "too-few-points", detail: "no point near the lookback date" };
   }
   const change = latest.value - hist[thenIdx].value;
@@ -274,8 +360,8 @@ export function classifySeries(
 
   // Midrank percentile: ties count half, so a flat or coarsely quantized
   // series sits at 0.5 instead of being read as an all-time-high regime.
-  const winStart = monthsBefore(latest.date, PERCENTILE_MONTHS);
-  const win = pts.filter((p) => p.date.getTime() >= winStart);
+  const winStart = monthsBefore(latest.time, PERCENTILE_MONTHS);
+  const win = pts.filter((p) => p.time >= winStart);
   let levelPercentile: number | null = null;
   if (win.length >= PERCENTILE_MIN_POINTS) {
     let less = 0;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { SectorColumn, SectorCellPoint, SectorMetricDef, SectorMetricsData } from "../lib/types";
@@ -6,6 +6,7 @@ import {
   formatSectorValue,
   rowStats,
   cellTint,
+  colNote,
   sortMatrixData,
   cycleMatrixSort,
   type MatrixSort,
@@ -22,6 +23,10 @@ interface CompanyScorecardTableProps {
   getRowHref?: (ticker: string) => string;
   /** Surface-scoped resolver so metric headers open their definitions. */
   resolveDef?: (label: string) => number | undefined;
+  /** Mark one company's row and bring it into view inside the table's own
+   *  scroll box. Used on the company page, where the reader arrived to read
+   *  about that one company and the ranking can run to dozens of rows. */
+  highlightTicker?: string;
 }
 
 
@@ -38,8 +43,19 @@ function cellHistory(col: SectorColumn | undefined, key: string): SectorCellPoin
  * it opens the sidebar on that company's historical trend for that metric (the
  * backend ships a per-(company, metric) history). The metric-label header stays
  * pinned as the user scrolls down the company list.
+ *
+ * Memoised, because the full ranking runs to hundreds of rows against dozens of
+ * metric columns and one render of it measures around a third of a second.
+ * Every caller must hand it stable props, or the memo buys nothing: the row
+ * link builder belongs in a useCallback and the definition resolver at module
+ * scope.
  */
-export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyScorecardTableProps) {
+export const CompanyScorecardTable = memo(function CompanyScorecardTable({
+  data,
+  getRowHref,
+  resolveDef,
+  highlightTicker,
+}: CompanyScorecardTableProps) {
   const stats = useMemo(() => {
     const m: Record<string, RowStats | null> = {};
     for (const met of data.metrics) m[met.key] = rowStats(data, met.key);
@@ -51,6 +67,23 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
   // heatmap, definitions, and the clickable histories are untouched.
   const [sort, setSort] = useState<MatrixSort | null>(null);
   const view = useMemo(() => sortMatrixData(data, sort), [data, sort]);
+
+  const marked = highlightTicker?.toUpperCase();
+
+  // Bring the marked row into the middle of the table's own scroll box, and
+  // only that box: the page itself must not jump under the reader. Re-runs
+  // when the rows are reordered or filtered, so the row stays found.
+  const scrollBox = useRef<HTMLDivElement>(null);
+  const markedRow = useRef<HTMLTableRowElement>(null);
+  const rowOrder = useMemo(() => view.sectors.join("|"), [view.sectors]);
+  useEffect(() => {
+    const box = scrollBox.current;
+    const row = markedRow.current;
+    if (!marked || !box || !row) return;
+    const boxTop = box.getBoundingClientRect().top;
+    const rect = row.getBoundingClientRect();
+    box.scrollTop += rect.top - boxTop - box.clientHeight / 2 + rect.height / 2;
+  }, [marked, rowOrder]);
 
   // Contiguous metric groups → spans for the top header row.
   const groups = useMemo(() => {
@@ -88,7 +121,7 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
 
   return (
     <div className="rounded-md border border-gold/20 bg-ink-800 overflow-hidden">
-      <div className="overflow-auto max-h-[75vh]">
+      <div ref={scrollBox} className="overflow-auto max-h-[75vh]">
         <table className="border-collapse text-sm w-full" style={{ minWidth: 760 }}>
           <caption className="sr-only">
             Per-company fundamentals. {data.universe}.
@@ -171,8 +204,13 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
           <tbody>
             {view.sectors.map((ticker) => {
               const row = data.data[ticker];
+              const isMarked = marked === ticker.toUpperCase();
               return (
-                <tr key={ticker} className="hover:bg-white/[0.015]">
+                <tr
+                  key={ticker}
+                  ref={isMarked ? markedRow : undefined}
+                  className="hover:bg-white/[0.015]"
+                >
                   <th
                     scope="row"
                     className="sticky left-0 z-20 bg-ink-800 text-left px-4 py-2.5 border-b border-r border-white/[0.06] font-normal"
@@ -180,12 +218,24 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                     {getRowHref ? (
                       <Link
                         to={getRowHref(ticker)}
-                        className="text-[0.85rem] font-semibold text-white/85 hover:text-gold transition-colors underline-offset-2 hover:underline"
+                        className={cn(
+                          "text-[0.85rem] transition-colors underline-offset-2 hover:underline",
+                          isMarked
+                            ? "font-bold text-gold"
+                            : "font-semibold text-white/85 hover:text-gold",
+                        )}
                       >
                         {ticker}
                       </Link>
                     ) : (
-                      <span className="text-[0.85rem] font-semibold text-white/85">{ticker}</span>
+                      <span
+                        className={cn(
+                          "text-[0.85rem]",
+                          isMarked ? "font-bold text-gold" : "font-semibold text-white/85",
+                        )}
+                      >
+                        {ticker}
+                      </span>
                     )}
                     <span className="block text-[0.65rem] font-mono text-white/30 mt-0.5">
                       FY {row?.["_year"] ?? ""} · {formatSectorValue(row?.["_marketCap"], "$")}
@@ -195,12 +245,18 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
                     const v = row?.[met.key];
                     const tint = cellTint(v, met.key, stats[met.key]);
                     const hasHistory = (cellHistory(row, met.key)?.length ?? 0) >= 2;
+                    // A payload that explained why this one cell is empty wins
+                    // the hover: it is the only place that reason is readable.
+                    const note = colNote(row, met.key);
                     return (
                       <td
                         key={met.key}
                         role="button"
                         tabIndex={0}
-                        title={hasHistory ? `${ticker} · ${met.label}, click for history` : met.definition}
+                        title={
+                          note ??
+                          (hasHistory ? `${ticker} · ${met.label}, click for history` : met.definition)
+                        }
                         onClick={() => openCell(ticker, met, row)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -232,4 +288,4 @@ export function CompanyScorecardTable({ data, getRowHref, resolveDef }: CompanyS
       </div>
     </div>
   );
-}
+});

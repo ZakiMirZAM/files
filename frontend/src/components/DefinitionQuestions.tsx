@@ -47,8 +47,11 @@ export function DefinitionQuestions({ section, scopeKey, questions, dataContext 
         {questions.map((question, i) => {
           const qid = `q${i + 1}`;
           return (
+            // Keyed by the scope as well as the question, so a field is never
+            // carried over from one subject to the next: its textarea holds
+            // unsaved text that belongs to the subject it was typed under.
             <QuestionField
-              key={qid}
+              key={`${scopeKey}-${qid}`}
               questionId={`${scopeKey}-${qid}`}
               question={`${i + 1}. ${question}`}
               section={section}

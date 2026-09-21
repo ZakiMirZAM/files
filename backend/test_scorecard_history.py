@@ -191,3 +191,56 @@ def test_value_score_history_needs_two_peers(monkeypatch):
 
     # a percentile against nobody is not a score
     assert "valueScore" not in (data["Solo"].get("_history") or {})
+
+
+# ── 4. Market-cap weight bound (upper AND lower) ─────────────────────────────
+#
+# industry_averages' SQL has always bounded the FX-converted weight to
+# (0, MAX_MARKET_CAP_USD); the scorecard matrices bounded only the floor. Seven
+# live rows sit above the ceiling today (BYAN.JK at $480 trillion, BREN.JK at
+# $477 trillion, GMKN.ME at $255 trillion), each thousands of times the largest
+# real company, so one of them decided its whole sector's column.
+
+def test_weight_bound_drops_an_absurd_market_cap():
+    api = _api()
+    assert api._usable_mc_weight(5e14) is False
+    assert api._usable_mc_weight(api.MAX_MARKET_CAP_USD) is False
+
+
+def test_weight_bound_keeps_the_largest_real_company():
+    api = _api()
+    # ~$4 trillion, comfortably the largest listed company, stays a weight.
+    assert api._usable_mc_weight(4e12) is True
+
+
+def test_weight_bound_still_drops_a_missing_or_sub_floor_cap():
+    api = _api()
+    assert api._usable_mc_weight(None) is False
+    assert api._usable_mc_weight(0.0) is False
+    assert api._usable_mc_weight(api._AVG_MC_FLOOR_USD - 1) is False
+    assert api._usable_mc_weight(api._AVG_MC_FLOOR_USD) is True
+
+
+def test_bound_is_the_one_industry_averages_uses():
+    api = _api()
+    import fx_convert
+    import industry_averages
+    assert api.MAX_MARKET_CAP_USD is fx_convert.MAX_MARKET_CAP_USD
+    assert industry_averages.MAX_MARKET_CAP_USD is fx_convert.MAX_MARKET_CAP_USD
+
+
+def test_weighted_column_ignores_an_absurd_cap_that_reaches_the_loop():
+    """The aggregator guards itself, not only its callers.
+
+    Two companies, one honest and one carrying a corrupt $500 trillion cap. The
+    weighted ROIC must be the honest company's, not a blend the corrupt row
+    decides by weight of numbers.
+    """
+    api = _api()
+    comps = [
+        {"roic": 20.0, "_mc": 1e12},
+        {"roic": -90.0, "_mc": 5e14},
+    ]
+    out = api._aggregate_weighted_columns(
+        {"G": comps}, {"G": [2025, 2025]}, {"G": 1e12}, ["roic"], {})
+    assert out["G"]["roic"] == pytest.approx(20.0)

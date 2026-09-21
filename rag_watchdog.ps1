@@ -35,6 +35,11 @@ function Restart-Rag {
     Log "RESTART: killing anything on :3001 and relaunching server.py"
     $conn = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
     if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+    # Tier 1 verification on. Tier 0's per-claim flags never leave the server:
+    # EXPOSE is a local debugging switch, so it is pinned off rather than left to
+    # whatever happens to be in the environment this process inherited.
+    $env:RAG_VERIFY = "on"
+    $env:RAG_VERIFY_EXPOSE = "0"
     Start-Process $PYTHON -ArgumentList "server.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
     # give it time to load the SDK + vault index before we start checking again
     Start-Sleep -Seconds 20

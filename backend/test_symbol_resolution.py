@@ -3,7 +3,7 @@
 These test the PURE lookup function in isolation: no DB, no network, no import of
 ``backend/api.py`` (which pulls pandas/yfinance and takes ~10s at import). The
 function below is a verbatim copy of ``_resolve_symbol_core`` from
-``remediation/phase2_api_patch.md`` (section 1). If that helper changes, update this
+``backend/api.py``. If that helper changes, update this
 copy in lockstep — the search/individual endpoints call the same logic through a
 thin cached wrapper (``_resolve_symbol`` -> ``_symbol_aliases`` -> this core).
 
@@ -16,14 +16,20 @@ import pytest
 
 
 # ── Copy of the pure core from the patch (keep in sync with api.py) ──────────
-def _resolve_symbol_core(symbol: str, alias_map: dict[str, str] | None) -> str:
-    """Uppercase + dot->dash normalize, then fold an alias onto its primary via
-    alias_map. A None map (security_map absent) or a non-alias symbol returns the
-    normalized input unchanged."""
-    normalized = (symbol or "").strip().upper().replace(".", "-")
+def _resolve_symbol_core(
+    symbol: str,
+    alias_map: dict[str, str] | None,
+    known: "set[str] | frozenset[str] | None" = None,
+) -> str:
+    """Uppercase, then dot->dash normalize UNLESS the dotted form is a known DB
+    symbol, then fold an alias onto its primary via alias_map. A None map
+    (security_map absent) or a non-alias symbol returns the normalized input
+    unchanged."""
+    upper = (symbol or "").strip().upper()
+    normalized = upper if (known and upper in known) else upper.replace(".", "-")
     if not alias_map:
         return normalized
-    return alias_map.get(normalized, normalized)
+    return alias_map.get(upper, alias_map.get(normalized, normalized))
 
 
 # ── Fixture: a hand-built alias map mirroring the known DB mislabelings ──────
@@ -119,3 +125,29 @@ def test_whitespace_only_input() -> None:
 )
 def test_resolution_table(symbol: str, expected: str, alias_map: dict[str, str]) -> None:
     assert _resolve_symbol_core(symbol, alias_map) == expected
+
+
+# ── exchange-suffixed listings keep their dot when the DB knows them ─────────
+@pytest.fixture()
+def known() -> frozenset[str]:
+    return frozenset({"LAR0.DE", "005930.KS", "6971.T", "AAPL", "BRK-A", "BRK-B"})
+
+
+def test_known_dotted_listing_is_not_dashed(known: frozenset[str], alias_map: dict[str, str]) -> None:
+    # LAR0.DE exists in the DB with its dot; dashing it produced a symbol that
+    # does not exist and the individual page 404'd.
+    assert _resolve_symbol_core("lar0.de", alias_map, known) == "LAR0.DE"
+    assert _resolve_symbol_core("005930.KS", alias_map, known) == "005930.KS"
+
+
+def test_share_class_still_dashes_and_folds_with_known(known: frozenset[str], alias_map: dict[str, str]) -> None:
+    # BRK.B is NOT stored dotted, so the dash rule still applies, then the fold.
+    assert _resolve_symbol_core("BRK.B", alias_map, known) == "BRK-A"
+
+
+def test_unknown_dotted_symbol_still_dashes_with_known(known: frozenset[str]) -> None:
+    assert _resolve_symbol_core("XYZ.Q", None, known) == "XYZ-Q"
+
+
+def test_none_known_keeps_legacy_behaviour() -> None:
+    assert _resolve_symbol_core("LAR0.DE", None, None) == "LAR0-DE"

@@ -25,6 +25,7 @@ Usage:
 
 import sqlite3
 import os
+import sys
 import time
 import warnings
 import pandas as pd
@@ -33,7 +34,96 @@ import yfinance as yf
 from datetime import datetime, date
 from pathlib import Path
 
+# fx_convert lives beside this module. Importing it by bare name works when
+# ``data/`` is on sys.path (backend/api.py puts it there); the explicit path
+# insert keeps ``python data/financial_db.py`` and direct imports working too.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fx_convert  # noqa: E402
+
 warnings.filterwarnings("ignore")
+
+
+# ---------------------------------------------------------------------------
+# The fx_rates table, and the one write path for a market cap
+# ---------------------------------------------------------------------------
+
+def fx_rates_from(conn: sqlite3.Connection) -> dict[str, float]:
+    """``{currency: usd_per_unit}`` from the ``fx_rates`` table; ``{}`` when the
+    table is absent.
+
+    Module level and connection-taking, so the jobs that hold their own
+    connection (``data/market_cap_refresh.py``,
+    ``remediation/repair_market_cap_currency.py``) read the table the same way
+    ``FinancialDB.get_fx_rates`` does instead of each writing the query again.
+    """
+    try:
+        return {r[0]: r[1] for r in conn.execute(
+            "SELECT currency, usd_per_unit FROM fx_rates")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+#: Pass as ``quote_currency`` when the fetcher reported no currency at all and
+#: the quote is to be taken as ALREADY in the row's own currency. That is the
+#: documented contract of a plain float-returning fetcher injected into
+#: ``data/market_cap_refresh.py``, and it is the only way an unconverted figure
+#: reaches the column through this function.
+ROW_CURRENCY = "__row_currency__"
+
+
+def write_market_cap(
+    conn: sqlite3.Connection,
+    ticker: str,
+    year: int,
+    cap: float | None,
+    quote_currency: object,
+    rates: dict[str, float] | None,
+) -> float | None:
+    """Store one quote as ``financials."Market Cap"`` for ``(ticker, year)``.
+
+    A quote arrives in the LISTING's currency while the row is denominated in
+    the filer's reporting currency. This reads that row's ``"Reported
+    Currency"``, converts through ``fx_convert``, and DECLINES when the pair
+    cannot be resolved: it returns ``None`` and writes nothing, so the stored
+    value is kept rather than replaced by a figure in the wrong unit. The raw
+    quote is what put TSM's USD ADR cap into its TWD row. Returns the amount
+    written, which the resumable sweep records in its progress table.
+
+    This is the one place in the project that emits
+    ``UPDATE financials SET "Market Cap"`` from a quote.
+    ``backend/test_market_cap_write_path.py`` fails on any other site outside
+    the three allowed exceptions, which write a figure that is not a quote:
+    ``remediation/phase3_complete_rows.py`` (shares times a point-in-time
+    price, only into a NULL cell, and only when the listing and the row already
+    agree on the currency), ``remediation/phase7_delisted_repair.py`` (the
+    filer's own EntityPublicFloat, or a NULL when SEC has none) and
+    ``remediation/repair_market_cap_currency.py`` (an audited correction of a
+    value already stored, written beside its own audit row).
+    """
+    if cap is None:
+        return None
+    if quote_currency is ROW_CURRENCY:
+        try:
+            amount: float | None = float(cap)
+        except (TypeError, ValueError):
+            return None
+    else:
+        row = conn.execute(
+            'SELECT "Reported Currency" FROM financials '
+            'WHERE Ticker = ? AND CAST("Calendar Year" AS INTEGER) = ?',
+            (ticker, int(year)),
+        ).fetchone()
+        amount = fx_convert.convert_amount(
+            cap, quote_currency, (row[0] if row is not None else None), rates)
+    if amount is None:
+        return None
+    conn.execute(
+        'UPDATE financials SET "Market Cap" = ? '
+        'WHERE Ticker = ? AND CAST("Calendar Year" AS INTEGER) = ?',
+        (amount, ticker, int(year)),
+    )
+    return amount
+
 
 # ---------------------------------------------------------------------------
 # Column definitions
@@ -337,76 +427,119 @@ def compute_peg_yf(ticker: str) -> float | None:
 # Live price is a spot quote — NOT persisted to the DB (it changes daily). A short
 # in-memory TTL cache keeps the per-page burst (FCFF + RI + DDM + FCFE + legacy DCF
 # all ask for the same ticker's price) down to a single network call.
-_PRICE_CACHE: dict[str, tuple[float, float]] = {}   # ticker -> (price, fetched_at)
+# ticker -> (price, quote currency, fetched_at). The CURRENCY rides along
+# because it comes off the same FastInfo payload and a caller that fetched
+# the price without it had no way to learn what the number is denominated in
+# short of a second network call.
+_PRICE_CACHE: dict[str, tuple[float, str | None, float]] = {}
 _PRICE_TTL_SECONDS = 900  # 15 minutes
 
 # Live market cap is likewise a spot value (price × shares). Same short in-memory
 # TTL cache so the comparative scorecard's bounded set of tickers costs one quote
 # each, and a repeated render inside the window costs zero.
-_MARKETCAP_CACHE: dict[str, tuple[float, float]] = {}  # ticker -> (market_cap, fetched_at)
+_MARKETCAP_CACHE: dict[str, tuple[float, str | None, float]] = {}
 _MARKETCAP_TTL_SECONDS = 900  # 15 minutes
 
 
-def fetch_latest_market_cap_yf(ticker: str) -> float | None:
-    """Most recent market cap for ``ticker`` from yfinance. Tries ``fast_info``
-    first (cheap), then falls back to the heavier ``.info`` payload. Cached
-    in-memory for 15 min. Returns None on any failure so callers fall back to the
-    stored financials.db Market Cap (the prior, filing-date value)."""
+def _fi_attr(fi, *names):
+    """Read an attribute off a yfinance ``FastInfo``. ``fi.get(x)`` silently
+    returns None on this object (see the repo gotchas), and item access raises
+    for an unknown key, so try both and fall back to ``getattr``."""
+    for attr in names:
+        v = None
+        try:
+            v = fi[attr] if hasattr(fi, "__getitem__") else getattr(fi, attr, None)
+        except (KeyError, TypeError):
+            v = getattr(fi, attr, None)
+        if v is not None:
+            return v
+    return None
+
+
+def fetch_latest_market_cap_currency_yf(ticker: str) -> tuple[float | None, str | None]:
+    """``(market cap, quote currency)`` for ``ticker`` from yfinance.
+
+    The cap is denominated in the **quote currency of the listing**, not in the
+    company's reporting currency — TSM's US ADR quotes in USD while TSM reports
+    in TWD. Callers that store it against a ``financials`` row MUST convert it
+    first (``fx_convert.convert_amount``); writing it raw is the bug this
+    function's second return value exists to prevent.
+
+    The currency can come back None (an old yfinance, or a symbol whose payload
+    omits it). A None currency means "unknown", and callers must then decline to
+    write rather than assume the reporting currency.
+
+    Tries ``fast_info`` first (cheap), then the heavier ``.info``. Cached
+    in-memory for 15 min. ``(None, None)`` on any failure, so callers fall back
+    to the stored financials.db Market Cap (the prior, filing-date value)."""
     key = ticker.upper()
     hit = _MARKETCAP_CACHE.get(key)
-    if hit is not None and (time.time() - hit[1]) < _MARKETCAP_TTL_SECONDS:
-        return hit[0]
+    if hit is not None and (time.time() - hit[2]) < _MARKETCAP_TTL_SECONDS:
+        return hit[0], hit[1]
 
     cap: float | None = None
+    ccy: str | None = None
     try:
         fi = yf.Ticker(key).fast_info
-        for attr in ("market_cap", "marketCap"):
-            try:
-                v = fi[attr] if hasattr(fi, "__getitem__") else getattr(fi, attr, None)
-            except (KeyError, TypeError):
-                v = getattr(fi, attr, None)
-            if v is not None and float(v) > 0:
-                cap = float(v)
-                break
+        v = _fi_attr(fi, "market_cap", "marketCap")
+        if v is not None and float(v) > 0:
+            cap = float(v)
+            c = _fi_attr(fi, "currency")
+            ccy = str(c) if c else None
     except Exception:  # noqa: BLE001 — never let a quote fetch break a scorecard
-        cap = None
+        cap, ccy = None, None
 
     if cap is None:
         try:
-            v = yf.Ticker(key).info.get("marketCap")
+            info = yf.Ticker(key).info
+            v = info.get("marketCap")
             if v is not None and float(v) > 0:
                 cap = float(v)
+                c = info.get("currency")
+                ccy = str(c) if c else None
         except Exception:  # noqa: BLE001
-            cap = None
+            cap, ccy = None, None
 
     if cap is not None:
-        _MARKETCAP_CACHE[key] = (cap, time.time())
-    return cap
+        _MARKETCAP_CACHE[key] = (cap, ccy, time.time())
+    return cap, ccy
 
 
-def fetch_latest_price_yf(ticker: str) -> float | None:
-    """Most recent market price for ``ticker`` from yfinance, for the intrinsic-
-    vs-price margin-of-safety comparison. Tries the intraday last price first
-    (``fast_info``), then the latest daily close. Cached in-memory for 15 min.
-    Returns None on any failure so callers fall back to Market Cap / shares."""
+def fetch_latest_price_currency_yf(ticker: str) -> tuple[float | None, str | None]:
+    """``(price, quote currency)`` for ``ticker`` from yfinance.
+
+    The price is denominated in the **quote currency of the listing**, which is
+    not always the currency the filer reports in: TSM's US depositary receipt
+    quotes in USD against TWD statements, and the London Stock Exchange quotes
+    in pence. A caller comparing this price with a per-share value built out of
+    ``financials`` rows MUST reconcile the two first
+    (``backend/price_currency.reconcile_price``); comparing them raw is the bug
+    this function's second return value exists to prevent.
+
+    The currency can come back None (an old yfinance, a symbol whose payload
+    omits it, or the daily-close fallback below, which carries no currency of
+    its own). None means "unknown", and callers must then leave the price
+    alone rather than assume the reporting currency.
+
+    Tries the intraday last price first (``fast_info``), then the latest daily
+    close. Cached in-memory for 15 min. ``(None, None)`` on any failure so
+    callers fall back to Market Cap / shares."""
     key = ticker.upper()
     hit = _PRICE_CACHE.get(key)
-    if hit is not None and (time.time() - hit[1]) < _PRICE_TTL_SECONDS:
-        return hit[0]
+    if hit is not None and (time.time() - hit[2]) < _PRICE_TTL_SECONDS:
+        return hit[0], hit[1]
 
     price: float | None = None
+    ccy: str | None = None
     try:
         fi = yf.Ticker(key).fast_info
-        for attr in ("last_price", "lastPrice"):
-            try:
-                v = fi[attr] if hasattr(fi, "__getitem__") else getattr(fi, attr, None)
-            except (KeyError, TypeError):
-                v = getattr(fi, attr, None)
-            if v is not None and float(v) > 0:
-                price = float(v)
-                break
+        v = _fi_attr(fi, "last_price", "lastPrice")
+        if v is not None and float(v) > 0:
+            price = float(v)
+            c = _fi_attr(fi, "currency")
+            ccy = str(c) if c else None
     except Exception:  # noqa: BLE001 — never let a quote fetch break valuation
-        price = None
+        price, ccy = None, None
 
     if price is None:
         try:
@@ -415,12 +548,15 @@ def fetch_latest_price_yf(ticker: str) -> float | None:
                 v = float(hist["Close"].iloc[-1])
                 if v > 0:
                     price = v
+                    # The history frame states no currency, so the caller is
+                    # told the currency is unknown rather than guessed at.
+                    ccy = None
         except Exception:  # noqa: BLE001
             price = None
 
     if price is not None:
-        _PRICE_CACHE[key] = (price, time.time())
-    return price
+        _PRICE_CACHE[key] = (price, ccy, time.time())
+    return price, ccy
 
 
 # ---------------------------------------------------------------------------
@@ -563,13 +699,19 @@ class FinancialDB:
                 pass
         return peg
 
-    def get_latest_price(self, ticker: str) -> float | None:
-        """Most recent market price from yfinance, for the intrinsic-vs-price
-        margin-of-safety comparison. Unlike beta/PEG this is a spot quote and is
-        NOT persisted (it changes daily); it is cached in-memory for 15 min.
-        Returns None when offline so the valuation falls back to Market Cap /
-        shares (the prior, stale filing-date price)."""
-        return fetch_latest_price_yf(ticker)
+    def get_latest_price_currency(self, ticker: str) -> tuple[float | None, str | None]:
+        """``(price, quote currency)`` from yfinance, for the intrinsic-vs-price
+        margin-of-safety comparison.
+
+        Unlike beta/PEG this is a spot quote and is NOT persisted (it changes
+        daily); it is cached in-memory for 15 min, and comes back ``(None,
+        None)`` when offline so the valuation falls back to Market Cap / shares
+        (the prior, stale filing-date price).
+
+        The currency is not optional. Anything that compares this price with a
+        per-share figure built out of ``financials`` rows needs it: the rows are
+        in the filer's reporting currency and the quote is in the listing's."""
+        return fetch_latest_price_currency_yf(ticker)
 
     def _latest_db_market_cap(self, ticker: str) -> float | None:
         """The most recent non-null stored Market Cap for ``ticker`` — the
@@ -586,14 +728,26 @@ class FinancialDB:
         except Exception:  # noqa: BLE001
             return None
 
-    def get_latest_market_cap(self, ticker: str) -> float | None:
+    def get_latest_market_cap(
+        self, ticker: str, reporting_currency: str | None = None
+    ) -> float | None:
         """Most recent market cap — yfinance FIRST (cached spot value), then the
         stored financials.db Market Cap if yfinance has none. This is the
         up-to-date weight for the bounded comparative scorecard; the DB fallback
-        keeps it working offline and for tickers yfinance cannot price."""
-        cap = fetch_latest_market_cap_yf(ticker)
+        keeps it working offline and for tickers yfinance cannot price.
+
+        Pass ``reporting_currency`` (the row's ``"Reported Currency"``) to get a
+        value denominated like the stored rows. Without it the live cap comes
+        back in the LISTING's quote currency, which is only interchangeable with
+        the stored cap when the two happen to match."""
+        cap, quote_ccy = fetch_latest_market_cap_currency_yf(ticker)
         if cap is not None:
-            return cap
+            if reporting_currency is None:
+                return cap
+            converted = fx_convert.convert_amount(
+                cap, quote_ccy, reporting_currency, self.get_fx_rates())
+            if converted is not None:
+                return converted
         return self._latest_db_market_cap(ticker)
 
     def refresh_market_caps(
@@ -604,14 +758,23 @@ class FinancialDB:
         weight in bulk SQL over the whole universe) read up-to-date caps without a
         per-request network fan-out. A ticker yfinance cannot price keeps its
         existing (filing-date) value — the DB fallback. Intended to be driven by
-        the same scheduled refresh that runs ``update_all``."""
+        the same scheduled refresh that runs ``update_all``.
+
+        The quote is denominated in the LISTING's currency while the row is
+        denominated in the filer's REPORTING currency, so every cap is converted
+        through ``fx_rates`` before it is written. A ticker whose quote currency
+        is unknown, whose row has no usable ``"Reported Currency"``, or whose
+        currency pair has no rate keeps its stored value and is counted in
+        ``unconvertible``."""
         # Three phases, deliberately separated: the yfinance fan-out must NOT run
         # inside a write transaction. Doing so escalates the connection to an
         # EXCLUSIVE lock on the whole database and holds it for one network
         # round-trip per ticker (thousands of them), which locks every API reader
         # out for the entire run ("database is locked" 500s across the site).
 
-        # Phase 1 — short READ transaction: ticker list + latest year per ticker.
+        # Phase 1: a short READ transaction for the ticker list and each ticker's
+        # latest year. The conversion target, that row's reporting currency, is
+        # read by write_market_cap in phase 3.
         conn = self._connect()
         try:
             if tickers is None:
@@ -627,40 +790,50 @@ class FinancialDB:
             }
         finally:
             conn.close()
+        rates = self.get_fx_rates()
 
         # Phase 2 — network fan-out with NO database connection open at all.
         updated = 0
         skipped = 0
-        pending: list[tuple[float, str, int]] = []
+        unconvertible = 0
+        fetched = 0
+        pending: list[tuple[str, int, float, object]] = []
         for tk in tickers:
-            cap = fetch_latest_market_cap_yf(tk)
+            cap, quote_ccy = fetch_latest_market_cap_currency_yf(tk)
             yr = latest_year.get(tk)
             if cap is None or yr is None:
                 skipped += 1
                 continue
-            pending.append((cap, tk, int(yr)))
-            updated += 1
-            if verbose and updated % 100 == 0:
-                print(f"  [market-cap] {updated} fetched…", flush=True)
+            pending.append((tk, int(yr), cap, quote_ccy))
+            fetched += 1
+            if verbose and fetched % 100 == 0:
+                print(f"  [market-cap] {fetched} fetched…", flush=True)
 
-        # Phase 3 — one short WRITE transaction for the whole batch.
+        # Phase 3: one short WRITE transaction for the whole batch. The
+        # conversion lives in write_market_cap, which declines rather than
+        # store a quote in the wrong currency: an unknown quote currency, a
+        # junk or missing Reported Currency, or no rate for the pair leaves
+        # the stored value alone. It is arithmetic, so the transaction is
+        # still short and no network call happens inside it.
         if pending:
             conn = self._connect()
             try:
-                conn.executemany(
-                    'UPDATE financials SET "Market Cap" = ? '
-                    'WHERE Ticker = ? AND CAST("Calendar Year" AS INTEGER) = ?',
-                    pending,
-                )
+                for tk, yr, cap, quote_ccy in pending:
+                    if write_market_cap(conn, tk, yr, cap, quote_ccy, rates) is None:
+                        unconvertible += 1
+                    else:
+                        updated += 1
                 conn.commit()
             finally:
                 conn.close()
         if verbose:
             print(
-                f"  [market-cap] done — {updated} refreshed, {skipped} kept DB value",
+                f"  [market-cap] done — {updated} refreshed, {skipped} kept DB value, "
+                f"{unconvertible} left alone (currency unresolved)",
                 flush=True,
             )
-        return {"updated": updated, "skipped": skipped, "total": len(tickers)}
+        return {"updated": updated, "skipped": skipped,
+                "unconvertible": unconvertible, "total": len(tickers)}
 
     def import_betas_from_csv(self, csv_path: str, verbose: bool = True) -> dict:
         """Import point-in-time betas from a CSV (header ``Ticker,beta``) into the
@@ -777,7 +950,12 @@ class FinancialDB:
                   earnings_yield REAL,
                   n_constituents INTEGER,
                   method TEXT,
-                  computed_at TEXT
+                  computed_at TEXT,
+                  -- The walk can span days, so computed_date is the date it
+                  -- FINISHED and run_date the date it started. market_pe.py
+                  -- matches its progress rows on run_date; it also ALTERs this
+                  -- column in on a file created before the column existed.
+                  run_date TEXT
                 )
             """)
 
@@ -881,11 +1059,7 @@ class FinancialDB:
     def get_fx_rates(self) -> dict[str, float]:
         """{currency: usd_per_unit} for converting local figures to USD."""
         with self._connect() as conn:
-            try:
-                return {r[0]: r[1] for r in conn.execute(
-                    "SELECT currency, usd_per_unit FROM fx_rates")}
-            except sqlite3.OperationalError:
-                return {}
+            return fx_rates_from(conn)
 
     # ------------------------------------------------------------------
     # Excel ingestion
@@ -1553,6 +1727,27 @@ class FinancialDB:
         # matches the annual rows instead of being ~100x larger.
         if result.get("Debt To Equity") is not None:
             result["Debt To Equity"] = result["Debt To Equity"] / 100.0
+
+        # Market Cap and Enterprise Value come off `.info` in the LISTING's quote
+        # currency (`info["currency"]`), while every statement figure above is in
+        # the filer's reporting currency (`info["financialCurrency"]`). Mixing the
+        # two puts a USD cap next to TWD revenue. Convert; drop the value when the
+        # pair cannot be resolved rather than store one in the wrong unit. The
+        # ratios below are computed AFTER this, so they stay self-consistent.
+        quote_ccy = info.get("currency")
+        reporting_ccy = info.get("financialCurrency") or quote_ccy
+        if quote_ccy and reporting_ccy:
+            rates = None
+            for col in ("Market Cap", "Enterprise Value"):
+                if result.get(col) is None:
+                    continue
+                if rates is None:
+                    rates = self.get_fx_rates()
+                result[col] = fx_convert.convert_amount(
+                    result[col], quote_ccy, reporting_ccy, rates)
+        norm_reporting = fx_convert.normalize_currency(reporting_ccy)
+        if norm_reporting is not None:
+            result["Reported Currency"] = norm_reporting[0]
 
         # Derived ratios
         rev = result.get("Revenue")

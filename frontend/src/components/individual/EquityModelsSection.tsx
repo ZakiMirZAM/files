@@ -1,8 +1,10 @@
 import type { DividendDiscount, DividendDiscountRow, FcfeRegulatory } from "../../lib/types";
+import { formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Coins, Banknote } from "lucide-react";
 import { DefinitionLink } from "./DefinitionsBlock";
 import { StageToggle, useActiveVariant } from "./StageToggle";
+import { NotApplicable } from "../NotApplicable";
 
 interface EquityModelsSectionProps {
   dividendDiscount?: DividendDiscount | null;
@@ -10,7 +12,7 @@ interface EquityModelsSectionProps {
   ticker?: string;
 }
 
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const ps = (v: number | null | undefined): string => formatPerShare(v);
 const rate = (v: number | null | undefined, d = 3): string =>
   v == null ? "n/a" : `${(v * 100).toFixed(d)}%`;
 
@@ -71,7 +73,7 @@ function DdmCard({ ddm, ticker }: { ddm?: DividendDiscount | null; ticker: strin
         <Banknote className="w-4 h-4" /> Method 2 · Dividend Discount
       </p>
       {!ddm.applicable ? (
-        <p className="text-sm text-white/55">{ddm.reason ?? "Not applicable."}</p>
+        <NotApplicable reason={ddm.reason} fallback="Not applicable." />
       ) : (
         <>
           {variants && recommendedStages != null && (
@@ -152,7 +154,7 @@ function FcfeCard({ fcfe }: { fcfe?: FcfeRegulatory | null }) {
         <Coins className="w-4 h-4" /> Method 3 · FCFE (regulatory capital)
       </p>
       {!fcfe.applicable ? (
-        <p className="text-sm text-white/55">{fcfe.reason ?? "Not applicable."}</p>
+        <NotApplicable reason={fcfe.reason} fallback="Not applicable." />
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">

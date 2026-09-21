@@ -1,5 +1,5 @@
 import type { ForecastRow, IndividualForecast, WaccBuild } from "../../lib/types";
-import { formatCurrency, formatNumber } from "../../lib/format";
+import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
@@ -11,7 +11,7 @@ interface ForecastSectionProps {
 }
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
-const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const perShare = (v: number | null | undefined): string => formatPerShare(v);
 const rate = (v: number | null | undefined, digits = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(digits)}%`);
 
 /** Heat tint for a sensitivity cell relative to today's price (or intrinsic). */
@@ -84,7 +84,12 @@ export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionPro
         marginOfSafety: f.marginOfSafety,
       };
   const ref = f.currentPrice ?? f.intrinsicPerShare;
-  const mos = view.marginOfSafety;
+  // Why there is no price to compare against, when that is the case: the quote
+  // is a depositary receipt's, in a currency the statements are not in, and the
+  // number of ordinary shares per receipt is not on file.
+  const priceRefusal =
+    f.priceComparison?.applicable === false ? f.priceComparison.reason : null;
+  const mos = priceRefusal ? null : view.marginOfSafety;
   const mosColor =
     mos == null ? "text-white/50" :
     mos >= 0.25 ? "text-gain-strong" :
@@ -175,13 +180,21 @@ export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionPro
                 <span className="font-display text-2xl font-semibold text-gold">{perShare(view.intrinsicPerShare)}</span>
               </div>
             </div>
-            <BridgeRow label="Current price" value={perShare(f.currentPrice)} />
+            <BridgeRow
+              label="Current price"
+              value={priceRefusal ? "not applicable" : perShare(f.currentPrice)}
+            />
             <div className="flex items-baseline justify-between">
               <span className="text-white/55 text-xs"><MetricTerm metric="Margin of safety" asSpan /></span>
               <span className={cn("font-mono text-base", mosColor)}>
-                {mos == null ? "n/a" : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(3)}%`}
+                {mos == null
+                  ? (priceRefusal ? "not applicable" : "n/a")
+                  : `${mos >= 0 ? "+" : ""}${(mos * 100).toFixed(3)}%`}
               </span>
             </div>
+            {priceRefusal && (
+              <p className="text-xs text-white/55 leading-snug pt-1">{priceRefusal}</p>
+            )}
             <div className="pt-1 mt-3 space-y-2">
               <BridgeRow label="EV/EBITDA exit cross-check / share" value={perShare(f.evEbitdaCrossCheckPerShare)} />
               <BridgeRow label="P/FCF exit cross-check / share" value={perShare(f.exitCrossCheckPerShare)} />

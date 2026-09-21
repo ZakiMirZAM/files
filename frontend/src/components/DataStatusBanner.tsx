@@ -30,15 +30,19 @@ export function DataStatusBanner() {
 interface PanelLoadErrorProps {
   /** What failed to load, lowercase (e.g. "sector scorecard"). */
   what: string;
+  /** The sentence to show instead of the default one. Used where the caller
+   *  knows something more useful than "it did not load", above all the shared
+   *  rate-limit sentence from lib/useResource.ts. */
+  message?: string;
   onRetry: () => void;
 }
 
-export function PanelLoadError({ what, onRetry }: PanelLoadErrorProps) {
+export function PanelLoadError({ what, message, onRetry }: PanelLoadErrorProps) {
   return (
     <div className="panel p-4 border-loss/30 flex items-center justify-between gap-3 flex-wrap">
       <p className="text-sm text-loss-strong inline-flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-        Couldn't load the {what}.
+        {message ?? `Couldn't load the ${what}.`}
       </p>
       <button
         type="button"

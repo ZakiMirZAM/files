@@ -1,4 +1,11 @@
-import type { IndividualBenchmarks, IndustryEntry, SectionData, SectorEtfData, SectorMetricsData, StrategicGroups } from "./types";
+import type { IndividualBenchmarks, IndustryEntry, SectionData, SectorEtfData, SectorMetricsData } from "./types";
+import {
+  EndpointError,
+  getJson,
+  loadResource,
+  messageFor,
+  SLOW_ROUTE_TIMEOUT_MS,
+} from "./useResource";
 import {
   ECONOMIC_DATA,
   INDUSTRIES,
@@ -26,12 +33,18 @@ export interface TickerHit {
   industry: string | null;
 }
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T | null> {
+/** The wait for a quick route: a quote, a ticker search, the FX table. */
+const QUICK_TIMEOUT_MS = 30_000;
+
+async function fetchJson<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = QUICK_TIMEOUT_MS,
+): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: { Accept: "application/json" },
-      // First /api/economic call hits FRED ~12s; allow 30s before falling back.
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
       ...init,
     });
     if (!res.ok) {
@@ -75,8 +88,10 @@ export interface SectionResult {
   isLive: boolean;
 }
 
+/** Every section endpoint is one of the routes that is slow from a cold cache,
+ *  so it waits the full ninety seconds before the mock fallback is shown. */
 async function fetchSection(path: string, mock: () => SectionData): Promise<SectionResult> {
-  const live = await fetchJson<SectionData>(path);
+  const live = await fetchJson<SectionData>(path, undefined, SLOW_ROUTE_TIMEOUT_MS);
   return live ? { data: live, isLive: true } : { data: mock(), isLive: false };
 }
 
@@ -107,6 +122,33 @@ export async function fetchCreditBanksResult(): Promise<SectionResult> {
   return fetchSection("/api/credit-banks", () => CREDIT_BANKS_MOCK);
 }
 
+/**
+ * The two macro payloads WITHOUT the mock fallback, for the stage lens.
+ *
+ * Every other caller may fall back to simulated figures behind the banner. The
+ * lens may not: it shows the owner's classification of a sector under a reading
+ * the reader picked, and judging that against invented numbers would be worse
+ * than showing nothing. A failure here throws, so useResource renders its
+ * load-error with a retry.
+ */
+export async function fetchEconomicStrict(signal?: AbortSignal): Promise<SectionData> {
+  return getJson<SectionData>(
+    `${API_BASE}/api/economic`,
+    "economic figures",
+    signal,
+    SLOW_ROUTE_TIMEOUT_MS,
+  );
+}
+
+export async function fetchCreditBanksStrict(signal?: AbortSignal): Promise<SectionData> {
+  return getJson<SectionData>(
+    `${API_BASE}/api/credit-banks`,
+    "credit figures",
+    signal,
+    SLOW_ROUTE_TIMEOUT_MS,
+  );
+}
+
 export async function fetchIndustries(): Promise<IndustryEntry[]> {
   const live = await fetchJson<IndustryEntry[]>("/api/industries");
   return live ?? INDUSTRIES;
@@ -119,27 +161,64 @@ export async function fetchSectors(): Promise<IndustryEntry[]> {
 
 /** Discriminated result for the scorecard/ranking panels: "empty" means the
  *  backend answered but has nothing for this scope (404), "error" means the
- *  request itself failed, so panels can offer a retry instead of vanishing. */
+ *  request itself failed, so panels can offer a retry instead of vanishing.
+ *  An error carries the sentence a reader should see, which for HTTP 429 is
+ *  the shared rate-limit one rather than a raw status. */
 export type MetricsResult =
   | { status: "ok"; data: SectorMetricsData }
   | { status: "empty" }
-  | { status: "error" };
+  | { status: "error"; message: string; rateLimited: boolean };
 
-async function fetchMetrics(path: string): Promise<MetricsResult> {
+/** The matrix endpoints (/api/sector-metrics, the sector and industry
+ *  scorecards, the comparative routes) are all slow from a cold cache. */
+async function fetchMetrics(path: string, what = "figures"): Promise<MetricsResult> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(SLOW_ROUTE_TIMEOUT_MS),
     });
     if (res.status === 404) return { status: "empty" };
     if (!res.ok) {
       console.warn(`[api] ${path} returned ${res.status}`);
-      return { status: "error" };
+      const { message, rateLimited } = messageFor(
+        new EndpointError(`The ${what} did not load (server said ${res.status}).`, res.status),
+        what,
+      );
+      return { status: "error", message, rateLimited };
     }
     return { status: "ok", data: (await res.json()) as SectorMetricsData };
   } catch (err) {
     console.warn(`[api] ${path} failed:`, err);
-    return { status: "error" };
+    const { message, rateLimited } = messageFor(err, what);
+    return { status: "error", message, rateLimited };
+  }
+}
+
+/**
+ * The same, through the shared cache under `key`.
+ *
+ * For the routes the cross-stage AI block also gathers: asking under the key
+ * that block uses makes the page view and the gather one request between them,
+ * rather than two against one per-IP limit.
+ */
+async function fetchMetricsShared(
+  path: string,
+  what: string,
+  key: string,
+): Promise<MetricsResult> {
+  try {
+    const data = await loadResource<SectorMetricsData>(
+      key,
+      (signal) => getJson<SectorMetricsData>(`${API_BASE}${path}`, what, signal),
+      undefined,
+      SLOW_ROUTE_TIMEOUT_MS,
+    );
+    return { status: "ok", data };
+  } catch (err) {
+    if (err instanceof EndpointError && err.status === 404) return { status: "empty" };
+    console.warn(`[api] ${path} failed:`, err);
+    const { message, rateLimited } = messageFor(err, what);
+    return { status: "error", message, rateLimited };
   }
 }
 
@@ -173,19 +252,16 @@ export async function fetchComparativeCompanyMetrics(
   return fetchMetrics(`/api/comparative/${enc}/company-metrics${qs}`);
 }
 
-/** The Per-Ticker Value Ranking, shaped like the scorecard (SectorMetricsData)
- *  plus leading Rank/Score/MoS/DCF columns. `developed` restricts to a developed-
- *  markets currency allowlist; `minMcap` (in $B) drops companies below the floor. */
-export async function fetchComparativeRanking(
-  industry: string,
-  opts?: { developed?: boolean; minMcap?: number | null },
-): Promise<MetricsResult> {
-  const enc = encodeURIComponent(industry);
-  const params = new URLSearchParams();
-  if (opts?.developed) params.set("developed", "true");
-  if (opts?.minMcap != null && opts.minMcap > 0) params.set("min_mcap", String(opts.minMcap));
-  const qs = params.toString();
-  return fetchMetrics(`/api/comparative/${enc}/ranking${qs ? `?${qs}` : ""}`);
+/** The Per-Ticker Value Ranking has no fetcher here: PeerRankingTable is the one
+ *  component that loads it, through the shared cache in lib/useResource.ts under
+ *  the key lib/peerRanking.ts builds, so the two pages showing it cannot fetch
+ *  it twice. */
+
+/** The shared-cache key one industry's scorecard is loaded under. Called by
+ *  `lib/stageContext/sources.ts` KEYS.industryScorecard, for the same reason
+ *  `individualCacheKey` is. */
+export function industryScorecardCacheKey(industry: string): string {
+  return `industry-scorecard|${industry}`;
 }
 
 /** One industry as a single aggregate column, using the exact scorecard metric
@@ -193,7 +269,11 @@ export async function fetchComparativeRanking(
  *  detail page via SectorMetricsPanel. */
 export async function fetchIndustryScorecard(industry: string): Promise<MetricsResult> {
   const enc = encodeURIComponent(industry);
-  return fetchMetrics(`/api/industry/${enc}/scorecard`);
+  return fetchMetricsShared(
+    `/api/industry/${enc}/scorecard`,
+    "industry scorecard",
+    industryScorecardCacheKey(industry),
+  );
 }
 
 export async function fetchIndustry(industry: string): Promise<SectionResult> {
@@ -201,17 +281,6 @@ export async function fetchIndustry(industry: string): Promise<SectionResult> {
   return fetchSection(`/api/industry/${enc}`, () => makeIndustryData(industry));
 }
 
-/** Porter strategic-group map for an industry (peer-median quadrants + badges).
- *  Returns null when the API is down or the industry lacks enough peers. */
-export async function fetchStrategicGroups(
-  industry: string,
-  limit = 20,
-): Promise<StrategicGroups | null> {
-  const enc = encodeURIComponent(industry);
-  return await fetchJson<StrategicGroups>(
-    `/api/industry/${enc}/strategic-groups?limit=${limit}`,
-  );
-}
 
 export async function fetchSector(sector: string): Promise<SectionResult> {
   const enc = encodeURIComponent(sector);
@@ -233,7 +302,35 @@ export async function fetchComparative(industry: string): Promise<SectionResult>
 export type IndividualResult =
   | { status: "ok"; data: SectionData }
   | { status: "not_found"; ticker: string }
+  /** The server asked us to slow down. Deliberately NOT api_down: simulated
+   *  figures in place of a rate limit tell the reader the wrong thing. */
+  | { status: "rate_limited"; message: string }
   | { status: "api_down"; mock: SectionData };
+
+/**
+ * The shared-cache key this company's analysis is loaded under.
+ *
+ * `lib/stageContext/sources.ts` KEYS.individual calls this rather than spelling
+ * the key again, because the page fetch and the AI gather are only one request
+ * between them while both ask under the same key.
+ */
+export function individualCacheKey(ticker: string): string {
+  return `individual|${ticker.toUpperCase()}`;
+}
+
+/** The shared-cache key one company's strategic group is loaded under. Both
+ *  `components/PeerRankingTable.tsx` and `lib/stageContext/sources.ts`
+ *  KEYS.rivals call this, so the table and the AI gather are one request. */
+export function rivalsCacheKey(ticker: string): string {
+  return `individual-rivals|${ticker}`;
+}
+
+/** The shared-cache key one connections query is loaded under. Both
+ *  `components/PeerRankingTable.tsx` and `lib/stageContext/sources.ts`
+ *  KEYS.connections call this, for the same reason. */
+export function connectionsCacheKey(params: ConnectionsParams): string {
+  return `connections|${connectionsQuery(params)}`;
+}
 
 /** Industry + sector averages for one company's metrics, for the definition
  *  sidebar's comparison block. Null when the backend is offline (the sidebar
@@ -244,26 +341,37 @@ export async function fetchIndividualBenchmarks(ticker: string): Promise<Individ
   );
 }
 
+/**
+ * One company's analysis.
+ *
+ * Routed through the shared cache so the page view and the cross-stage AI
+ * gather, which asks for the same document under the same key, cost one call
+ * between them. Reading a handful of companies inside a minute used to spend
+ * two calls each against the route's per-IP limit, and the 429 that followed
+ * reached the reader as the simulated-data banner.
+ */
 export async function fetchIndividual(ticker: string): Promise<IndividualResult> {
   const t = ticker.toUpperCase();
   const enc = encodeURIComponent(t);
+  const what = `${t} company analysis`;
   try {
-    const res = await fetch(`${API_BASE}/api/individual/${enc}`, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(30000),
-    });
-    if (res.status === 404) {
-      // Backend reachable, but ticker isn't in financials.db
-      return { status: "not_found", ticker: t };
-    }
-    if (!res.ok) {
-      console.warn(`[api] /api/individual/${t} returned ${res.status}, using mock`);
-      return { status: "api_down", mock: makeIndividualData(t) };
-    }
-    const data = (await res.json()) as SectionData;
+    const data = await loadResource<SectionData>(
+      individualCacheKey(t),
+      (signal) => getJson<SectionData>(`${API_BASE}/api/individual/${enc}`, what, signal),
+      undefined,
+      SLOW_ROUTE_TIMEOUT_MS,
+    );
     return { status: "ok", data };
   } catch (err) {
-    console.warn(`[api] /api/individual/${t} fetch failed, using mock`, err);
+    // Backend reachable, but the ticker isn't in financials.db.
+    if (err instanceof EndpointError && err.status === 404) {
+      return { status: "not_found", ticker: t };
+    }
+    if (err instanceof EndpointError && err.status === 429) {
+      console.warn(`[api] /api/individual/${t} was rate limited`);
+      return { status: "rate_limited", message: messageFor(err, what).message };
+    }
+    console.warn(`[api] /api/individual/${t} failed, using mock`, err);
     return { status: "api_down", mock: makeIndividualData(t) };
   }
 }
@@ -365,4 +473,21 @@ export async function triggerDailyUpdate(tickers: string[] = []): Promise<{ stat
 
 export async function getDailyUpdateState(): Promise<DailyUpdateState | null> {
   return await fetchJson<DailyUpdateState>("/api/daily-update");
+}
+
+export interface ConnectionsParams {
+  sector?: string;
+  industry?: string;
+  ticker?: string;
+  /** "economy" asks for just the economy and credit blocks. */
+  scope?: string;
+}
+
+export function connectionsQuery(params: ConnectionsParams): string {
+  const qs = new URLSearchParams();
+  if (params.scope) qs.set("scope", params.scope);
+  if (params.sector) qs.set("sector", params.sector);
+  if (params.industry) qs.set("industry", params.industry);
+  if (params.ticker) qs.set("ticker", params.ticker);
+  return qs.toString();
 }

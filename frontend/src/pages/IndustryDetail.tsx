@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   fetchComparative,
   fetchComparativeCompanyMetrics,
-  fetchComparativeRanking,
   fetchIndustry,
   fetchIndustryScorecard,
-  fetchStrategicGroups,
   type MetricsResult,
 } from "../lib/api";
-import type { SectionData, SectionKey, SectorMetricsData, StrategicGroups } from "../lib/types";
+import type { SectionData, SectionKey, SectorMetricsData } from "../lib/types";
 import { DataStatusBanner, PanelLoadError } from "../components/DataStatusBanner";
 import { SectionHeader } from "../components/SectionHeader";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
@@ -22,21 +20,45 @@ import { PrinciplesBlock } from "../components/PrinciplesBlock";
 import { GroupScorePanel } from "../components/GroupScorePanel";
 import { SectorMetricsPanel } from "../components/SectorMetricsPanel";
 import { LifecyclePanel } from "../components/industry/LifecyclePanel";
-import {
-  StrategicGroupsSection,
-  STRATEGIC_GROUPS_DECK_TITLE,
-} from "../components/industry/StrategicGroupsSection";
 import { CompanyScorecardTable } from "../components/CompanyScorecardTable";
-import { ScorecardSkeleton, MatrixSkeleton } from "../components/Skeletons";
+import { PeerRankingTable } from "../components/PeerRankingTable";
+import { ScorecardSkeleton, MatrixSkeleton, PanelSkeleton } from "../components/Skeletons";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { resolveComparativeDef, resolveIndustryDef } from "../lib/surfaceDefinitions";
 import { buildSurfaceSeriesIndex } from "../lib/surfaceSeries";
 import { withRoicWaccSpread } from "../lib/sectorMetrics";
-import { cn } from "../lib/cn";
 import { ChevronLeft, ArrowRight, Loader2 } from "lucide-react";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { NextStagePanel } from "../components/connections/NextStagePanel";
+import { PEER_RANKING } from "../lib/connectionsCopy";
+import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
+import { useIndustryStructure } from "../lib/industryStructureApi";
+import { FIVE_FORCES_TITLE, BARRIER_GRID_TITLE } from "../lib/industryForcesCopy";
+import { useGroupMap, useValueSystem } from "../lib/groupMapApi";
+
+// Only industry mode renders these, and they pull in a second recharts surface,
+// so they leave the main bundle and arrive when the page asks for them.
+const IndustryStructureSections = lazy(() =>
+  import("../components/industry/IndustryStructureSections").then((m) => ({
+    default: m.IndustryStructureSections,
+  })),
+);
 
 interface IndustryDetailProps {
   mode: "industry" | "comparative";
+}
+
+/**
+ * A company's own name out of a scorecard-shaped payload, when it carries one.
+ *
+ * The comparative matrix ships tickers only, so this returns undefined there
+ * and the hand-on list prints the bare ticker rather than "NVDA (NVDA)". It
+ * reads the smuggled field the same way the table reads `_history`, so the day
+ * the payload gains a name the list picks it up with no further change.
+ */
+function companyName(data: SectorMetricsData | null, ticker: string): string | undefined {
+  const raw = (data?.data?.[ticker] as unknown as { _name?: unknown } | undefined)?._name;
+  return typeof raw === "string" && raw.trim() !== "" && raw !== ticker ? raw : undefined;
 }
 
 // Company scorecard paging, backend caps at 20 companies per request.
@@ -44,8 +66,22 @@ const SCORECARD_INITIAL = 8;
 const SCORECARD_STEP = 8;
 const SCORECARD_MAX = 20;
 
+// The scorecard's heading, over whichever of its three states is showing:
+// loading, failed, or the table itself.
+const COMPANY_SCORECARD_HEADING = (
+  <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
+    <span className="text-gold font-mono text-sm">Company Scorecard</span>
+    <span className="flex-1 h-px bg-gold/15" />
+  </h2>
+);
+
+/** The company page each scorecard row links to. Hoisted so the memoised table
+ *  is handed the same function on every render. */
+const rowHref = (ticker: string) => `/app/individual/${encodeURIComponent(ticker)}`;
+
 export function IndustryDetail({ mode }: IndustryDetailProps) {
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const industry = decodeURIComponent(params.industry ?? "");
   const [data, setData] = useState<SectionData | null>(null);
   const [isLive, setIsLive] = useState(true);
@@ -58,17 +94,45 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
   const [limit, setLimit] = useState(SCORECARD_INITIAL);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Per-ticker value ranking + its filters (ranking only).
-  const [ranking, setRanking] = useState<MetricsResult | null>(null);
-  const [rankingRetry, setRankingRetry] = useState(0);
-  const [developed, setDeveloped] = useState(false);
-  const [minMcapInput, setMinMcapInput] = useState("");
-  const [minMcap, setMinMcap] = useState<number | null>(null);
-
   // Route mode → section key. Must be declared before the effects below that
   // read it, one lists `section` in its dependency array, which React evaluates
   // during render, so a later `const` would hit the temporal dead zone.
   const section: SectionKey = mode === "industry" ? "industry" : "comparative";
+
+  // Industry structure data (five forces, barrier grid, key players).
+  const {
+    data: structureData,
+    state: structureState,
+    retry: retryStructure,
+  } = useIndustryStructure(mode === "industry" ? industry : undefined);
+
+  // Group map: the reader's chosen axes. Page state, not URL state: the axes
+  // are reset when the industry changes and are not deep-linkable.
+  const [gmX, setGmX] = useState<string | undefined>();
+  const [gmY, setGmY] = useState<string | undefined>();
+  const groupMap = useGroupMap(mode === "industry" ? industry : undefined, gmX, gmY);
+  const groupMapData = groupMap.data;
+  const handleAxisChange = (x: string, y: string) => {
+    setGmX(x);
+    setGmY(y);
+  };
+
+  // Value system: supplier and buyer are user picks.
+  const [vsSupplier, setVsSupplier] = useState("");
+  const [vsBuyer, setVsBuyer] = useState("");
+  const valueSystem = useValueSystem(
+    mode === "industry" ? industry : undefined,
+    vsSupplier || undefined,
+    vsBuyer || undefined,
+  );
+
+  // Reset picks when the industry changes.
+  useEffect(() => {
+    setVsSupplier("");
+    setVsBuyer("");
+    setGmX(undefined);
+    setGmY(undefined);
+  }, [industry]);
 
   useEffect(() => {
     setData(null);
@@ -85,15 +149,44 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
     };
   }, [industry, mode]);
 
+  // One context per render, rather than the same string rebuilt at six call
+  // sites. It follows the route mode, and every industry-only consumer of it
+  // below is reached only when that mode IS industry, so one string serves
+  // both surfaces.
+  const sectionCtx = useMemo(
+    () => buildDataContext(section, data, isLiveData(data)),
+    [section, data],
+  );
+
+  // The company the reader arrived from. Only honoured when that company is
+  // actually drawn on the map, so a stale or hand-typed ticker highlights
+  // nothing rather than pointing at a company that is not there.
+  const requestedTicker = (searchParams.get("ticker") ?? "").trim().toUpperCase();
+  const highlightTicker = useMemo(() => {
+    if (!requestedTicker) return undefined;
+    return groupMapData?.firms.some((firm) => firm.ticker === requestedTicker)
+      ? requestedTicker
+      : undefined;
+  }, [requestedTicker, groupMapData]);
+
+  // Build a short context string from the structure data (key players + concentration).
+  const structureContext = useMemo(() => {
+    if (!structureData) return "";
+    const c = structureData.concentration;
+    const names = c.top10.slice(0, 10).map((t) => `${t.name} (${t.ticker})`).join(", ");
+    return `KEY PLAYERS: ${names}. ${c.firmCount} listed companies. The four largest companies' share of revenue (CR4) is ${(c.cr4.value * 100).toFixed(1)} percent. The Herfindahl-Hirschman Index (HHI) is ${c.hhi.value.toFixed(0)} points.`;
+  }, [structureData]);
+
   // Publish this industry/comparison's live figures for the AI question + highlight buttons.
   useEffect(() => {
     setPageAiContext({
       section,
       subject: industry,
-      dataContext: buildDataContext(section, data, isLiveData(data)),
+      subjectKey: industry,
+      dataContext: [sectionCtx, structureContext].filter(Boolean).join("\n\n"),
     });
     return () => clearPageAiContext();
-  }, [section, industry, data]);
+  }, [section, industry, sectionCtx, structureContext]);
 
   // Reset paging whenever the industry changes.
   useEffect(() => {
@@ -114,33 +207,6 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
     };
   }, [industry, mode, industryScorecardRetry]);
 
-  // Industry view: Porter strategic-group map over the industry's largest names.
-  // The count is user-controlled: the quadrant medians are computed over whichever
-  // peers are on the map, so remapping the industry at a different width is part of
-  // the analysis rather than a display preference.
-  const [strategicGroups, setStrategicGroups] = useState<StrategicGroups | null>(null);
-  const [sgLimit, setSgLimit] = useState(20);
-  const [sgLoading, setSgLoading] = useState(false);
-  useEffect(() => {
-    if (mode !== "industry") return;
-    let active = true;
-    setSgLoading(true);
-    fetchStrategicGroups(industry, sgLimit).then((d) => {
-      if (!active) return;
-      setStrategicGroups(d);
-      setSgLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [industry, mode, sgLimit]);
-
-  // Reset the width when the industry changes, so a wide map does not carry over.
-  useEffect(() => {
-    setSgLimit(20);
-    setStrategicGroups(null);
-  }, [industry]);
-
   useEffect(() => {
     if (mode !== "comparative") return;
     let active = true;
@@ -157,30 +223,6 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
     };
   }, [industry, mode, limit, companyMetricsRetry]);
 
-  // Debounce the min-market-cap input so typing doesn't spam the ranking endpoint.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const n = parseFloat(minMcapInput);
-      setMinMcap(Number.isFinite(n) && n > 0 ? n : null);
-    }, 400);
-    return () => clearTimeout(t);
-  }, [minMcapInput]);
-
-  // The per-ticker value ranking (shaped like the scorecard). Re-fetches when the
-  // industry or either filter changes, re-ranking on a filter change is intended,
-  // since the score is a percentile within the filtered set.
-  useEffect(() => {
-    if (mode !== "comparative") return;
-    let active = true;
-    setRanking(null);
-    fetchComparativeRanking(industry, { developed, minMcap }).then((d) => {
-      if (active) setRanking(d);
-    });
-    return () => {
-      active = false;
-    };
-  }, [industry, mode, developed, minMcap, rankingRetry]);
-
   const backPath = mode === "industry" ? "/app/industry" : "/app/comparative";
   const resolveDef = mode === "industry" ? resolveIndustryDef : resolveComparativeDef;
   const seriesIndex = useMemo(() => buildSurfaceSeriesIndex(data, resolveDef), [data, resolveDef]);
@@ -191,10 +233,33 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
     () => (companyMetrics ? withRoicWaccSpread(companyMetrics) : null),
     [companyMetrics],
   );
-  const rankingView = useMemo(
-    () => (ranking?.status === "ok" ? withRoicWaccSpread(ranking.data) : null),
-    [ranking],
+
+  // The parent sector, which every payload of this industry carries. The connect
+  // deck names it, so the deck waits for whichever payload arrives first.
+  const parentSector =
+    (industryScorecard?.status === "ok" ? industryScorecard.data.sector : undefined) ??
+    companyMetrics?.sector;
+
+  const connectDeck = useMemo(
+    () =>
+      parentSector
+        ? buildConnectDeck(section, { industry, parentSector })
+        : [],
+    [section, industry, parentSector],
   );
+
+  // The companies this stage hands on to: the industry's largest, which the
+  // structure payload ranks by revenue and names, or the scorecard's own
+  // tickers. The scorecard payload carries no company names, so those entries
+  // go on without one rather than repeating the ticker as its own name.
+  const companyList = useMemo(() => {
+    const top = structureData?.concentration.top10;
+    if (top && top.length > 0) {
+      return top.slice(0, 10).map((t) => ({ ticker: t.ticker, name: t.name }));
+    }
+    const tickers = companyMetrics?.sectors;
+    return tickers?.slice(0, 10).map((t) => ({ ticker: t, name: companyName(companyMetrics, t) }));
+  }, [structureData, companyMetrics]);
 
   // More companies are likely available only if the last fetch filled the limit.
   const loadedCount = companyMetrics?.sectors.length ?? 0;
@@ -222,6 +287,22 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
         actions={<PageTourButton tourId={mode === "comparative" ? "comparative" : "industry"} />}
       />
 
+      <StageGoalPanel stage={mode === "industry" ? "industry" : "comparative"} />
+
+      {connectDeck.length > 0 && (
+        <div className="mt-6 mb-6">
+          <QualitativeBlock
+            section={section}
+            scopeKey={industry}
+            groups={connectDeck}
+            storageSuffix="connect"
+            defaultOpen
+            hideHeader
+            dataContext={sectionCtx}
+          />
+        </div>
+      )}
+
       <div className="space-y-6">
         {!isLive && <DataStatusBanner />}
 
@@ -248,10 +329,37 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
                 onlyTitles={[INDUSTRY_DEFINE_TITLE]}
                 storageSuffix="define"
                 hideHeader
-                dataContext={buildDataContext("industry", data, isLiveData(data))}
+                dataContext={sectionCtx}
               />
             </div>
           </div>
+        )}
+
+        {mode === "industry" && structureState === "loading" && (
+          <PanelSkeleton label="Loading the industry structure figures…" />
+        )}
+
+        {mode === "industry" && structureState === "error" && (
+          <PanelLoadError what="industry structure figures" onRetry={retryStructure} />
+        )}
+
+        {mode === "industry" && structureData && (
+          <Suspense fallback={<PanelSkeleton label="Loading the industry structure figures…" />}>
+            <IndustryStructureSections
+              industry={industry}
+              section={section}
+              pageContext={sectionCtx}
+              structureData={structureData}
+              groupMap={groupMap}
+              valueSystem={valueSystem}
+              highlightTicker={highlightTicker}
+              onAxisChange={handleAxisChange}
+              onSupplierChange={setVsSupplier}
+              onBuyerChange={setVsBuyer}
+              selectedSupplier={vsSupplier}
+              selectedBuyer={vsBuyer}
+            />
+          </Suspense>
         )}
 
         {mode === "industry" && (
@@ -261,6 +369,7 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
             ) : industryScorecard.status === "error" ? (
               <PanelLoadError
                 what="industry scorecard"
+                message={industryScorecard.message}
                 onRetry={() => setIndustryScorecardRetry((n) => n + 1)}
               />
             ) : industryScorecard.status === "ok" ? (
@@ -271,7 +380,7 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
                   title="Industry Scorecard"
                   resolveDef={resolveIndustryDef}
                   questionSection="industry"
-                  questionDataContext={buildDataContext("industry", data, isLiveData(data))}
+                  questionDataContext={sectionCtx}
                 />
                 <GroupScorePanel
                   data={industryScorecard.data}
@@ -286,94 +395,24 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
 
         {mode === "industry" && data?.lifecycle && <LifecyclePanel lifecycle={data.lifecycle} />}
 
-        {mode === "industry" && strategicGroups && (
-          <StrategicGroupsSection
-            data={strategicGroups}
-            industry={industry}
-            limit={sgLimit}
-            onLimitChange={setSgLimit}
-            loading={sgLoading}
-          />
-        )}
-
         {mode === "comparative" && (
-          <div>
-            <div className="flex items-end justify-between gap-3 mb-3 flex-wrap">
-              <div>
-                <h2 className="font-display text-xl font-semibold text-white flex items-center gap-3">
-                  <span className="text-gold font-mono text-sm">Per-Ticker Value Ranking</span>
-                </h2>
-              </div>
-              <div className="flex items-center gap-4 flex-wrap">
-                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <span className="text-xs text-white/60">US / developed only</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={developed}
-                    onClick={() => setDeveloped((v) => !v)}
-                    className={cn(
-                      "relative w-9 h-5 rounded-full transition-colors shrink-0",
-                      developed ? "bg-gold" : "bg-white/15",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-ink-900 transition-transform",
-                        developed && "translate-x-4",
-                      )}
-                    />
-                  </button>
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <span className="text-xs text-white/60">Min mkt cap</span>
-                  <span className="inline-flex items-center rounded-sm border border-gold/20 bg-ink-900 overflow-hidden">
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      inputMode="decimal"
-                      value={minMcapInput}
-                      onChange={(e) => setMinMcapInput(e.target.value)}
-                      placeholder="0"
-                      aria-label="Minimum market cap in billions"
-                      className="w-16 bg-transparent px-2 py-1 text-sm text-white/85 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span className="px-2 py-1 text-xs text-white/40 font-mono border-l border-gold/15">$B</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-            {!ranking ? (
-              <MatrixSkeleton rows={10} cols={6} label="Loading value ranking…" />
-            ) : ranking.status === "error" ? (
-              <PanelLoadError what="value ranking" onRetry={() => setRankingRetry((n) => n + 1)} />
-            ) : ranking.status === "ok" ? (
-              <CompanyScorecardTable
-                data={rankingView ?? ranking.data}
-                getRowHref={(ticker) => `/app/individual/${encodeURIComponent(ticker)}`}
-                resolveDef={resolveComparativeDef}
-              />
-            ) : null}
-          </div>
+          <PeerRankingTable
+            industry={industry}
+            heading={PEER_RANKING.comparativeHeading}
+            withExposures
+          />
         )}
 
         {mode === "comparative" && !companyMetrics && loadingMore && (
           <div>
-            <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
-              <span className="text-gold font-mono text-sm">Company Scorecard</span>
-              <span className="flex-1 h-px bg-gold/15" />
-            </h2>
+            {COMPANY_SCORECARD_HEADING}
             <MatrixSkeleton rows={10} cols={6} label="Loading company scorecard…" />
           </div>
         )}
 
         {mode === "comparative" && !companyMetrics && !loadingMore && companyMetricsError && (
           <div>
-            <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
-              <span className="text-gold font-mono text-sm">Company Scorecard</span>
-              <span className="flex-1 h-px bg-gold/15" />
-            </h2>
+            {COMPANY_SCORECARD_HEADING}
             <PanelLoadError
               what="company scorecard"
               onRetry={() => setCompanyMetricsRetry((n) => n + 1)}
@@ -383,13 +422,10 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
 
         {mode === "comparative" && companyMetrics && (
           <div data-tour="comparative-scorecard">
-            <h2 className="font-display text-xl font-semibold text-white mb-1 flex items-center gap-3">
-              <span className="text-gold font-mono text-sm">Company Scorecard</span>
-              <span className="flex-1 h-px bg-gold/15" />
-            </h2>
+            {COMPANY_SCORECARD_HEADING}
             <CompanyScorecardTable
               data={companyMetricsView ?? companyMetrics}
-              getRowHref={(ticker) => `/app/individual/${encodeURIComponent(ticker)}`}
+              getRowHref={rowHref}
               resolveDef={resolveDef}
             />
             {(canLoadMore || limit > SCORECARD_INITIAL) && (
@@ -424,11 +460,16 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
           <QualitativeBlock
             section={section}
             scopeKey={industry}
-            // The strategic-group deck is rendered inside its own section, above.
-            // Without this it would render a second time here, in the page-bottom
-            // bank, which shows every group that is not excluded.
-            excludeTitles={mode === "industry" ? [STRATEGIC_GROUPS_DECK_TITLE, INDUSTRY_DEFINE_TITLE] : undefined}
-            dataContext={buildDataContext(section, data, isLiveData(data))}
+            // Every group that is rendered in a section of its own is excluded
+            // here, or it would appear a second time in this page-bottom bank,
+            // which shows everything that is not excluded. The static
+            // "Strategic Groups" deck is NOT one of them: the section that used
+            // to render it was deleted, so excluding it left readers' saved
+            // answers to it reachable from nowhere on the page.
+            excludeTitles={mode === "industry"
+              ? [INDUSTRY_DEFINE_TITLE, CONNECT_DECK_TITLE.industry, FIVE_FORCES_TITLE, BARRIER_GRID_TITLE]
+              : [CONNECT_DECK_TITLE.comparative]}
+            dataContext={sectionCtx}
           />
         </div>
 
@@ -443,6 +484,8 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
             </Link>
           </div>
         )}
+
+        <NextStagePanel page={mode === "industry" ? "industry" : "comparative"} companies={companyList} industryName={industry} />
       </div>
       </div>
       <DefinitionPanel seriesIndex={seriesIndex} />

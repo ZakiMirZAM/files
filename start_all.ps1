@@ -55,6 +55,11 @@ else {
 if (Test-Port 3001) { Write-Host "3. RAG server: already running" }
 else {
     Write-Host "3. RAG server: starting..."
+    # Tier 1 verification on. Tier 0's per-claim flags never leave the server:
+    # EXPOSE is a local debugging switch, so it is pinned off rather than left to
+    # whatever happens to be in the environment this process inherited.
+    $env:RAG_VERIFY = "on"
+    $env:RAG_VERIFY_EXPOSE = "0"
     Start-Process $PYTHON -ArgumentList "server.py" -WorkingDirectory "$ROOT\rag" -WindowStyle Minimized
     Wait-Port 3001 "RAG server" 60 | Out-Null
 }

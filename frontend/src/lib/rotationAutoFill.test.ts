@@ -11,6 +11,7 @@ import {
   sameReadings,
   seriesNameForRow,
 } from "./rotationAutoFill";
+import { factsFromSeries } from "./readingRules/engine";
 
 const NOW = new Date(2026, 5, 30);
 const OPTS = { now: NOW };
@@ -75,17 +76,28 @@ function makeData(metrics: Metric[], extra?: Partial<SectionData>): SectionData 
 }
 
 describe("parsePeriod", () => {
+  // Every period is parsed in UTC, so the same payload buckets into the same
+  // months whatever time zone the reader's machine is set to.
   it("parses a bare year as end of that year", () => {
     const d = parsePeriod("2024");
-    expect(d?.getFullYear()).toBe(2024);
-    expect(d?.getMonth()).toBe(11);
+    expect(d?.getUTCFullYear()).toBe(2024);
+    expect(d?.getUTCMonth()).toBe(11);
+    expect(d?.getUTCDate()).toBe(31);
   });
 
   it("parses YYYY-MM as the end of that month", () => {
     const d = parsePeriod("2024-05");
-    expect(d?.getFullYear()).toBe(2024);
-    expect(d?.getMonth()).toBe(4);
-    expect(d?.getDate()).toBe(31);
+    expect(d?.getUTCFullYear()).toBe(2024);
+    expect(d?.getUTCMonth()).toBe(4);
+    expect(d?.getUTCDate()).toBe(31);
+  });
+
+  it("refuses a period that is not a non-empty string", () => {
+    // `new Date(null)` is the epoch, so an unguarded parse silently dated a
+    // point 1970 and dragged the ten-year window back with it.
+    expect(parsePeriod(null as unknown as string)).toBeNull();
+    expect(parsePeriod("")).toBeNull();
+    expect(parsePeriod("   ")).toBeNull();
   });
 
   it("parses ISO dates and rejects garbage", () => {
@@ -459,4 +471,69 @@ describe("commodity rows are informational by default", () => {
     expect(clampWeight(7)).toBe(5);
     expect(clampWeight(Number.NaN)).toBe(1);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Two readers, two time zones, one reading.
+//
+// Every period used to be parsed and bucketed in the machine's LOCAL time for
+// the two coarse forms while an ISO date string parses as UTC, so a payload
+// bucketed into different months and the ten-year percentile moved by a point
+// or two depending on where the reader sat. The whole path is UTC now, and
+// this holds it there: the same series, read under three time zones spanning a
+// full day, must produce the same verdict and the same figures.
+
+describe("the same series reads the same in every time zone", () => {
+  const ZONES = ["UTC", "Asia/Tokyo", "America/Los_Angeles"];
+
+  /** A year of first-of-month points, the shape /api/economic delivers. */
+  const SERIES: TrendPoint[] = Array.from({ length: 120 }, (_, i) => {
+    const d = new Date(Date.UTC(2016, i, 1));
+    return { period: d.toISOString().slice(0, 10), value: 100 + Math.sin(i / 5) * 8 + i * 0.2 };
+  });
+
+  /** A month-only series, the form whose parse used to be local. */
+  const COARSE: TrendPoint[] = Array.from({ length: 120 }, (_, i) => ({
+    period: `${2016 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`,
+    value: 50 + Math.cos(i / 7) * 5 + i * 0.1,
+  }));
+
+  function underZone<T>(tz: string, run: () => T): T {
+    const before = process.env.TZ;
+    process.env.TZ = tz;
+    try {
+      return run();
+    } finally {
+      process.env.TZ = before;
+    }
+  }
+
+  for (const points of [SERIES, COARSE]) {
+    const label = points === SERIES ? "ISO dates" : "year and month only";
+    it(`classifySeries agrees across time zones (${label})`, () => {
+      const results = ZONES.map((tz) =>
+        underZone(tz, () =>
+          JSON.stringify(classifySeries(points, "monthly", { now: new Date("2026-01-15T00:00:00Z") })),
+        ),
+      );
+      expect(new Set(results).size, results.join("\n")).toBe(1);
+    });
+
+    it(`factsFromSeries agrees across time zones (${label})`, () => {
+      const results = ZONES.map((tz) =>
+        underZone(tz, () => {
+          const f = factsFromSeries(points, "monthly", new Date("2026-01-15T00:00:00Z"));
+          return JSON.stringify({
+            latest: f?.latest,
+            latestPeriod: f?.latestPeriod,
+            yearAgo: f?.yearAgo,
+            yoyChangePct: f?.yoyChangePct,
+            trend: f?.trend,
+            percentile10y: f?.percentile10y,
+          });
+        }),
+      );
+      expect(new Set(results).size, results.join("\n")).toBe(1);
+    });
+  }
 });

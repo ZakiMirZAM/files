@@ -1,4 +1,5 @@
 import type { BankProfitability } from "../../lib/types";
+import { moneySign } from "../../lib/format";
 
 interface BankProfitabilitySectionProps {
   bankProfitability?: BankProfitability | null;
@@ -10,9 +11,10 @@ const rate = (v: number | null | undefined, d = 3): string =>
 const bn = (v: number | null | undefined): string => {
   if (v == null) return "n/a";
   const a = Math.abs(v);
-  if (a >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${v.toFixed(0)}`;
+  const s = moneySign(v);
+  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
+  return `${s}$${a.toFixed(0)}`;
 };
 
 /**

@@ -26,6 +26,7 @@ import { AiPanel } from "./AiPanel";
 import { SelectionExplainButton } from "./SelectionExplainButton";
 import { TourOverlay } from "./tour/TourOverlay";
 import { HelpMenu } from "./onboarding/HelpMenu";
+import { PageTOC } from "./PageTOC";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: BarChart3, end: true },
@@ -214,6 +215,7 @@ export function AppShell() {
       <AiPanel />
       <SelectionExplainButton />
       <TourOverlay />
+      <PageTOC />
     </div>
   );
 }

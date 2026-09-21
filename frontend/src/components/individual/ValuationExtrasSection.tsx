@@ -1,15 +1,16 @@
 import type { ValuationAnchors, RndAdjusted } from "../../lib/types";
-import { formatCurrency } from "../../lib/format";
+import { formatCurrency, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Anchor, FlaskConical } from "lucide-react";
 import { DefinitionLink } from "./DefinitionsBlock";
+import { NotApplicable } from "../NotApplicable";
 
 interface ValuationExtrasSectionProps {
   anchors?: ValuationAnchors | null;
   rnd?: RndAdjusted | null;
 }
 
-const ps = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const ps = (v: number | null | undefined): string => formatPerShare(v);
 const pct = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
 
 /**
@@ -77,7 +78,7 @@ function RndCard({ r }: { r: RndAdjusted }) {
         <p className="eyebrow mb-3 inline-flex items-center gap-2">
           <FlaskConical className="w-4 h-4" /> R&amp;D Capitalization
         </p>
-        <p className="text-sm text-white/55">{r.reason}</p>
+        <NotApplicable reason={r.reason} />
         {r.rdIntensity != null && (
           <p className="text-xs font-mono text-white/45 mt-2">R&amp;D / revenue: {pct(r.rdIntensity)}</p>
         )}

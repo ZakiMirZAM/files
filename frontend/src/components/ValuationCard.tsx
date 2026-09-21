@@ -1,5 +1,5 @@
 import type { IndividualAnalysis } from "../lib/types";
-import { formatCurrency, formatPercent } from "../lib/format";
+import { formatCurrency, formatPercent, formatPerShare } from "../lib/format";
 import { cn } from "../lib/cn";
 import { Check, X, TrendingUp, Calculator, Award } from "lucide-react";
 import { DefinitionsBlock, MetricTerm } from "./individual/DefinitionsBlock";
@@ -146,9 +146,19 @@ function IntrinsicPanel({
     ?? null;
   const active = useActiveVariant(analysis.ticker, variants, recommended);
 
+  // Whether a market quote and this model's per-ordinary-share value are the
+  // same kind of number. For a foreign filer trading through a US depositary
+  // receipt they are not, twice over: the quote is in dollars while the model
+  // runs in the filer's own currency, and one receipt is several ordinary
+  // shares. The panel then prints the reason in place of both figures rather
+  // than a margin of safety worked out across two units.
+  const refusal =
+    valuation.priceComparison?.applicable === false
+      ? valuation.priceComparison.reason
+      : null;
   // The toggle is a lens: the displayed value follows it, the score does not.
   const intrinsic = active?.intrinsicPerShare ?? valuation.dcfIntrinsicPerShare;
-  const shownMos = active?.marginOfSafety ?? mos;
+  const shownMos = refusal ? null : active?.marginOfSafety ?? mos;
   const mosPct = shownMos != null ? shownMos * 100 : null;
   const mosColor =
     mosPct === null ? "text-white/40" :
@@ -190,19 +200,24 @@ function IntrinsicPanel({
       )}
       <div className="space-y-2.5 text-sm">
         <Row label="Intrinsic / share" value={
-          intrinsic != null ? `$${intrinsic.toFixed(3)}` : "n/a"
+          intrinsic != null ? formatPerShare(intrinsic) : "n/a"
         } />
         <Row label="Implied price" value={
-          valuation.impliedPrice !== null ? `$${valuation.impliedPrice.toFixed(3)}` : "n/a"
+          !refusal && valuation.impliedPrice !== null
+            ? formatPerShare(valuation.impliedPrice)
+            : refusal ? "not applicable" : "n/a"
         } />
         <Row label="Margin of safety" value={
           mosPct !== null
             ? <span className={cn("font-mono", mosColor)}>{mosPct >= 0 ? "+" : ""}{mosPct.toFixed(3)}%</span>
-            : "n/a"
+            : refusal ? "not applicable" : "n/a"
         } />
         <Row label="Growth used" value={
           growth != null ? `${(growth * 100).toFixed(3)}%` : "n/a"
         } />
+        {refusal && (
+          <p className="text-xs text-white/55 leading-snug pt-1">{refusal}</p>
+        )}
         {valuation.notApplicableReason && (
           <p className="text-xs text-white/45 leading-snug pt-1">
             {valuation.notApplicableReason}

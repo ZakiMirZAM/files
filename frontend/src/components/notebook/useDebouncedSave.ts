@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { toast } from "sonner";
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
+/** The same four states lib/useDebouncedSave.ts reports. Re-exported rather
+ *  than declared again, so a state added to one is a state both know. */
+export type { SaveStatus } from "../../lib/useDebouncedSave";
+import type { SaveStatus } from "../../lib/useDebouncedSave";
 
 const SAVE_DELAY_MS = 800;
 const SAVED_BADGE_MS = 1500;

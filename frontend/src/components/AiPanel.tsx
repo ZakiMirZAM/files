@@ -19,9 +19,19 @@ import {
   reviewCount,
 } from "./AiVerification";
 import { closeAi, getOpenAi, subscribeAi } from "../lib/aiPanelStore";
+import { CONNECT_AI } from "../lib/connectQuestions";
 
 type Status = "loading" | "done" | "error";
 const ASK_MODEL = "claude-sonnet-4-6";
+
+/** Thrown to stop a run that must not reach the model: a newer request took
+ *  over, or the reader navigated away while the figures were being gathered. */
+class AbandonedError extends Error {
+  constructor(message = "") {
+    super(message);
+    this.name = "AbandonedError";
+  }
+}
 
 function prettySource(path: string): string {
   const parts = path.split("/");
@@ -66,6 +76,8 @@ export function AiPanel() {
   // definition sidebar's collapsed width).
   const [expanded, setExpanded] = useState(false);
   const [regenStamp, setRegenStamp] = useState(0);
+  const [gathering, setGathering] = useState(false);
+  const gatherAbort = useRef<AbortController | null>(null);
   const regenForReqId = useRef<number | null>(null);
   const handledRef = useRef<string>("");
   const verifiedRef = useRef<string>("");
@@ -128,21 +140,45 @@ export function AiPanel() {
     setShowOriginal(false);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     const reqId = req.id;
+    const request = req;
 
-    const pending =
-      req.mode === "answer"
+    // The figures are gathered HERE, not at the click, so a question whose
+    // answer came back from the cache above never pays for them.
+    // null means the reader moved on, and the model is not called at all.
+    const withData = async (): Promise<string | null | undefined> => {
+      if (!request.gatherData) return request.dataContext;
+      const controller = new AbortController();
+      gatherAbort.current?.abort();
+      gatherAbort.current = controller;
+      setGathering(true);
+      try {
+        return await request.gatherData(controller.signal);
+      } catch {
+        // The figures failed; the question still goes, on the page's own.
+        return request.dataContext;
+      } finally {
+        setGathering(false);
+        if (gatherAbort.current === controller) gatherAbort.current = null;
+      }
+    };
+
+    const pending = withData().then((dataContext) => {
+      if (getOpenAi()?.id !== reqId) throw new AbandonedError();
+      if (dataContext === null) throw new AbandonedError(CONNECT_AI.abandoned);
+      return request.mode === "answer"
         ? askQuestion({
-            question: req.question ?? "",
-            context: req.context,
-            section: req.section,
-            dataContext: req.dataContext,
+            question: request.question ?? "",
+            context: request.context,
+            section: request.section,
+            dataContext,
           })
         : explainSelection({
-            selection: req.selection ?? "",
-            context: req.context,
-            subject: req.subject,
-            dataContext: req.dataContext,
+            selection: request.selection ?? "",
+            context: request.context,
+            subject: request.subject,
+            dataContext,
           });
+    });
 
     pending.then(
       (r) => {
@@ -174,6 +210,10 @@ export function AiPanel() {
       },
       (err: unknown) => {
         if (getOpenAi()?.id !== reqId) return;
+        if (err instanceof AbandonedError && !err.message) {
+          // A newer request took over. Its own run owns the panel now.
+          return;
+        }
         setErrorMsg(err instanceof Error ? err.message : "Request failed");
         setStatus("error");
       },
@@ -319,7 +359,11 @@ export function AiPanel() {
             {status === "loading" && (
               <div className="flex items-center gap-2.5 text-sm text-white/45 font-mono py-6">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                {req?.mode === "explain" ? "Explaining from the vault…" : "Researching the vault and web…"}
+                {gathering
+                  ? CONNECT_AI.gathering
+                  : req?.mode === "explain"
+                    ? "Explaining from the vault…"
+                    : "Researching the vault and web…"}
               </div>
             )}
 

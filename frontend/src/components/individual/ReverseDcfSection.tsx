@@ -1,4 +1,5 @@
 import type { ReverseDcf } from "../../lib/types";
+import { formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { DefinitionLink } from "./DefinitionsBlock";
 import { FlipHorizontal2 } from "lucide-react";
@@ -18,7 +19,27 @@ const pct = (v: number | null | undefined, d = 3): string =>
  * invisible.
  */
 export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
-  if (!data || !data.applicable) return null;
+  if (!data) return null;
+
+  // The inversion solves for growth against a PRICE, so when the price and the
+  // model's per-ordinary-share value are different kinds of number there is
+  // nothing to solve against. Saying so beats rendering nothing: the section
+  // used to disappear, which left a reader wondering where it went.
+  if (!data.applicable) {
+    return (
+      <section className="animate-fade-up">
+        <header className="mb-5">
+          <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">Reverse DCF</h2>
+          <DefinitionLink number={193} prominent className="mt-3">How market-implied growth works</DefinitionLink>
+        </header>
+        <div className="panel-soft p-5">
+          <p className="text-[0.95rem] leading-7 text-white/70">
+            Not applicable.{data.reason ? ` ${data.reason}` : ""}
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   const solved = data.status === "solved" && data.impliedGrowth != null;
   const gap =
@@ -29,7 +50,9 @@ export function ReverseDcfSection({ data }: ReverseDcfSectionProps) {
     <section className="animate-fade-up">
       <header className="mb-5">
         <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">Reverse DCF</h2>
-        <p className="text-[0.7rem] font-mono text-white/40 mt-1.5">Price used: ${data.priceUsed.toFixed(3)}</p>
+        <p className="text-[0.7rem] font-mono text-white/40 mt-1.5">
+          Price used: {formatPerShare(data.priceUsed)}
+        </p>
         <DefinitionLink number={193} prominent className="mt-3">How market-implied growth works</DefinitionLink>
       </header>
 

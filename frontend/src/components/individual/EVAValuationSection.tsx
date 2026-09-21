@@ -1,5 +1,5 @@
 import type { IndividualForecast } from "../../lib/types";
-import { formatCurrency } from "../../lib/format";
+import { formatCurrency, formatPerShare } from "../../lib/format";
 import { formatMetricValue } from "../../lib/metricFormat";
 import { cn } from "../../lib/cn";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
@@ -13,7 +13,7 @@ interface EVAValuationSectionProps {
 }
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
-const perShare = (v: number | null | undefined): string => (v == null ? "n/a" : `$${v.toFixed(3)}`);
+const perShare = (v: number | null | undefined): string => formatPerShare(v);
 const rate = (v: number | null | undefined, d = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(d)}%`);
 
 /** Build a DefinitionSeries from a {year: value} history map, oldest → newest. */

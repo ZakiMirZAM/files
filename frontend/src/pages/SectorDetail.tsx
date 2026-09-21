@@ -20,12 +20,18 @@ import { GroupScorePanel } from "../components/GroupScorePanel";
 import { SectorMetricsPanel } from "../components/SectorMetricsPanel";
 import { SectorMetricsTable } from "../components/SectorMetricsTable";
 import { SectorPriceChart } from "../components/SectorPriceChart";
-import { ScorecardSkeleton, MatrixSkeleton } from "../components/Skeletons";
+import { ScorecardSkeleton, MatrixSkeleton, PanelSkeleton } from "../components/Skeletons";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { resolveSectorDef, resolveIndustryDef } from "../lib/surfaceDefinitions";
 import { ScoreExplainer } from "../components/ScoreExplainer";
 import { buildSurfaceSeriesIndex } from "../lib/surfaceSeries";
 import { ChevronLeft } from "lucide-react";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { NextStagePanel } from "../components/connections/NextStagePanel";
+import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
+import { WHAT, useProfitPool } from "../lib/groupMapApi";
+import { ProfitPoolChart } from "../components/sector/ProfitPoolChart";
+import { buildProfitPoolDeck } from "../lib/industryDecksB";
 
 export function SectorDetail() {
   const params = useParams();
@@ -52,15 +58,22 @@ export function SectorDetail() {
     };
   }, [sector]);
 
+  // One context per render. The same string was rebuilt at five call sites.
+  const pageCtx = useMemo(
+    () => buildDataContext("sector", data, isLiveData(data)),
+    [data],
+  );
+
   // Publish this sector's live figures for the AI question + highlight buttons.
   useEffect(() => {
     setPageAiContext({
       section: "sector",
       subject: `${sector} sector`,
-      dataContext: buildDataContext("sector", data, isLiveData(data)),
+      subjectKey: sector,
+      dataContext: pageCtx,
     });
     return () => clearPageAiContext();
-  }, [sector, data]);
+  }, [sector, pageCtx]);
 
   useEffect(() => {
     let active = true;
@@ -84,7 +97,35 @@ export function SectorDetail() {
     };
   }, [sector, industryMetricsRetry]);
 
+  const industryNames = useMemo(
+    () => (industryMetrics?.status === "ok" ? industryMetrics.data.sectors : undefined),
+    [industryMetrics],
+  );
+
   const seriesIndex = useMemo(() => buildSurfaceSeriesIndex(data, resolveSectorDef), [data]);
+
+  const connectDeck = useMemo(() => buildConnectDeck("sector", { sector }), [sector]);
+
+  const {
+    data: profitPool,
+    state: profitPoolState,
+    retry: retryProfitPool,
+  } = useProfitPool(sector);
+
+  // Industries ordered by profit share (highest first) so the "what's next"
+  // panel leads with where this sector's profit actually concentrates,
+  // falling back to the scorecard's plain industry list when unavailable.
+  const profitPoolOrder = useMemo(() => {
+    if (!profitPool || profitPool.negativeSectorProfit) return undefined;
+    return [...profitPool.industries]
+      .sort((a, b) => (b.profitShare ?? -Infinity) - (a.profitShare ?? -Infinity))
+      .map((i) => i.industry);
+  }, [profitPool]);
+
+  const profitPoolDeck = useMemo(
+    () => buildProfitPoolDeck(profitPool, sector, pageCtx),
+    [profitPool, sector, pageCtx],
+  );
 
   return (
     <div className="flex gap-0 lg:gap-6">
@@ -100,6 +141,20 @@ export function SectorDetail() {
         subtitle="Market-cap weighted aggregates across every public company in the sector."
         actions={<PageTourButton tourId="sector" />}
       />
+
+      <StageGoalPanel stage="sector" />
+
+      <div className="mt-6 mb-6">
+        <QualitativeBlock
+          section="sector"
+          scopeKey={sector}
+          groups={connectDeck}
+          storageSuffix="connect"
+          defaultOpen
+          hideHeader
+          dataContext={pageCtx}
+        />
+      </div>
 
       <div className="space-y-6">
         {!isLive && <DataStatusBanner />}
@@ -128,7 +183,7 @@ export function SectorDetail() {
               onlyTitles={[SECTOR_DEFINE_TITLE]}
               storageSuffix="define"
               hideHeader
-              dataContext={buildDataContext("sector", data, isLiveData(data))}
+              dataContext={pageCtx}
             />
           </div>
         </div>
@@ -144,7 +199,7 @@ export function SectorDetail() {
                 data={sectorMetrics.data}
                 sector={sector}
                 questionSection="sector"
-                questionDataContext={buildDataContext("sector", data, isLiveData(data))}
+                questionDataContext={pageCtx}
               />
               <GroupScorePanel
                 data={sectorMetrics.data}
@@ -193,19 +248,39 @@ export function SectorDetail() {
               resolveDef={(l) => (l === "Value Score" ? resolveIndustryDef(l) : resolveSectorDef(l))}
               getColumnHref={(ind) => `/app/industry/${encodeURIComponent(ind)}`}
               questionSection="industry"
-              questionDataContext={buildDataContext("sector", data, isLiveData(data))}
+              questionDataContext={pageCtx}
             />
           </div>
         ) : null}
+
+        {profitPoolState === "loading" && <PanelSkeleton />}
+
+        {profitPoolState === "error" && (
+          <PanelLoadError what={WHAT.profitPool} onRetry={retryProfitPool} />
+        )}
+
+        {profitPool && (
+          <ProfitPoolChart
+            data={profitPool}
+            sector={sector}
+            deck={profitPoolDeck}
+          />
+        )}
 
         <div className="mt-16">
           <QualitativeBlock
             section="sector"
             scopeKey={sector}
-            excludeTitles={[SECTOR_DEFINE_TITLE]}
-            dataContext={buildDataContext("sector", data, isLiveData(data))}
+            excludeTitles={[SECTOR_DEFINE_TITLE, CONNECT_DECK_TITLE.sector]}
+            dataContext={pageCtx}
           />
         </div>
+
+        <NextStagePanel
+          page="sector"
+          industries={industryNames}
+          industryOrder={profitPoolOrder}
+        />
       </div>
       </div>
       <DefinitionPanel seriesIndex={seriesIndex} />

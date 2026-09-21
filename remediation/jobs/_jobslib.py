@@ -93,17 +93,13 @@ def write_job_run(db_path: str, job: str) -> None:
     Creates the table if a fresh DB does not have it yet, so a first run on a
     clean copy never dies on a missing ``job_runs``.
     """
+    ensure_sys_path()
+    import _jobs  # noqa: PLC0415 - data/ is on sys.path via ensure_sys_path
+
     try:
         with sqlite3.connect(db_path) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS job_runs (job TEXT PRIMARY KEY, last_run TEXT)"
-            )
             try:
-                conn.execute(
-                    "INSERT INTO job_runs(job, last_run) VALUES(?, datetime('now')) "
-                    "ON CONFLICT(job) DO UPDATE SET last_run=excluded.last_run",
-                    [job],
-                )
+                _jobs.upsert_job_run(conn, job, commit=False)
             except sqlite3.OperationalError:
                 # Legacy DB where job_runs lacks the PRIMARY KEY: emulate the
                 # upsert so the marker still lands.

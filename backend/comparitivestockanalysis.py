@@ -47,7 +47,13 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "data"))
 
 from financial_db import FinancialDB, capm_discount_rate  # noqa: E402
+from group_sql import named_group_sql  # noqa: E402 (the blank-group guard)
 import individualanalysis as _ia  # noqa: E402  — shared FCFF + EVA + metric registry
+# Currency/unit reconciliation between a price and a per-ordinary-share value.
+try:
+    import price_currency as _pc  # noqa: E402
+except Exception:  # noqa: BLE001 — absence leaves the prior behaviour in place
+    _pc = None  # type: ignore[assignment]
 
 # Bottom-up beta engine (optional; see individualanalysis.py for the pattern).
 try:
@@ -243,6 +249,9 @@ class TickerSnapshot:
     eva_intrinsic: Optional[float] = None
     # Fundamental display-metric level history: metric_key → {year: value}
     metric_levels: dict[str, dict[int, Optional[float]]] = field(default_factory=dict)
+    # Whether the price this snapshot compared against is the same kind of number
+    # as the model's per-ordinary-share value, and why not when it is not.
+    price_comparison: Optional[dict] = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -297,7 +306,7 @@ def load_industry_panel(db: FinancialDB, industry: Optional[str] = None) -> dict
     Return {ticker: [rows ordered by year]} for every ticker in the requested
     industry (or every industry, if ``industry`` is None).
     """
-    where = ['t.industry IS NOT NULL', "f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"]
+    where = [named_group_sql("t.industry"), "f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"]
     params: list = []
     if industry:
         where.append("LOWER(t.industry) LIKE ?")
@@ -410,7 +419,18 @@ def build_snapshot(
     rf: float | None = None,
     erp: float | None = None,
     use_live_price: bool = True,
+    rates: Optional[dict[str, float]] = None,
 ) -> Optional[TickerSnapshot]:
+    """One company's ranked snapshot.
+
+    ``rates`` is ``{currency: USD per unit}``. A caller that builds many
+    snapshots in one pass should read the table once and pass it here: the
+    whole-industry ranking loops 561 companies, and looking the rates up per
+    company opened a new connection to the 640 MB database and re-read the same
+    45 rows 561 times, which measured 535 ms of the cold build. Left out, the
+    lookup happens here exactly as it always did, so every other caller is
+    unchanged.
+    """
     if not rows:
         return None
     # Sort ascending by fiscal year so `rows[-1]` is the true LATEST year and every
@@ -435,14 +455,54 @@ def build_snapshot(
     # yfinance spot quote (used by the whole-industry leaderboard, where one live
     # call per company would make the request take minutes) → Market Cap / shares
     # fallback is used for the intrinsic-vs-price margin-of-safety instead.
-    live_price = (
-        db.get_latest_price(ticker) if (db is not None and use_live_price) else None
-    )
+    live_price: Optional[float] = None
+    quote_ccy: Optional[str] = None
+    if db is not None and use_live_price:
+        live_price, quote_ccy = db.get_latest_price_currency(ticker)
+
+    # A price and a per-ordinary-share model value have to be the same kind of
+    # number before a margin of safety means anything. Two different sources
+    # are reconciled here, because the leaderboard takes no live quote:
+    #   * the live quote, in the LISTING's currency, when there is one;
+    #   * otherwise the stored market value over diluted shares, which is a
+    #     per-ordinary-share figure for an ordinary listing and something else
+    #     entirely for a depositary receipt.
+    price_comparison = None
+    if _pc is not None:
+        # The newest row can carry a NULL currency, so take the latest row that
+        # states one rather than reading a NULL as a change of currency.
+        reporting_ccy = None
+        for _r in reversed(rows):
+            try:
+                _c = _r["Reported Currency"]
+            except (IndexError, KeyError):
+                _c = None
+            if _c:
+                reporting_ccy = _c
+                break
+        if rates is not None:
+            _rates = rates
+        else:
+            try:
+                _rates = db.get_fx_rates() if db is not None else None
+            except Exception:  # noqa: BLE001 — a missing rate table is not a crash
+                _rates = None
+        price_comparison = _pc.reconcile_price(
+            ticker, live_price, quote_ccy, reporting_ccy, _rates)
+        if price_comparison.applicable and price_comparison.price is None:
+            # No quote: the fallback price is the stored market value, which has
+            # its own reconciliation.
+            price_comparison = _pc.reconcile_stored_market_value(ticker, reporting_ccy)
+        live_price = price_comparison.price
+    price_unusable = price_comparison is not None and not price_comparison.applicable
     # Use the shared FCFF firm model (consistent with the individual page) for the
     # DCF + EVA columns; fall back to the simpler FCF/share DCF when FCFF can't be
     # built (e.g. negative ROIC / missing shares).
     eva_intrinsic: Optional[float] = None
-    forecast = _ia.compute_forecast(rows, beta=beta, rf=rf, erp=erp, price=live_price)
+    forecast = _ia.compute_forecast(rows, beta=beta, rf=rf, erp=erp, price=live_price,
+                                    price_unusable=price_unusable,
+                                    price_unusable_reason=(
+                                        price_comparison.reason if price_unusable else None))
     if forecast is not None:
         intrinsic = forecast.get("intrinsicPerShare")
         implied_price = forecast.get("currentPrice")
@@ -462,6 +522,15 @@ def build_snapshot(
         metrics[key] = hist.get(latest_year_int)
 
     # Graham Number = sqrt(22.5 * EPS * BVPS).  Ratio = Graham / implied price
+    #
+    # This one IS scored (weight 1.0 in every sector profile), unlike the margin
+    # of safety, which is carried for display only. Both fall away on their own
+    # when the price cannot be compared, because `implied_price` is the
+    # forecast's own `currentPrice` and that is empty in the same case: a
+    # Graham number in TWD over a price that is not TWD per ordinary share
+    # would have read as a deeply cheap company and lifted the value score.
+    # `score_industry` skips a None metric, so the score is then built on the
+    # metrics that do mean something rather than on a converted-by-accident one.
     eps = latest["EPS Diluted"] if "EPS Diluted" in latest.keys() else None
     bvps = latest["Book Value Per Share"] if "Book Value Per Share" in latest.keys() else None
     graham_ratio: Optional[float] = None
@@ -486,6 +555,8 @@ def build_snapshot(
         metric_horizontal=_compute_metric_horizontal(rows),
         eva_intrinsic=eva_intrinsic,
         metric_levels=metric_levels,
+        price_comparison=(price_comparison.to_dict()
+                          if price_comparison is not None else None),
     )
 
 

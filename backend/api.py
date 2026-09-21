@@ -46,6 +46,16 @@ for p in (ROOT / "backend", ROOT / "data", ROOT / "remediation"):
         sys.path.insert(0, sp)
 
 import ttm_lib  # noqa: E402 -- pure TTM/latest-row selection logic (Phase 4)
+# The one upper bound on a market cap used as a WEIGHT, shared with
+# industry_averages' SQL aggregates so the two weighting paths agree on which
+# rows are corrupt. Imported outside the analysis try/except below because
+# fx_convert is a pure module with no dependencies of its own, exactly like
+# ttm_lib above, and the scorecard matrices need the bound whether or not the
+# heavy analysis modules loaded.
+from fx_convert import MAX_MARKET_CAP_USD  # noqa: E402
+# The blank-group guard every sector/industry query carries, written once so
+# dropping the TRIM half at one call site cannot happen quietly.
+from group_sql import named_group_sql  # noqa: E402
 
 MIN_YEAR = 2012
 
@@ -106,9 +116,10 @@ app = FastAPI(
 # is fast.
 try:
     from financial_db import (  # type: ignore
-        FinancialDB, fetch_latest_market_cap_yf, EXCEL_COLUMNS,
+        FinancialDB, fetch_latest_market_cap_currency_yf, EXCEL_COLUMNS,
         capm_discount_rate,
     )
+    import fx_convert  # type: ignore
     from valuation import valuation_engine  # type: ignore
     from individualanalysis import (  # type: ignore
         build_individual_snapshot,
@@ -142,10 +153,12 @@ except Exception as exc:  # noqa: BLE001
     log.error("[api] Failed to import analysis modules: %s", exc)
     FinancialDB = None  # type: ignore[assignment]
 
-    def fetch_latest_market_cap_yf(_ticker: str):  # type: ignore[misc]
+    fx_convert = None  # type: ignore[assignment]
+
+    def fetch_latest_market_cap_currency_yf(_ticker: str):  # type: ignore[misc]
         """Fallback when analysis modules fail to import — no live cap available,
         so callers keep the stored DB Market Cap."""
-        return None
+        return (None, None)
 
     def capm_discount_rate(beta, rf=None, erp=None, *, market_fallback=False):  # type: ignore[misc]
         """Import-failure stub mirroring financial_db.capm_discount_rate."""
@@ -377,14 +390,41 @@ def cached(ttl_seconds: float, key_prefix: str = "") -> Callable:
     return decorator
 
 
+def _clear_side_caches(prefix: str) -> None:
+    """Drop the caches that live outside ``_cache`` (finding H5).
+
+    ``POST /api/cache/clear`` promises to clear everything, but the
+    connections sector cache, the cross-industry rank table and the macro
+    economy block are separate in-process stores. Each owning module
+    registers its own clear function with ``backend/side_caches.py``, so a
+    cache added later cannot be missed here. An "econ" invalidation (the
+    marketdata scheduler's) reaches the economy block, because its figures
+    are read from ``market_data.db``.
+    """
+    try:
+        from side_caches import clear_side_caches
+
+        clear_side_caches(prefix)
+    except Exception as exc:  # noqa: BLE001 — a clear must never 500
+        log.warning("[api] side-cache clear failed: %s", exc)
+
+
 def invalidate_cache(prefix: str = "") -> int:
     """Drop cache entries whose key starts with prefix. Returns drop count."""
+    _clear_side_caches(prefix)
     with _cache_lock:
         if not prefix:
             n = len(_cache)
             _cache.clear()
             return n
         keys = [k for k in _cache if k.startswith(prefix)]
+        if prefix == "econ":
+            # The connections payload embeds the macro blocks, so a fresh
+            # economic aggregate has to drop it as well.
+            keys += [
+                k for k in _cache
+                if k.startswith("db:connections_endpoint") and k not in keys
+            ]
         for k in keys:
             _cache.pop(k, None)
         return len(keys)
@@ -505,6 +545,15 @@ def db_conn(read_only: bool = True) -> Iterator[sqlite3.Connection]:
     conn.row_factory = sqlite3.Row
     try:
         conn.execute(f"PRAGMA busy_timeout = {int(_SQLITE_TIMEOUT_SECONDS * 1000)}")
+        # Memory-map the DB for fast page reads on a large (640 MB) file.
+        # 256 MB is a safe ceiling that avoids address-space pressure.
+        conn.execute("PRAGMA mmap_size = 268435456")
+        # Raise the page cache from the default 2 MB to 16 MB so hot pages
+        # survive across queries within the same connection. It is PRIVATE
+        # heap per connection and the threadpool opens up to 40 of them, so
+        # 64 MB here meant a 2.5 GB ceiling on page cache alone; the mmap
+        # above already serves repeat page reads from the OS cache.
+        conn.execute("PRAGMA cache_size = -16384")
         yield conn
     finally:
         conn.close()
@@ -1061,6 +1110,7 @@ def _run_daily_update(tickers: list[str] | None = None) -> None:
                         result.returncode, result.stderr[-2000:])
         else:
             log.info("daily-update done — DB caches invalidated")
+        _start_ranking_warm()  # the invalidation just made the big rankings cold
     except Exception as e:
         with _update_lock:
             _update_state["finished_at"] = datetime.datetime.now().isoformat()
@@ -1114,9 +1164,14 @@ _weekly_running = {"v": False}
 
 
 def _market_pe_is_stale() -> bool:
+    # Gate on the last COMPLETE ATTEMPT, not only on the last published aggregate.
+    # A run that finishes and then fails its sanity checks writes no aggregate
+    # row, so gating on the aggregate alone read "never computed" and relaunched
+    # the entire yfinance universe sweep every 6h, indefinitely. A failed run now
+    # backs off for the normal weekly cadence like a successful one.
     try:
-        from market_pe import latest_computed_date  # noqa: PLC0415
-        d = latest_computed_date(str(DB_PATH))
+        from market_pe import last_attempt_date  # noqa: PLC0415
+        d = last_attempt_date(str(DB_PATH))
     except Exception as exc:  # noqa: BLE001
         log.warning("_market_pe_is_stale: staleness check failed, treating as stale: %s", exc)
         return True
@@ -1128,18 +1183,23 @@ def _market_pe_is_stale() -> bool:
         return True
 
 
-def _run_market_pe_once() -> None:
+def _run_market_pe_once() -> Optional[dict]:
+    """Run ONE batch of the market-PE walk. Returns the batch result (``complete``
+    says whether the universe is finished), or None if it could not run."""
     with _weekly_lock:
         if _weekly_running["v"]:
-            return
+            return None
         _weekly_running["v"] = True
     try:
         from market_pe import compute_market_pe_aggregate  # noqa: PLC0415
         res = compute_market_pe_aggregate(str(DB_PATH))
         log.info("weekly market-PE aggregate: %s", res)
-        invalidate_cache("econ")  # surface the fresh aggregate on next /api/economic
+        if isinstance(res, dict) and res.get("complete") and res.get("ok"):
+            invalidate_cache("econ")  # surface the fresh aggregate on next /api/economic
+        return res
     except Exception as e:  # noqa: BLE001
         log.warning("weekly market-PE aggregate failed: %s", e)
+        return None
     finally:
         with _weekly_lock:
             _weekly_running["v"] = False
@@ -1148,13 +1208,22 @@ def _run_market_pe_once() -> None:
 def _weekly_market_pe_loop() -> None:
     import time  # noqa: PLC0415
     time.sleep(20)  # don't block startup or hammer yfinance at boot
+    mid_run = False
     while True:
+        res = None
         try:
             if _market_pe_is_stale():
-                _run_market_pe_once()
+                res = _run_market_pe_once()
         except Exception as e:  # noqa: BLE001
             log.warning("weekly scheduler tick error: %s", e)
-        time.sleep(6 * 3600)  # re-check every 6h; the 7-day gate enforces weekly cadence
+        if isinstance(res, dict):
+            mid_run = (not res.get("complete")) and (res.get("remaining") or 0) > 0
+        # A None result mid-run (a batch that raised) keeps the short cadence so the
+        # walk resumes instead of idling for 6h with progress rows sitting on disk.
+        if mid_run:
+            time.sleep(15 * 60)  # mid-run: come back soon for the next batch
+        else:
+            time.sleep(6 * 3600)  # re-check every 6h; the 7-day gate enforces weekly cadence
 
 
 @app.on_event("startup")
@@ -1933,7 +2002,10 @@ def _extended_economic_metrics(start: str, end: str) -> list[dict[str, Any]]:
 # see the price/number trend in addition to the rate of change.
 
 @app.get("/api/economic")
-@limiter.limit("10/minute")
+# 30, not 10: the sector lens loads this alongside the Economic page's own
+# fetch, and the route is already cached six hours, so the extra headroom
+# costs nothing upstream.
+@limiter.limit("30/minute")
 @cached(ttl_seconds=6 * 3600, key_prefix="econ")
 def economic(request: Request) -> dict[str, Any]:
     # Pull a year of buffer so YoY can compute on the first MIN_YEAR observation
@@ -2447,7 +2519,8 @@ def _credit_bank_metrics(start: str, end: str) -> list[dict[str, Any]]:
 
 
 @app.get("/api/credit-banks")
-@limiter.limit("10/minute")
+# Matched to /api/economic: the sector lens loads the two together.
+@limiter.limit("30/minute")
 @cached(ttl_seconds=6 * 3600, key_prefix="econ")
 def credit_banks(request: Request) -> dict[str, Any]:
     start = f"{MIN_YEAR - 1}-01-01"
@@ -2508,6 +2581,50 @@ def sector_etf_endpoint(request: Request, sector: str = PathParam(pattern=GROUP_
     }
 
 
+# Ranking payloads live until the next daily update invalidates the "db" prefix.
+_RANKING_TTL_SECONDS = 24 * 60 * 60
+# Industries with at least this many primary filers get their default ranking
+# pre-built in the background, because a cold build takes longer than the
+# frontend's 30s fetch timeout (Biotechnology, 1,100+ filers, is the worst).
+_RANKING_WARM_MIN_COMPANIES = 500
+
+
+def _warm_large_rankings() -> None:
+    """Pre-build /api/comparative/{industry}/ranking (default filters) for the
+    largest industries, sequentially on a daemon thread. Runs after startup and
+    after every daily update, since both leave those entries cold."""
+    try:
+        big = [e["name"] for e in list_industries()
+               if int(e.get("companies") or 0) >= _RANKING_WARM_MIN_COMPANIES]
+    except Exception as e:  # noqa: BLE001 - a warm failure must never block anything
+        log.warning("ranking warm: industry list failed: %s", e)
+        return
+    for name in big:
+        t0 = time.time()
+        try:
+            _ranking_for_industry(name, False, None)
+            log.info("ranking warm: %s ready in %.1fs", name, time.time() - t0)
+        except Exception as e:  # noqa: BLE001
+            log.warning("ranking warm (%s) failed: %s", name, e)
+    log.info("ranking warm: %d large industries ready", len(big))
+
+
+def _start_daemon(fn: Callable[[], None], disable_env: str) -> None:
+    """Run one warm-up on a daemon thread, unless its env flag switches it off.
+
+    Three warms were three copies of this. The flag each one reads stays as it
+    was: the ranking warm is gated by DISABLE_BENCHMARK_WARM rather than a flag
+    of its own, so setting that one variable still switches off both.
+    """
+    if os.environ.get(disable_env) == "1":
+        return
+    threading.Thread(target=fn, daemon=True).start()
+
+
+def _start_ranking_warm() -> None:
+    _start_daemon(_warm_large_rankings, "DISABLE_BENCHMARK_WARM")
+
+
 def _warm_benchmark_matrices() -> None:
     """Pre-build the sector and industry matrices that back
     ``/api/individual/{ticker}/benchmarks``.
@@ -2539,13 +2656,65 @@ def _warm_benchmark_matrices() -> None:
         except Exception as e:  # noqa: BLE001
             log.warning("benchmark warm (industry/%s) failed: %s", name, e)
     log.info("benchmark warm: %d industry matrices ready", len(sectors))
+    # Same thread, after the matrices: the rankings are the slow tail and
+    # must not compete with the matrices for the interpreter.
+    _warm_large_rankings()
 
 
 @app.on_event("startup")
 def _start_benchmark_warm() -> None:
-    if os.environ.get("DISABLE_BENCHMARK_WARM") == "1":
-        return
-    threading.Thread(target=_warm_benchmark_matrices, daemon=True).start()
+    _start_daemon(_warm_benchmark_matrices, "DISABLE_BENCHMARK_WARM")
+
+
+def _warm_connections_cache() -> None:
+    """Pre-fill the connections sector_cache for the two heaviest sectors.
+
+    Technology (3700+ peers) and Financial Services (2100+ peers) dominate
+    cold-start latency; warming their panel + sector preload in a daemon
+    thread cuts the first user request from ~5 s to ~0.5 s.  Mirrors the
+    existing benchmark-matrix warm pattern.
+    """
+    time.sleep(5)  # let the benchmark warm start first
+    heavy = ["Technology", "Financial Services"]
+    from connections.sector_cache import preload_sector, get_industry_panel  # noqa: PLC0415
+    from industry_structure.ranks import build_cross_industry_medians  # noqa: PLC0415
+    warmed_years: set[int] = set()
+    for sector_name in heavy:
+        try:
+            with db_conn() as conn:
+                # Find the largest industry in this sector to warm its panel
+                rows = conn.execute(
+                    'SELECT industry, COUNT(*) AS n FROM tickers'
+                    f" WHERE sector = ? AND {named_group_sql('industry')}"
+                    ' GROUP BY industry ORDER BY n DESC LIMIT 3',
+                    (sector_name,),
+                ).fetchall()
+                for row in rows:
+                    panel = get_industry_panel(conn, row["industry"])
+                    if panel:
+                        preload_sector(conn, sector_name)
+                        warmed_years.add(panel.fiscal_year)
+                        log.info("connections warm: %s (%s) ready", sector_name, row["industry"])
+                        break
+        except Exception as e:  # noqa: BLE001 - never block startup
+            log.warning("connections warm (%s) failed: %s", sector_name, e)
+    # The cross-industry median table is the other cold cost of the first
+    # /structure: about 1.1 s, paid once per fiscal year in play. Its TTL is
+    # 60 minutes against the route cache's 30, so the two never expire out
+    # of phase and leave one request to rebuild it.
+    for year in sorted(warmed_years):
+        try:
+            with db_conn() as conn:
+                build_cross_industry_medians(conn, year)
+            log.info("connections warm: cross-industry medians %d ready", year)
+        except Exception as e:  # noqa: BLE001 - never block startup
+            log.warning("connections warm (ranks %s) failed: %s", year, e)
+    log.info("connections warm: heavy sectors done")
+
+
+@app.on_event("startup")
+def _start_connections_warm() -> None:
+    _start_daemon(_warm_connections_cache, "DISABLE_CONNECTIONS_WARM")
 
 
 @app.on_event("startup")
@@ -2569,9 +2738,9 @@ def _start_marketdata_scheduler() -> None:
 def list_industries() -> list[dict[str, Any]]:
     with db_conn() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT industry AS name, sector, COUNT(*) AS companies
-            FROM tickers WHERE industry IS NOT NULL
+            FROM tickers WHERE {named_group_sql('industry')}
             GROUP BY industry, sector
             """
         ).fetchall()
@@ -2587,9 +2756,44 @@ def list_industries() -> list[dict[str, Any]]:
         if r["sector"] is not None and companies > entry["_best"]:
             entry["_best"] = companies
             entry["sector"] = r["sector"]
-    out = [{"name": e["name"], "companies": e["companies"], "sector": e["sector"]} for e in agg.values()]
+    servable = _servable_industries()
+    out = [
+        {"name": e["name"], "companies": e["companies"], "sector": e["sector"]}
+        for e in agg.values() if e["name"] in servable
+    ]
     out.sort(key=lambda e: (-e["companies"], e["name"]))
     return out
+
+
+def _servable_industries() -> set[str]:
+    """Industries the /api/comparative/{industry} family can actually serve.
+
+    The list endpoint used to advertise every distinct tickers.industry, and
+    the frontend turned each one into a link. Sixteen of them 404'd on click:
+    industries whose only members are secondary listings (security_map
+    is_primary = 0, e.g. a Swiss name via its London line), industries with no
+    financials in the analysis window, an empty-string industry, and one name
+    containing '/' that can never match the path parameter. Mirror the peer-set
+    predicate the comparative queries use (primary listing, a year in window,
+    a USD-convertible market cap) so the menu and the endpoints agree.
+    """
+    with db_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT t.industry
+            FROM financials f JOIN tickers t ON t.ticker = f.Ticker
+            LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"
+            LEFT JOIN security_map s ON s.symbol = f.Ticker
+            WHERE {named_group_sql('t.industry')}
+              AND t.industry NOT LIKE '%/%'
+              AND COALESCE(s.is_primary, 1) = 1
+              AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
+              AND CAST(f."Calendar Year" AS INTEGER) >= ?
+              AND {_FX_SPOT_MC_SQL} IS NOT NULL
+            """,
+            (MIN_YEAR,),
+        ).fetchall()
+    return {r["industry"] for r in rows}
 
 
 @app.get("/api/sectors")
@@ -2597,9 +2801,9 @@ def list_industries() -> list[dict[str, Any]]:
 def list_sectors() -> list[dict[str, Any]]:
     with db_conn() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT sector AS name, COUNT(*) AS companies
-            FROM tickers WHERE sector IS NOT NULL
+            FROM tickers WHERE {named_group_sql('sector')}
             GROUP BY sector ORDER BY companies DESC, sector
             """
         ).fetchall()
@@ -2688,6 +2892,19 @@ _FX_WEIGHT_SQL = (
     "OR f.\"Reported Currency\" IS NULL THEN 1.0 ELSE NULL END)"
 )
 
+# Spot-only sibling of _FX_WEIGHT_SQL for the peer-ranking queries, which size
+# companies by their LATEST-year (spot) cap. Same currency contract: known
+# currency -> spot rate; USD or NULL currency -> 1.0; unknown currency -> NULL
+# (row drops out). ~1,865 tickers, mostly US OTC filers, carry a NULL Reported
+# Currency; a bare `* x.usd_per_unit` turned every one of them into a NULL cap,
+# and 48 industries made entirely of such filers 404'd on /api/comparative.
+# Requires `LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"`.
+_FX_SPOT_MC_SQL = (
+    'f."Market Cap" * COALESCE(x.usd_per_unit, '
+    "CASE WHEN f.\"Reported Currency\" = 'USD' "
+    "OR f.\"Reported Currency\" IS NULL THEN 1.0 ELSE NULL END)"
+)
+
 
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def _by_year_with_groups(group_col: str) -> dict[int, dict[str, dict[str, Any]]]:
@@ -2728,7 +2945,7 @@ def _by_year_with_groups(group_col: str) -> dict[int, dict[str, dict[str, Any]]]
           -- corrupt cap (one Wisesheets row carried 3.2e17) dominates a whole
           -- group-year. Bound the weight to (0, $100T-equivalent).
           AND f."Market Cap" > 0
-          AND {_FX_WEIGHT_SQL} < 1e14
+          AND {_FX_WEIGHT_SQL} < {MAX_MARKET_CAP_USD}
         GROUP BY t.{group_col}, yr
         ORDER BY yr, t.{group_col}
     """
@@ -3063,7 +3280,8 @@ def _group_excess_return(group_col: str) -> dict[str, dict[str, Any]]:
         f"SELECT f.Ticker, t.{group_col} AS grp, t.sector AS csec, {_cb_beta('t')}, "
         'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
         " FROM financials f JOIN tickers t ON t.ticker = f.Ticker" + _cb_join() +
-        f" WHERE t.{group_col} IS NOT NULL AND f.\"Reported Currency\" = 'USD'"
+        f" WHERE {named_group_sql(f't.{group_col}')}"
+        " AND f.\"Reported Currency\" = 'USD'"
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" >= ?"
     )
@@ -3524,6 +3742,19 @@ _SECTOR_MC_FLOOR = 1e9
 # USD-converted market cap (via _mc_to_usd) so a $100M bar means the same thing
 # in every currency — a local-currency SQL floor would compare apples to yen.
 _AVG_MC_FLOOR_USD = 1e8     # $100M, applied to FX-converted market cap
+
+
+def _usable_mc_weight(mc: float | None) -> bool:
+    """Whether an FX-converted market cap may act as a weight.
+
+    The floor keeps a shell company out of a sector average. The CEILING is
+    the same bound ``industry_averages``' SQL applies (``MAX_MARKET_CAP_USD``)
+    and the scorecard matrices had no equivalent, so rows such as BREN.JK at
+    $477 trillion and GMKN.ME at $255 trillion carried thousands of times the
+    weight of the largest real company and decided a whole sector's column.
+    A row above the bound is DROPPED, never clamped.
+    """
+    return mc is not None and _AVG_MC_FLOOR_USD <= mc < MAX_MARKET_CAP_USD
 # Fallback CAPM inputs for sector-level cost of equity, used ONLY when the live
 # implied ERP (get_live_wacc_params) is unavailable. Previously the sector page
 # hard-coded a 5.5% ERP that disagreed with the individual page's premium; both
@@ -3738,6 +3969,23 @@ class _RowWithMarketCap:
 
     def keys(self) -> Any:
         return self._row.keys()
+
+
+def _live_cap_in_row_currency(ticker: str, row: Any) -> float | None:
+    """Today's market cap for ``ticker``, expressed in ``row``'s reporting
+    currency, or None when it cannot be (so the caller keeps the stored cap).
+
+    yfinance prices the LISTING, so the quote is in the listing's currency: a
+    Taiwanese filer's US ADR quotes in USD against TWD statements. Dropping the
+    raw quote into the row made every cap-derived ratio on that column wrong by
+    the exchange rate, and `_mc_to_usd` then converted it a second time. This is
+    the request-time twin of the conversion the weekly sweep does on write."""
+    cap, quote_ccy = fetch_latest_market_cap_currency_yf(ticker)
+    if cap is None or fx_convert is None:
+        return None
+    keys = row.keys()
+    reporting_ccy = row["Reported Currency"] if "Reported Currency" in keys else None
+    return fx_convert.convert_amount(cap, quote_ccy, reporting_ccy, _fx_rates())
 
 
 def _sector_row_plausible(row: Any) -> bool:
@@ -4327,7 +4575,11 @@ def _aggregate_weighted_columns(
             for c in comps:
                 v = c.get(key)
                 mc = c.get("_mc")
-                if v is None or mc is None or mc <= 0 or not math.isfinite(v):
+                # The same (0, $100T) bound the callers gate on, repeated here so
+                # the weighting function is safe on its own: a corrupt cap that
+                # reached this loop would dominate the group's whole column.
+                if (v is None or mc is None or mc <= 0
+                        or mc >= MAX_MARKET_CAP_USD or not math.isfinite(v)):
                     continue
                 if lo_hi is not None:
                     v = max(lo_hi[0], min(lo_hi[1], v))
@@ -4382,7 +4634,7 @@ def _per_year_columns(
         for y, row in by_yr.items():
             cm = _company_metrics(row, by_yr.get(y - 1))
             mc = cm.get("_mc")
-            if mc is None or mc < _AVG_MC_FLOOR_USD:
+            if not _usable_mc_weight(mc):
                 continue
             per_year.setdefault(y, []).append(cm)
 
@@ -4512,7 +4764,7 @@ def _sector_current_metrics() -> dict[str, Any]:
         'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
         " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
         " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
-        " WHERE t.sector IS NOT NULL AND COALESCE(s.is_primary, 1) = 1"
+        f" WHERE {named_group_sql('t.sector')} AND COALESCE(s.is_primary, 1) = 1"
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
@@ -4550,7 +4802,7 @@ def _sector_current_metrics() -> dict[str, Any]:
         # Floor on the USD-converted cap so $100M means the same in every currency;
         # this also drops filers whose currency has no FX rate (cap → None).
         mc = cm.get("_mc")
-        if mc is None or mc < _AVG_MC_FLOOR_USD:
+        if not _usable_mc_weight(mc):
             continue
         s = latest["sec"]
         by_sector.setdefault(s, []).append(cm)
@@ -4593,7 +4845,7 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
         'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
         " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
         " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
-        " WHERE t.sector = ? AND t.industry IS NOT NULL AND COALESCE(s.is_primary, 1) = 1"
+        f" WHERE t.sector = ? AND {named_group_sql('t.industry')} AND COALESCE(s.is_primary, 1) = 1"
         " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
         " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ? AND f.\"Market Cap\" > 0"
     )
@@ -4626,7 +4878,7 @@ def _industry_metrics_for_sector(sector: str) -> dict[str, Any]:
         cm = _company_metrics(latest, prior)
         # Currency-neutral $100M floor on the FX-converted cap (drops no-FX filers).
         mc = cm.get("_mc")
-        if mc is None or mc < _AVG_MC_FLOOR_USD:
+        if not _usable_mc_weight(mc):
             continue
         cm.update(_lens_company_metrics(sector, latest, prior, rs))
         ind = latest["ind"]
@@ -4700,7 +4952,7 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
     with db_conn() as conn:
         sec_row = conn.execute(
             "SELECT sector, COUNT(*) AS n FROM tickers"
-            " WHERE industry = ? AND sector IS NOT NULL"
+            f" WHERE industry = ? AND {named_group_sql('sector')}"
             " GROUP BY sector ORDER BY n DESC LIMIT 1",
             (industry,),
         ).fetchone()
@@ -4741,7 +4993,7 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
         cm = _company_metrics(latest, prior)
         # Currency-neutral $100M floor on the FX-converted cap (drops no-FX filers).
         mc = cm.get("_mc")
-        if mc is None or mc < _AVG_MC_FLOOR_USD:
+        if not _usable_mc_weight(mc):
             continue
         if lens:
             cm.update(_lens_company_metrics(sector, latest, prior, rs))
@@ -4806,7 +5058,11 @@ def _industry_scorecard(industry: str) -> dict[str, Any]:
 
 
 @app.get("/api/industry/{industry}/scorecard")
-@limiter.limit("10/minute")
+# 30, not 10: the industry page fetches this once and the cross-stage AI block
+# gathers it again under the same client cache key, so a reader walking a few
+# industries inside one minute was hitting the limit on a route that is cached
+# server side anyway (finding M2).
+@limiter.limit("30/minute")
 def industry_scorecard_endpoint(request: Request, industry: str = PathParam(pattern=GROUP_PATTERN)) -> dict[str, Any]:
     return _industry_scorecard(urllib.parse.unquote(industry))
 
@@ -4846,7 +5102,7 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
         # /api/industries for industries that span more than one sector).
         sec_row = conn.execute(
             "SELECT sector, COUNT(*) AS n FROM tickers"
-            " WHERE industry = ? AND sector IS NOT NULL"
+            f" WHERE industry = ? AND {named_group_sql('sector')}"
             " GROUP BY sector ORDER BY n DESC LIMIT 1",
             (industry,),
         ).fetchone()
@@ -4858,8 +5114,9 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
         # corrupt old-year cap must not outrank today's leaders. USD filers
         # only — foreign filers carry local-currency magnitudes that would both
         # crowd out the real top names and be dropped by the USD filter below
-        # anyway. Preferred-share series (e.g. SPG-PJ) are excluded so a
-        # company can't appear twice.
+        # anyway. A NULL Reported Currency counts as USD (US OTC filers; same
+        # contract as _FX_WEIGHT_SQL / _FX_SPOT_MC_SQL). Preferred-share series
+        # (e.g. SPG-PJ) are excluded so a company can't appear twice.
         top_rows = conn.execute(
             """
             SELECT f.Ticker, f."Market Cap" AS mc,
@@ -4868,7 +5125,7 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
             LEFT JOIN security_map s ON s.symbol = f.Ticker
             WHERE t.industry = ?
               AND COALESCE(s.is_primary, 1) = 1
-              AND f."Reported Currency" = 'USD'
+              AND COALESCE(f."Reported Currency", 'USD') = 'USD'
               AND f.Ticker NOT GLOB '*-P[A-Z]'
               AND f."Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
               AND CAST(f."Calendar Year" AS INTEGER) >= ?
@@ -4889,7 +5146,7 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
             'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
             " FROM financials f JOIN tickers t ON t.ticker = f.Ticker" + _cb_join() +
             f" WHERE f.Ticker IN ({placeholders})"
-            " AND f.\"Reported Currency\" = 'USD'"
+            " AND COALESCE(f.\"Reported Currency\", 'USD') = 'USD'"
             " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
             " AND CAST(f.\"Calendar Year\" AS INTEGER) >= ?"
         )
@@ -4913,8 +5170,9 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
         # Most-recent market cap: yfinance first (this bounded top-N set is small
         # enough to quote live), the stored filing-date cap as fallback. Only the
         # latest row is overridden — the per-year history below keeps each year's
-        # own stored cap.
-        live_cap = fetch_latest_market_cap_yf(tk)
+        # own stored cap. The quote is converted into the row's reporting
+        # currency first; an unresolvable pair keeps the stored cap.
+        live_cap = _live_cap_in_row_currency(tk, latest)
         latest_eff = _RowWithMarketCap(latest, live_cap) if live_cap is not None else latest
         cm = _company_metrics(latest_eff, prior)
         if lens:
@@ -4982,7 +5240,7 @@ def _company_metrics_for_industry(industry: str, limit: int) -> dict[str, Any]:
 
 
 @app.get("/api/comparative/{industry}/company-metrics")
-@limiter.limit("6/minute")
+@limiter.limit("30/minute")
 def comparative_company_metrics_endpoint(
     request: Request,
     industry: str = PathParam(pattern=GROUP_PATTERN),
@@ -5173,9 +5431,13 @@ _PER_SHARE_DEFS: list[tuple[str, str, str, str, str]] = [
 ]
 
 
-@cached(ttl_seconds=30 * 60, key_prefix="db")
+@cached(ttl_seconds=_RANKING_TTL_SECONDS, key_prefix="db")
 def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None) -> dict[str, Any]:
-    """Per-Ticker Value Ranking as a SectorMetricsData payload (see header note)."""
+    """Per-Ticker Value Ranking as a SectorMetricsData payload (see header note).
+
+    Cached under the "db" prefix so the daily update drops it; a large industry
+    runs a reverse DCF per company (Semiconductors ~20s, Biotechnology ~40s),
+    so a repeat view must never redo it. See _warm_large_rankings."""
     window_start = MAX_YEAR - 4
     mc_floor = (min_mcap * 1e9) if (min_mcap is not None and min_mcap > 0) else None
     cur_clause = ""
@@ -5187,7 +5449,7 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
     with db_conn() as conn:
         sec_row = conn.execute(
             "SELECT sector, COUNT(*) AS n FROM tickers"
-            " WHERE industry = ? AND sector IS NOT NULL"
+            f" WHERE industry = ? AND {named_group_sql('sector')}"
             " GROUP BY sector ORDER BY n DESC LIMIT 1",
             (industry,),
         ).fetchone()
@@ -5198,9 +5460,10 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
         # Rank by USD-converted market cap so a ¥/₩/NT$ company isn't sized against a
         # $ company by raw number. Unknown/garbage currencies have no fx rate → mc is
         # NULL → dropped by `HAVING mc IS NOT NULL` (they can't be size-compared).
+        # NULL currency is treated as USD (see _FX_SPOT_MC_SQL), not dropped.
         # mc_floor is already a USD threshold, so it now compares like-for-like too.
         top_sql = (
-            'SELECT f.Ticker, f."Market Cap" * x.usd_per_unit AS mc,'
+            f'SELECT f.Ticker, {_FX_SPOT_MC_SQL} AS mc,'
             ' MAX(CAST(f."Calendar Year" AS INTEGER)) AS yr'
             " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
             ' LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"'
@@ -5249,6 +5512,11 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
         log.warning("[api] live WACC params failed for ranking %s: %s", industry, exc)
         macro = {"rf": None, "erp": None}
 
+    # Read once for the whole build. The snapshot builder would otherwise open a
+    # connection and re-read the same 45-row table for every one of the industry's
+    # companies, which measured 535 ms on a 561-company cold build.
+    fx_rates = _fx_rates()
+
     cmdata: dict[str, dict[str, Any]] = {}
     snaps: list[Any] = []
     for tk, rs in by_ticker.items():
@@ -5292,7 +5560,8 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
         if db is not None:
             try:
                 snap = build_comparative_snapshot(
-                    tk, rs, db=db, rf=macro.get("rf"), erp=macro.get("erp"), use_live_price=False
+                    tk, rs, db=db, rf=macro.get("rf"), erp=macro.get("erp"),
+                    use_live_price=False, rates=fx_rates,
                 )
             except Exception as exc:  # noqa: BLE001 — one bad ticker must not drop the table
                 log.warning("[api] ranking snapshot for %s failed: %s", tk, exc)
@@ -5359,15 +5628,41 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
     }
 
 
+def _without_cell_history(payload: dict[str, Any]) -> dict[str, Any]:
+    """The same ranking payload with every cell's per-year ``_history`` dropped.
+
+    A large industry's ranking is dominated by those arrays: Semiconductors is
+    561 rows times ~48 metrics, each metric carrying a list of year/value pairs,
+    so the full document runs to about ten megabytes while the values the table
+    actually prints are a fraction of that. A caller that never opens a cell
+    chart (the cross-stage AI block) asks for ``?history=0`` and gets the same
+    shape without them.
+
+    Returns a NEW dict: the payload it is handed is the ``@cached`` object that
+    every other caller shares, and mutating it would silently delete the
+    histories from the cached full form.
+    """
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return payload
+    light = {
+        ticker: ({k: v for k, v in col.items() if k != "_history"} if isinstance(col, dict) else col)
+        for ticker, col in data.items()
+    }
+    return {**payload, "data": light}
+
+
 @app.get("/api/comparative/{industry}/ranking")
-@limiter.limit("6/minute")
+@limiter.limit("30/minute")
 def comparative_ranking_endpoint(
     request: Request,
     industry: str = PathParam(pattern=GROUP_PATTERN),
     developed: bool = Query(default=False),
     min_mcap: float | None = Query(default=None, ge=0),
+    history: bool = Query(default=True),
 ) -> dict[str, Any]:
-    return _ranking_for_industry(urllib.parse.unquote(industry), developed, min_mcap)
+    payload = _ranking_for_industry(urllib.parse.unquote(industry), developed, min_mcap)
+    return payload if history else _without_cell_history(payload)
 
 
 # ── /api/comparative/{industry} ──────────────────────────────────────────────
@@ -5386,7 +5681,7 @@ _COMP_METRIC_DEFS: list[tuple[str, str, float | None, float | None]] = [
 
 
 @app.get("/api/comparative/{industry}")
-@limiter.limit("6/minute")
+@limiter.limit("30/minute")
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def comparative_endpoint(
     request: Request,
@@ -5402,8 +5697,8 @@ def comparative_endpoint(
         # the value from the row holding MAX(year). Matches the latest-year
         # selection used by the ranking + company-metrics queries.
         top_rows = conn.execute(
-            """
-            SELECT f.Ticker, f."Market Cap" * x.usd_per_unit AS mc,
+            f"""
+            SELECT f.Ticker, {_FX_SPOT_MC_SQL} AS mc,
                    MAX(CAST(f."Calendar Year" AS INTEGER)) AS yr
             FROM financials f JOIN tickers t ON t.ticker = f.Ticker
             LEFT JOIN fx_rates x ON x.currency = f."Reported Currency"
@@ -5605,16 +5900,27 @@ def _valuation_block(snap: Any) -> dict[str, Any]:
             "impliedPrice": snap.implied_price,
             "marginOfSafety": snap.margin_of_safety,
             "fcfGrowthUsed": snap.avg_fcf_growth,
+            "priceComparison": getattr(snap, "price_comparison", None),
             "wacc": DCF_WACC,
             "terminalGrowth": DCF_TERMINAL_GROWTH,
             "projectionYears": DCF_PROJECTION_YEARS,
         }
     fc = snap.forecast if isinstance(getattr(snap, "forecast", None), dict) else None
+    pc = getattr(snap, "price_comparison", None)
+    # Belt and braces. The snapshot already leaves these empty when the quote
+    # and the model value are different kinds of number (a receipt's US dollar
+    # price against a per-ordinary-share value in the filer's own currency),
+    # but this block is the one the page reads for its headline, so it refuses
+    # the comparison here too rather than trusting a caller upstream.
+    comparable = not (isinstance(pc, dict) and pc.get("applicable") is False)
     base = {
         "dcfIntrinsicPerShare": snap.dcf_intrinsic,
-        "impliedPrice": snap.implied_price,
-        "marginOfSafety": snap.margin_of_safety,
+        "impliedPrice": snap.implied_price if comparable else None,
+        "marginOfSafety": snap.margin_of_safety if comparable else None,
         "fcfGrowthUsed": snap.avg_fcf_growth,
+        # The currencies the two figures are in, and why they could not be
+        # compared when that is the case. Always present.
+        "priceComparison": pc,
     }
     if not fc or fc.get("applicable") is False:
         # Financials: the dividend model carries the headline (JP Morgan rule).
@@ -5697,6 +6003,12 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         # here is the CHOSEN MODEL'S actual value (the old block echoed module
         # constants — a 10% WACC and 3% terminal that the model never used).
         "valuation": _valuation_block(snap),
+        # Whether the market quote and the model's per-ordinary-share value are
+        # the same kind of number, plus both currencies. The page reads this to
+        # decide between printing a margin of safety and saying why there is
+        # none, and the AI block reads the quote currency off it rather than
+        # making its own /api/quote call.
+        "priceComparison": snap.price_comparison,
         # Horizontal analysis — {metric: {year: yoy_pct_decimal}}
         "horizontal": {
             "income": {m: {str(y): v for y, v in d.items() if v is not None}
@@ -5776,6 +6088,12 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         # Uses of cash: what each year's operating cash flow was spent on. Net
         # borrowing and net divestitures ride in `sources`, never in `uses`.
         "usesOfCash": snap.uses_of_cash,
+        # Business profile (plan 3.1): yfinance description, segments, 10-K extract
+        "businessProfile": snap.business_profile,
+        # Cost structure vs strategic group (plan 3.2)
+        "costStructure": snap.cost_structure,
+        # Generic competitive strategy with industry ranks (plan 3.3)
+        "genericStrategy": snap.generic_strategy,
         # Verdict
         "verdict": {
             "qualityScore": snap.quality_score,
@@ -5921,7 +6239,11 @@ def individual_benchmarks_endpoint(request: Request,
 
 
 @app.get("/api/individual/{ticker}")
-@limiter.limit("10/minute")
+# 30, not 10: the company page and the cross-stage AI block both read this
+# route, and a 429 here used to reach the reader as the simulated-data banner.
+# The response is cached for thirty minutes, so the extra allowance costs
+# nothing (finding M2).
+@limiter.limit("30/minute")
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
     # Phase 2: fold an alias (GS-PA, BRK.B, MS-PO, GOOGL) onto its primary listing
@@ -6189,22 +6511,59 @@ def _symbol_aliases() -> dict[str, str] | None:
     return _symbol_alias_map
 
 
-def _resolve_symbol_core(symbol: str, alias_map: dict[str, str] | None) -> str:
-    """PURE symbol resolution (unit-tested). Uppercase + dot->dash normalize, then
-    map an alias to its primary via alias_map. A None map (table absent) or a
-    symbol that is not an alias returns the normalized input unchanged."""
-    normalized = (symbol or "").strip().upper().replace(".", "-")
+def _resolve_symbol_core(
+    symbol: str,
+    alias_map: dict[str, str] | None,
+    known: "set[str] | frozenset[str] | None" = None,
+) -> str:
+    """PURE symbol resolution (unit-tested). Uppercase, then dot->dash normalize
+    UNLESS the dotted form is itself a known DB symbol, then map an alias to its
+    primary via alias_map. A None map (table absent) or a symbol that is not an
+    alias returns the normalized input unchanged.
+
+    The dot->dash step exists for US share classes (BRK.B is stored as BRK-B).
+    Exchange-suffixed listings keep their dot (LAR0.DE, 005930.KS, 6971.T:
+    24.5k tickers with financials), so an unconditional replace sent every one
+    of them to a symbol that does not exist and the individual page 404'd on
+    companies the comparative pages were happily ranking. ``known`` is the set
+    of DB tickers; when it is None (tests, table probe failed) the old
+    behaviour applies."""
+    upper = (symbol or "").strip().upper()
+    normalized = upper if (known and upper in known) else upper.replace(".", "-")
     if not alias_map:
         return normalized
-    return alias_map.get(normalized, normalized)
+    return alias_map.get(upper, alias_map.get(normalized, normalized))
 
 
 def _resolve_symbol(symbol: str) -> str:
     """Fold an alias symbol onto its primary listing (GS-PA -> GS, BRK.B -> BRK-A).
-    Cheap: reads the process-cached alias map. Falls back to the normalized input
-    when security_map is absent or the symbol is not an alias. The cache is process
-    -lifetime — restart the backend to pick up a rebuilt security_map."""
-    return _resolve_symbol_core(symbol, _symbol_aliases())
+    Cheap: reads the process-cached alias map and known-symbol set. Falls back
+    to the normalized input when security_map is absent or the symbol is not an
+    alias. Both caches are process-lifetime — restart the backend to pick up a
+    rebuilt security_map or newly ingested tickers."""
+    return _resolve_symbol_core(symbol, _symbol_aliases(), _known_symbols())
+
+
+_known_symbol_set: frozenset[str] | None = None
+_known_symbol_loaded = False
+
+
+def _known_symbols() -> frozenset[str] | None:
+    """Process-cached uppercase set of tickers.ticker. Best-effort: any DB error
+    caches None, which makes resolution fall back to unconditional dot->dash."""
+    global _known_symbol_set, _known_symbol_loaded
+    if not _known_symbol_loaded:
+        with _symbol_alias_lock:
+            if not _known_symbol_loaded:
+                try:
+                    with db_conn() as conn:
+                        rows = conn.execute("SELECT ticker FROM tickers").fetchall()
+                    _known_symbol_set = frozenset(
+                        str(r["ticker"]).strip().upper() for r in rows if r["ticker"])
+                except (sqlite3.OperationalError, sqlite3.DatabaseError, HTTPException):
+                    _known_symbol_set = None
+                _known_symbol_loaded = True
+    return _known_symbol_set
 
 
 # ── Ticker search ────────────────────────────────────────────────────────────
@@ -6303,6 +6662,231 @@ def beta_endpoint(
     return out
 
 
+# ── Connections endpoint ───────────────────────────────────────────────────────
+
+def _ticker_group(conn, tk: str) -> tuple[str | None, str | None, Any]:
+    """``(sector, industry, peer set)`` for one ticker.
+
+    The two company-profile routes below opened with the same six lines. The
+    peer set comes from the shared 30-minute cache, whose one implementation
+    lives in ``company_profile/common.py`` and is also what
+    ``individualanalysis`` calls: a reader looking at the page and at these two
+    routes sees ONE peer set, one fiscal year, and one set of strategic-group
+    labels.
+
+    ``industry`` comes back None when the warehouse has no industry for the
+    ticker, and the caller answers with its own not-applicable line.
+    """
+    meta = conn.execute(
+        "SELECT sector, industry FROM tickers WHERE UPPER(ticker) = ?", (tk,),
+    ).fetchone()
+    if not meta or not meta["industry"]:
+        return None, None, None
+    from company_profile.common import industry_peer_set  # noqa: PLC0415
+    return meta["sector"], meta["industry"], industry_peer_set(conn, meta["industry"])
+
+
+def _guarded_block(what: str, tk: str, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """One cached payload, answered as a not-applicable line rather than a 500
+    when it raises. A broken block must not take the page down with it."""
+    try:
+        return build()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[api] %s for %s failed: %s", what, tk, exc)
+        return {"applicable": False, "reason": str(exc)}
+
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _rivals_payload(tk: str, rival_key: tuple[str, ...]) -> dict[str, Any]:
+    """Cached body of the rivals route.
+
+    ``rival_key`` is the SORTED tuple of resolved rival tickers, so ``A,B``
+    and ``B,A`` are one cache entry rather than two, and the capability rows
+    come back in a stable order. The company itself is always first in the
+    table regardless."""
+    with db_conn() as conn:
+        sector, industry, now_peers = _ticker_group(conn, tk)
+        if industry is None:
+            return {"applicable": False, "reason": "Ticker not found"}
+        if now_peers is None:
+            return {"applicable": False, "reason": "No peer data available"}
+        from company_profile.rivals import get_rival_capabilities, list_group_rivals
+        if rival_key:
+            return get_rival_capabilities(conn, tk, list(rival_key), now_peers, sector)
+        return {
+            "applicable": True,
+            "ticker": tk,
+            "industry": industry,
+            "sector": sector,
+            "fiscalYear": now_peers.fiscal_year,
+            "peerCount": len(now_peers.peers),
+            "groupRivals": list_group_rivals(tk, now_peers, sector),
+        }
+
+
+@app.get("/api/individual/{ticker}/rivals")
+@limiter.limit("10/minute")
+def individual_rivals_endpoint(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+    rivals: str = Query(default="", max_length=60),
+) -> dict[str, Any]:
+    """Capability table for the company + up to three rivals (plan 3.4)."""
+    tk = _resolve_symbol(ticker)
+    # Every rival goes through _resolve_symbol too: a reader typing BRK.B must
+    # match the primary listing that carries the financials, exactly as the
+    # company ticker does.
+    rival_list = sorted({
+        _resolve_symbol(r.strip()) for r in rivals.split(",") if r.strip()
+    } - {tk})
+    return _guarded_block("rivals", tk, lambda: _rivals_payload(tk, tuple(rival_list)))
+
+
+# How many of the industry's companies the spread table ranks against. Every
+# one of them costs a _company_metrics run and (inside
+# _company_metrics_for_industry) one live market-cap quote, so it is bounded
+# and reported back as `peerCount` rather than implied to be the whole
+# industry. 20 is the ceiling the comparative endpoint already uses.
+SPREADS_PEER_LIMIT = 20
+
+
+def _spread_peer_columns(industry: str) -> dict[str, dict[str, Any]]:
+    """{ticker: {individual_metric_key: display value}} for the industry.
+
+    Re-keys the SAME per-company matrix columns the comparative scorecard and
+    the benchmarks sidebar are built from, so every number in the spread table
+    is produced by one function, ``_company_metrics``, in DISPLAY units
+    (percents already x100). Nothing here rescales anything."""
+    cm = _company_metrics_for_industry(industry, SPREADS_PEER_LIMIT)
+    out: dict[str, dict[str, Any]] = {}
+    for tk, col in (cm.get("data") or {}).items():
+        out[str(tk).upper()] = {
+            ind_key: col.get(mx_key) for ind_key, mx_key in _BENCHMARK_KEY_MAP.items()
+        }
+    return out
+
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _spreads_payload(tk: str) -> dict[str, Any]:
+    """Cached body of the spread table (plan 5.2)."""
+    with db_conn() as conn:
+        sector, industry, now_peers = _ticker_group(conn, tk)
+        if industry is None:
+            return {"applicable": False, "reason": "Ticker not found"}
+
+    peer_values = _spread_peer_columns(industry)
+    # The company's own column, computed by the same _company_metrics path.
+    # It is added explicitly because _company_metrics_for_industry takes the
+    # top N by market cap and hard-filters to USD filers, so a smaller company
+    # or a foreign filer (TSM reports in TWD) would otherwise be absent from
+    # the set it is ranked in, and its rank would be null.
+    company_col = _company_benchmark_metrics(tk)
+    peer_values[tk] = {
+        ind_key: company_col.get(mx_key)
+        for ind_key, mx_key in _BENCHMARK_KEY_MAP.items()
+    }
+    if len(peer_values) <= 1:
+        return {"applicable": False, "reason": "No peer data available"}
+
+    # Group membership comes from the industry_structure peer set, the same
+    # median split cost structure and the connections bundle use.
+    group_label: str | None = None
+    group_members: set[str] = set()
+    fiscal_year: int | None = None
+    if now_peers is not None:
+        from company_profile.common import company_groups
+        fiscal_year = now_peers.fiscal_year
+        groups = company_groups(now_peers, sector)
+        group_label = groups.get(tk)
+        if group_label is not None:
+            group_members = {
+                t.upper() for t, g in groups.items() if g == group_label
+            }
+
+    industry_col: dict[str, Any] = {}
+    sector_col: dict[str, Any] = {}
+    try:
+        matrix = _industry_metrics_for_sector(sector)
+        industry_col = (matrix.get("data") or {}).get(industry) or {}
+    except Exception as exc:  # noqa: BLE001 — a missing lens must not 500
+        log.warning("[api] spreads industry column for %s failed: %s", tk, exc)
+    try:
+        smatrix = _sector_current_metrics()
+        sector_col = (smatrix.get("data") or {}).get(sector) or {}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[api] spreads sector column for %s failed: %s", tk, exc)
+
+    defs = {k: (lbl, unit) for k, lbl, unit, _grp, _d in _SECTOR_METRIC_DEFS}
+    labels: dict[str, str] = {}
+    units: dict[str, str | None] = {}
+    industry_weighted: dict[str, Any] = {}
+    sector_weighted: dict[str, Any] = {}
+    for ind_key, mx_key in _BENCHMARK_KEY_MAP.items():
+        if mx_key not in defs:
+            continue
+        labels[ind_key], units[ind_key] = defs[mx_key]
+        industry_weighted[ind_key] = _bench_num(industry_col, mx_key)
+        sector_weighted[ind_key] = _bench_num(sector_col, mx_key)
+
+    from company_profile.spreads import build_spread_table
+    return build_spread_table(
+        tk, peer_values, group_members, labels, units,
+        industry_weighted=industry_weighted,
+        sector_weighted=sector_weighted,
+        group_label=group_label,
+        industry=industry,
+        sector=sector,
+        fiscal_year=fiscal_year,
+    )
+
+
+@app.get("/api/individual/{ticker}/spreads")
+@limiter.limit("10/minute")
+def individual_spreads_endpoint(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+) -> dict[str, Any]:
+    """Benchmark spread table with company/industry/group medians (plan 5.2)."""
+    tk = _resolve_symbol(ticker)
+    return _guarded_block("spreads", tk, lambda: _spreads_payload(tk))
+
+
+@app.get("/api/connections")
+# 60/minute, matching the other read-only cached routes every stage page hits
+# on load (/api/quote, /api/quotes, /api/tickers/search). At 10 a reader who
+# opens four stage pages in a minute is throttled, and a cache HIT still
+# spends a token.
+@limiter.limit("60/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def connections_endpoint(
+    request: Request,
+    sector: str | None = Query(default=None, max_length=80),
+    industry: str | None = Query(default=None, max_length=80),
+    ticker: str | None = Query(default=None, max_length=12),
+    scope: str | None = Query(default=None, max_length=16),
+) -> dict[str, Any]:
+    """Connection layer: economy, credit, sector, industry, company, exposures.
+
+    ``scope=economy`` returns only the economy and credit blocks, for the
+    pages that need the macro lines without an industry.
+    """
+    if scope is not None and scope != "economy":
+        raise HTTPException(400, "scope must be 'economy'")
+    if scope != "economy" and not sector and not industry and not ticker:
+        raise HTTPException(400, "At least one of scope, sector, industry, or ticker is required")
+    if ticker:
+        ticker = _resolve_symbol(ticker)
+    from connections.bundle import build_connections as _build_conn
+    with db_conn() as conn:
+        return _build_conn(
+            conn,
+            scope=scope,
+            sector=urllib.parse.unquote(sector) if sector else None,
+            industry=urllib.parse.unquote(industry) if industry else None,
+            ticker=ticker,
+        )
+
+
 # ── FX rates + batch quotes (stock simulator) ────────────────────────────────
 
 @app.get("/api/fx-rates")
@@ -6349,3 +6933,114 @@ def quotes_batch_endpoint(request: Request, tickers: str = Query(default="", max
         log.error("batch quote: all %d symbols failed (%s)",
                   len(failed), ", ".join(failed[:5]))
     return out
+
+
+# ── Industry structure endpoints ──────────────────────────────────────────────
+
+@app.get("/api/industry/{industry}/structure")
+# 60/minute, matching /api/quote and /api/tickers/search: read-only, cached
+# for 30 minutes, and called on every Industry page load (finding M4).
+@limiter.limit("60/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def industry_structure_endpoint(
+    request: Request,
+    industry: str = PathParam(pattern=GROUP_PATTERN),
+) -> dict[str, Any]:
+    """Full industry structure: concentration, entry/exit/rivalry evidence,
+    share stability, evolution, environment indicators."""
+    industry = urllib.parse.unquote(industry)
+    from industry_structure.structure import build_industry_structure
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM tickers WHERE industry = ? LIMIT 1", (industry,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, f"industry '{industry}' not found")
+        return build_industry_structure(conn, industry)
+
+
+@app.get("/api/industry/{industry}/group-map")
+@limiter.limit("60/minute")  # finding M4, as above
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def group_map_endpoint(
+    request: Request,
+    industry: str = PathParam(pattern=GROUP_PATTERN),
+    x: str = Query(default="", max_length=60),
+    y: str = Query(default="", max_length=60),
+    limit: int = Query(SG_DEFAULT_LIMIT, ge=8, le=100),
+) -> dict[str, Any]:
+    """Porter strategic groups with proper axes, quadrants, ROIC, and
+    share-return curve. Separate from the legacy strategic-groups endpoint."""
+    industry = urllib.parse.unquote(industry)
+    from industry_structure.groups import build_strategic_groups, build_share_return
+    from connections.sector_cache import get_industry_panel
+    from industry_structure.dimensions import AXIS_REGISTRY
+    x_key = x if x else None
+    y_key = y if y else None
+    if x_key and x_key not in AXIS_REGISTRY:
+        raise HTTPException(400, f"unknown axis key: {x_key}")
+    if y_key and y_key not in AXIS_REGISTRY:
+        raise HTTPException(400, f"unknown axis key: {y_key}")
+    if x_key and y_key and x_key == y_key:
+        raise HTTPException(400, "x and y axes must differ")
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM tickers WHERE industry = ? LIMIT 1", (industry,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, f"industry '{industry}' not found")
+        panel = get_industry_panel(conn, industry)  # finding M1: shared panel
+        result = build_strategic_groups(
+            conn, industry,
+            x_key=x_key,
+            y_key=y_key,
+            limit=limit,
+            panel=panel,
+        )
+        result["shareReturn"] = build_share_return(conn, industry, panel=panel)
+        result["limitOptions"] = list(SG_LIMITS)
+        return result
+
+
+@app.get("/api/industry/{industry}/value-system")
+@limiter.limit("60/minute")  # finding M4, as above
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def value_system_endpoint(
+    request: Request,
+    industry: str = PathParam(pattern=GROUP_PATTERN),
+    supplier: str = Query(default="", max_length=80),
+    buyer: str = Query(default="", max_length=80),
+) -> dict[str, Any]:
+    """Value system: focal industry vs optional supplier/buyer."""
+    industry = urllib.parse.unquote(industry)
+    from industry_structure.value_system import build_value_system
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM tickers WHERE industry = ? LIMIT 1", (industry,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, f"industry '{industry}' not found")
+        return build_value_system(
+            conn, industry,
+            supplier=urllib.parse.unquote(supplier) if supplier else None,
+            buyer=urllib.parse.unquote(buyer) if buyer else None,
+        )
+
+
+@app.get("/api/sector/{sector}/profit-pool")
+@limiter.limit("60/minute")  # finding M4, as above
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def profit_pool_endpoint(
+    request: Request,
+    sector: str = PathParam(pattern=GROUP_PATTERN),
+) -> dict[str, Any]:
+    """Sector profit pool: per-industry revenue/profit shares."""
+    sector = urllib.parse.unquote(sector)
+    from industry_structure.profit_pool import build_profit_pool
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM tickers WHERE sector = ? LIMIT 1", (sector,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, f"sector '{sector}' not found")
+        return build_profit_pool(conn, sector)

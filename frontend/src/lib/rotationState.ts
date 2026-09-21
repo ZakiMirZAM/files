@@ -4,6 +4,7 @@
 // helper what the user's own matrix currently says.
 
 import {
+  ECON_LINK,
   METRICS,
   SECTORS,
   clampWeight,
@@ -71,4 +72,38 @@ export function currentRotationRanking(): SectorTotal[] | null {
     ? scoreMatrixNormalized(dirs, weights)
     : scoreMatrix(dirs, weights);
   return totals.length === SECTORS.length ? totals : null;
+}
+
+/**
+ * Write one metric row's reading into the matrix's persisted state.
+ *
+ * The Sector Rotation page holds the same map in component state and mirrors it
+ * here on every change, so it calls this too: one writer, one shape, one place
+ * to look when a reading set somewhere else does not show up on the matrix.
+ * Returns the stored map so a caller can hand it straight to setState.
+ */
+export function setRotationDirection(
+  metricId: string,
+  reading: Reading,
+): Record<string, Reading> {
+  const next = { ...loadRotationDirections(), [metricId]: reading };
+  saveRotationDirections(next);
+  return next;
+}
+
+/** Persist the whole directions map. The page's own effect calls this. */
+export function saveRotationDirections(directions: Record<string, Reading>): void {
+  try {
+    localStorage.setItem(ROTATION_DIRECTIONS_KEY, JSON.stringify(directions));
+  } catch {
+    // A browser with storage blocked keeps the matrix for this visit only.
+  }
+}
+
+/** The matrix rows that carry a given economic definition number. */
+export function rotationRowsForEconomic(econNumber: number): { id: string; name: string }[] {
+  return METRICS.filter((m) => ECON_LINK[m.id] === econNumber).map((m) => ({
+    id: m.id,
+    name: m.name,
+  }));
 }

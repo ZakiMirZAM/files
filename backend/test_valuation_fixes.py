@@ -9,6 +9,8 @@ Run:  cd backend && python -m pytest test_valuation_fixes.py -q
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
 
@@ -455,13 +457,141 @@ def test_tobins_q_ratio_and_trend():
 
 
 def test_owner_earnings_formula_and_proxy():
+    # One row means no prior year, so maintenance capex falls back to the D&A proxy.
     out = ia._owner_earnings([_LATEST])
     assert out["applicable"]
+    assert out["maintenanceCapexMethod"] == "dda_proxy_insufficient"
     # OE = NI + D&A − maint(=D&A) + ΔWC = 15e9 − 1e9 = 14e9
     assert abs(out["ownerEarnings"] - 14e9) < 1.0
     assert out["maintenanceCapexProxy"] == 5e9
     assert abs(out["growthCapex"] - 3e9) < 1.0        # |−8e9| − 5e9
     assert out["lookThroughFlag"] is False             # 0.5/19 < 10%
+
+
+def test_owner_earnings_greenwald_uses_prior_years():
+    prior = dict(_LATEST, **{"Calendar Year": 2023, "Revenue": 90e9,
+                             "Property Plant Equipment Net": 45e9})
+    latest = dict(_LATEST, **{"Property Plant Equipment Net": 50e9})
+    out = ia._owner_earnings([prior, latest])
+    assert out["applicable"]
+    assert out["maintenanceCapexMethod"] == "greenwald"
+    # PP&E/sales over the prior rows = 45e9/90e9 = 0.50
+    # growth capex = 0.50 * (100e9 − 90e9) = 5e9
+    # maint = |−8e9| − 5e9 = 3e9
+    assert abs(out["maintenanceCapexProxy"] - 3e9) < 1.0
+    # OE = 15e9 + 5e9 − 3e9 − 1e9 = 16e9
+    assert abs(out["ownerEarnings"] - 16e9) < 1.0
+    assert abs(out["growthCapex"] - 5e9) < 1.0        # |−8e9| − 3e9
+
+
+def test_maintenance_capex_keeps_the_greenwald_estimate_for_a_shrinking_firm():
+    """A firm whose revenue fell subtracted NO growth capex, so the estimate is
+    already the whole of capex and the D&A floor has nothing to protect against.
+    PSTV's upkeep is its full 67,000 of capex; the floor was publishing D&A of
+    445,000 instead, nearly seven times too much."""
+    prior = dict(_LATEST, **{"Calendar Year": 2023, "Revenue": 120e9,
+                             "Property Plant Equipment Net": 60e9,
+                             "Capital Expenditure": -9e9})
+    # Revenue shrinks 120e9 → 100e9; capex 1e9 is far under 0.25 × D&A (1.25e9).
+    latest = dict(_LATEST, **{"Capital Expenditure": -1e9,
+                              "Property Plant Equipment Net": 50e9})
+    maint, method = ia._maintenance_capex([prior, latest], 1)
+    assert method == "greenwald"
+    assert abs(maint - 1e9) < 1.0
+
+
+def test_maintenance_capex_floor_still_catches_a_fast_grower():
+    """The floor exists for the opposite case: growth so fast that the estimate
+    charges almost no upkeep at all."""
+    prior = dict(_LATEST, **{"Calendar Year": 2023, "Revenue": 50e9,
+                             "Property Plant Equipment Net": 25e9})
+    latest = dict(_LATEST, **{"Property Plant Equipment Net": 50e9})
+    # PP&E/sales = 0.50; growth capex = 0.50 × (100e9 − 50e9) = 25e9 > |capex|,
+    # so maint clamps to 0, under 0.25 × 5e9.
+    maint, method = ia._maintenance_capex([prior, latest], 1)
+    assert method == "dda_proxy_floor"
+    assert maint == 5e9
+
+
+def test_maintenance_capex_falls_back_across_a_year_gap():
+    """A missing fiscal year turns a multi-year revenue change into one year of
+    growth capex, which silently overstates it."""
+    prior = dict(_LATEST, **{"Calendar Year": 2020, "Revenue": 90e9,
+                             "Property Plant Equipment Net": 45e9})
+    latest = dict(_LATEST, **{"Calendar Year": 2024,
+                              "Property Plant Equipment Net": 50e9})
+    maint, method = ia._maintenance_capex([prior, latest], 1)
+    assert method == "dda_proxy_insufficient"
+    assert maint == 5e9
+
+
+def test_owner_earnings_never_publishes_negative_growth_capex():
+    """On the D&A fallback the proxy can exceed actual capex, which would print a
+    negative 'growth' figure. It clamps at zero and the split stays honest."""
+    rows = [dict(_LATEST, **{"Capital Expenditure": -1e9})]
+    out = ia._owner_earnings(rows)
+    assert out["maintenanceCapexMethod"] == "dda_proxy_insufficient"
+    assert out["growthCapex"] == 0.0
+    # The identity stays true in both directions, with the gap named rather than
+    # buried: capex + underInvestment = maintenance + growth.
+    assert out["underInvestment"] == pytest.approx(4e9)
+    assert (out["capitalExpenditure"] + out["underInvestment"]
+            == pytest.approx(out["maintenanceCapexProxy"] + out["growthCapex"]))
+
+
+# ── Display multiples: stored-vs-computed selection and sanity bands ─────────
+
+
+def _mrow(**kw):
+    base = {"Reported Currency": "USD", "Market Cap": 300e9, "Revenue": 100e9,
+            "Operating Cash Flow": 30e9, "Free Cash Flow": 12e9}
+    base.update(kw)
+    return base
+
+
+def test_price_multiple_prefers_the_computed_ratio_for_a_usd_filer():
+    """Market Cap is refreshed to spot weekly while the stored ratio is frozen at
+    the fiscal-year pull (AAPL stored 9.18 against a computed 10.73)."""
+    row = _mrow(**{"Price To Sales Ratio": 2.0})
+    assert ia._price_multiple(row, "Price To Sales Ratio", 300e9, 100e9) == pytest.approx(3.0)
+
+
+def test_price_multiple_keeps_the_stored_ratio_for_a_non_usd_filer():
+    """For some foreign filers the stored Market Cap is on a different basis than
+    Revenue: TSM computes 0.58 against a stored P/S of 10.55."""
+    row = _mrow(**{"Reported Currency": "TWD", "Price To Sales Ratio": 10.55})
+    assert ia._price_multiple(row, "Price To Sales Ratio", 300e9, 100e9) == pytest.approx(10.55)
+
+
+def test_price_multiple_keeps_the_stored_ratio_when_the_two_diverge():
+    row = _mrow(**{"Price To Sales Ratio": 0.5})   # computed 3.0 is 6x the stored
+    assert ia._price_multiple(row, "Price To Sales Ratio", 300e9, 100e9) == pytest.approx(0.5)
+
+
+def test_price_multiple_treats_a_stored_zero_as_missing_but_does_not_guess():
+    """19,031 rows store a P/S of exactly 0. That is missing data, not a free
+    company, and it must not fall through to a computed value built from inputs
+    that may not share a basis."""
+    row = _mrow(**{"Reported Currency": "JPY", "Price To Sales Ratio": 0.0})
+    assert ia._price_multiple(row, "Price To Sales Ratio", 300e9, 100e9) is None
+
+
+def test_price_multiple_rejects_non_positive_and_absurd_values():
+    neg = _mrow(**{"Operating Cash Flow": -30e9, "POCF Ratio": -5.0})
+    assert ia._price_multiple(neg, "POCF Ratio", 300e9, -30e9) is None
+    absurd = _mrow(**{"Operating Cash Flow": 1e3, "POCF Ratio": 0.0})
+    assert ia._price_multiple(absurd, "POCF Ratio", 300e9, 1e3) is None
+
+
+def test_sga_revenue_outside_a_sane_band_is_dropped():
+    """The stored column holds 14,449 rows above 1.0 and a maximum of 7.96e7; at
+    the '%' display unit a stored 1,515 prints as 151,500 percent."""
+    rows = [dict(_LATEST, **{"Sales General And Administrative To Revenue": v})
+            for v in (0.0663, 1.5, 2.5, -0.4, 1515.0)]
+    got = [ia._compute_one_metric(r, None, None)["sga_revenue"] for r in rows]
+    assert got[0] == pytest.approx(0.0663)
+    assert got[1] == pytest.approx(1.5)     # inside the band: real for a loss-maker
+    assert got[2] is None and got[3] is None and got[4] is None
 
 
 # ── Industry life-cycle classifier + strategic groups (Phase 3) ──────────────
@@ -586,3 +716,99 @@ def test_capital_base_negative_tangible_ic_voids_tangible_metrics():
     assert out["tangibleInvestedCapital"] == -3e9
     assert out["roicTangible"] is None
     assert out["evaTangible"] is None
+
+
+# ── Financial-sector guard on the credit block ───────────────────────────────
+#
+# JPM's FY2025 row: EBIT 72.6bn against interest expense 97.9bn, because a
+# bank's interest expense is what it pays for deposits, not a fixed charge out
+# of operating income. That gives 0.74x "coverage", which the Damodaran
+# synthetic-rating table maps to Caa/CCC with a 10 percent default spread, and
+# the letter then supplied half the composite credit score and tripped the
+# sub-1x hard cap at 35. The reading is an artifact of running a manufacturer's
+# table over a lender.
+
+def _bank_rows(sector="Financial Services", industry="Banks - Diversified"):
+    """One JPM-shaped year. Figures are JPM's FY2025 row, in millions."""
+    return [{
+        "Calendar Year": 2025,
+        "t_sector": sector, "t_industry": industry, "t_name": "Test Bank",
+        "Revenue": 279_745.0, "Operating Income": 72_595.0,
+        "Interest Expense": 97_898.0, "Net Income": 58_000.0,
+        "Total Assets": 4_424_900.0, "Total Stockholders Equity": 362_438.0,
+        "Total Debt": 800_000.0, "Cash And Cash Equivalents": 500_000.0,
+        "Market Cap": 964_496.0, "Reported Currency": "USD",
+        "EBITDA": 80_000.0, "Free Cash Flow": 40_000.0,
+        "Total Current Assets": None, "Total Current Liabilities": None,
+        "Inventory": None, "Short Term Debt": 100_000.0,
+        "Operating Cash Flow": 50_000.0,
+    }]
+
+
+def test_bank_credit_block_withdraws_the_synthetic_rating():
+    out = ia._credit_analysis(_bank_rows())
+    assert out["kind"] == "bank"
+    assert out["isFinancial"] is True
+    assert out["rating"]["letter"] is None
+    assert out["rating"]["investmentGrade"] is None
+    assert out["rating"]["interestCoverage"] is None
+    # defaultSpread is a marker, not a withdrawal: the rating block keeps a
+    # numeric spread because the cost of debt needs one, and this says the
+    # number is the model's fallback rather than a reading off the bank.
+    assert set(out["notApplicable"]) == {
+        "syntheticRating", "interestCoverage", "defaultSpread",
+    }
+    assert out["rating"]["spread"] is not None
+
+
+def test_the_withdrawn_rating_is_the_one_that_was_being_shown():
+    """The guard is doing work: unguarded, the same row rates Caa/CCC."""
+    unguarded = ia._synthetic_rating(72_595.0 / 97_898.0, 964_496.0 * 1e6)
+    assert unguarded["letter"] == "Caa/CCC"
+    assert unguarded["spread"] == pytest.approx(0.1000, abs=1e-4)
+    assert unguarded["interestCoverage"] == pytest.approx(0.74, abs=0.01)
+
+
+def test_the_bank_score_no_longer_rides_on_that_letter():
+    """With no letter the composite is the bank track's own three metrics.
+
+    Before: rating_base for Caa/CCC blended in at half weight and the sub-1x
+    coverage cap pinned the score at 35 or below, so a bank with healthy
+    capital adequacy still read "weak".
+    """
+    out = ia._credit_analysis(_bank_rows())
+    capped = ia._credit_score(
+        ia._synthetic_rating(72_595.0 / 97_898.0, 964_496.0 * 1e6),
+        out["bank"]["metrics"], {"band": "na"})
+    assert capped["score"] <= 35.0
+    assert out["summary"]["score"] > capped["score"]
+
+
+def test_the_bank_track_keeps_its_own_metrics():
+    out = ia._credit_analysis(_bank_rows())
+    labels = [m["label"] for m in out["metrics"]]
+    assert "Equity / Total Assets (capital adequacy)" in labels
+    assert "Return on Assets" in labels
+    assert out["bank"]["equityToAssets"] is not None
+    assert out["bank"]["leverageMultiple"] is not None
+
+
+def test_a_reit_keeps_its_rating_on_the_same_track():
+    """Real estate rides the bank TRACK (fcff_applicable covers REITs) but its
+    interest cover is an ordinary fixed-charge cover, so the rating stays."""
+    out = ia._credit_analysis(_bank_rows("Real Estate", "REIT - Office"))
+    assert out["kind"] == "bank"
+    assert out["isFinancial"] is False
+    assert out["rating"]["letter"] is not None
+    assert out["notApplicable"] == {}
+
+
+def test_a_non_financial_credit_block_is_unchanged():
+    rows = _bank_rows("Technology", "Semiconductors")
+    rows[0]["Interest Expense"] = 259.0     # NVDA-shaped: EBIT covers interest easily
+    out = ia._credit_analysis(rows)
+    assert out["kind"] == "corporate"
+    assert out["isFinancial"] is False
+    assert out["notApplicable"] == {}
+    assert out["rating"]["letter"] == "Aaa/AAA"
+    assert out["rating"]["interestCoverage"] is not None

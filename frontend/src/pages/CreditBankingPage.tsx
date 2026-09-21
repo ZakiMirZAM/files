@@ -10,6 +10,10 @@ import { setPageAiContext, clearPageAiContext } from "../lib/aiContextStore";
 import { PrinciplesBlock } from "../components/PrinciplesBlock";
 import { CREDIT_METRIC_DEFS, CREDIT_PANEL_OFFSET } from "../lib/creditDefinitions";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
+import { StageGoalPanel } from "../components/StageGoalPanel";
+import { NextStagePanel } from "../components/connections/NextStagePanel";
+import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
+import { currentRotationRanking } from "../lib/rotationState";
 
 export function CreditBankingPage() {
   const [data, setData] = useState<SectionData | null>(null);
@@ -37,6 +41,9 @@ export function CreditBankingPage() {
 
   // Publish the page's data so the "Explain using AI" question + highlight buttons use it.
   const dataContext = buildDataContext("credit", data, isLiveData(data));
+
+  const connectDeck = useMemo(() => buildConnectDeck("credit", {}), []);
+
   useEffect(() => {
     setPageAiContext({
       section: "credit",
@@ -47,9 +54,6 @@ export function CreditBankingPage() {
   }, [dataContext]);
 
   const metricDefs = CREDIT_METRIC_DEFS;
-  const withCharts = metricDefs.filter(
-    (d) => d.chartMetricName && metricByName.has(d.chartMetricName),
-  ).length;
 
   return (
     <div className="flex gap-0 lg:gap-6">
@@ -59,6 +63,20 @@ export function CreditBankingPage() {
           title="Credit & Banking"
           subtitle="The Condition that sets every borrower's terms. Read the credit cycle and the health of the banking system before you judge any company's debt capacity."
         />
+
+        <StageGoalPanel stage="credit" />
+
+        <div className="mt-6 mb-6">
+          <QualitativeBlock
+            section="credit"
+            scopeKey="global"
+            groups={connectDeck}
+            storageSuffix="connect"
+            defaultOpen
+            hideHeader
+            dataContext={dataContext}
+          />
+        </div>
 
         <div className="space-y-6">
           {!isLive && <DataStatusBanner />}
@@ -88,9 +106,19 @@ export function CreditBankingPage() {
           </div>
 
           <div className="mt-16">
-            <QualitativeBlock section="credit" scopeKey="global" dataContext={dataContext} />
+            <QualitativeBlock
+              section="credit"
+              scopeKey="global"
+              excludeTitles={[CONNECT_DECK_TITLE.credit]}
+              dataContext={dataContext}
+            />
           </div>
         </div>
+
+        <NextStagePanel
+          page="credit"
+          sectorOrder={currentRotationRanking()?.map((s) => ({ sector: s.sector, total: s.total })) ?? undefined}
+        />
       </div>
       <DefinitionPanel />
     </div>

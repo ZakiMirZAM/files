@@ -3,8 +3,9 @@
 // company rows) ranks the same way while cells and definitions stay untouched.
 
 import { describe, expect, it } from "vitest";
-import type { SectorMetricsData } from "./types";
-import { cycleMatrixSort, sortMatrixData } from "./sectorMetrics";
+import type { SectionKey, SectorMetricDef, SectorMetricsData } from "./types";
+import { cycleMatrixSort, openMetricHistory, sortMatrixData } from "./sectorMetrics";
+import { derivePanelScope, getOpenDefinition } from "./definitionPanelStore";
 
 function matrix(values: Record<string, number | null>): SectorMetricsData {
   return {
@@ -64,5 +65,61 @@ describe("cycleMatrixSort", () => {
 
   it("switching to another key starts at desc", () => {
     expect(cycleMatrixSort({ key: "roe", dir: "asc" }, "wacc")).toEqual({ key: "wacc", dir: "desc" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The Part 9 answer scope. A metric LABEL click carries no column name, so the
+// sidebar derives one from the page. It has to land on the same key a clicked
+// CELL of the page's own column builds, or an answer typed after one kind of
+// click would be invisible after the other.
+// ---------------------------------------------------------------------------
+
+describe("the Part 9 answer scope", () => {
+  const met: SectorMetricDef = {
+    key: "operatingMargin",
+    label: "Operating Margin",
+    unit: "%",
+    group: "Margins",
+    definition: "",
+  };
+  const resolveDef = (label: string) => (label === "Operating Margin" ? 421 : undefined);
+
+  function scopeFromCell(columnName: string, section: SectionKey): string | undefined {
+    openMetricHistory(columnName, met, { operatingMargin: 12.5 }, resolveDef, { section });
+    return getOpenDefinition()?.scope?.scopeKey;
+  }
+
+  it("a label click lands on the same key as a cell of the page's own column", () => {
+    const sector = "Industrials";
+    const fromCell = scopeFromCell(sector, "sector");
+    const fromLabel = derivePanelScope(421, { section: "sector", subjectKey: sector })?.scopeKey;
+
+    expect(fromCell).toBe("Industrials-def-421");
+    expect(fromLabel).toBe(fromCell);
+  });
+
+  it("a cell of another column keeps that column's key", () => {
+    expect(scopeFromCell("Energy", "sector")).toBe("Energy-def-421");
+  });
+
+  it("uses the industry on an industry page and the ticker on a company page", () => {
+    expect(
+      derivePanelScope(310, { section: "industry", subjectKey: "Semiconductors" })?.scopeKey,
+    ).toBe("Semiconductors-def-310");
+    expect(
+      derivePanelScope(11, { section: "individual", subjectKey: "NVDA" })?.scopeKey,
+    ).toBe("NVDA-def-11");
+  });
+
+  it("derives nothing on the economic and credit pages, which render their own decks", () => {
+    expect(derivePanelScope(601, { section: "economic", subjectKey: "the US economy" })).toBeUndefined();
+    expect(derivePanelScope(701, { section: "credit", subjectKey: "global" })).toBeUndefined();
+  });
+
+  it("derives nothing without a number or without a page subject", () => {
+    expect(derivePanelScope(0, { section: "sector", subjectKey: "Industrials" })).toBeUndefined();
+    expect(derivePanelScope(null, { section: "sector", subjectKey: "Industrials" })).toBeUndefined();
+    expect(derivePanelScope(421, { section: "sector" })).toBeUndefined();
   });
 });

@@ -229,6 +229,7 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["FCF / Net Income", 49], ["Operating Leverage", 50],
   ["Liabilities / Equity", 51], ["Net Debt / OCF", 52],
   ["COGS / Inventory", 54], ["P / E", 61], ["EV / EBITDA", 62], ["P / FCF", 63],
+  ["P / Sales", 64], ["P / OCF", 65], ["SG&A / Sales", 66],
   // Statement-trends tiles mapped to their covering definitions
   ["Gross Profit Ratio", 6], ["Operating Income Ratio", 39],
   // FMP cash-flow line names

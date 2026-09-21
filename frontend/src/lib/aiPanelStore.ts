@@ -22,6 +22,18 @@ export interface AiRequest {
   context?: string;
   /** Compact summary of the page's computed figures for this subject (optional). */
   dataContext?: string;
+  /**
+   * Gathers the figures this question should carry, run ONLY when the panel is
+   * about to call the model.
+   *
+   * The cross-stage block is a dozen network calls and takes tens of seconds.
+   * Gathering it before the panel opened meant a question whose answer was
+   * already in the Convex cache spent that wait and that bandwidth for
+   * nothing, because the cached row is resolved before any fetch. Resolving to
+   * null means the reader left the page while it ran, and the question is not
+   * sent at all.
+   */
+  gatherData?: (signal: AbortSignal) => Promise<string | null>;
   /** Subject label in view (used by explain mode for interactive valuation). */
   subject?: string;
   // explain mode

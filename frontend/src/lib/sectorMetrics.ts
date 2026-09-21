@@ -100,6 +100,9 @@ export function formatSectorValue(value: number | null | undefined, unit: Sector
   }
   // Small percentages and ratios keep more precision (e.g. 0.45% not 0.5%).
   if (unit === "%") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(3)}%`;
+  // A difference between two percentages. Printed as points so it is not read
+  // as a percentage of anything.
+  if (unit === "pts") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)} pts`;
   if (unit === "d") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(0)}d`;
   if (unit === "yrs") return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)} yrs`;
   if (unit === "b") return value.toFixed(3); // beta, a plain coefficient, ~1.0
@@ -118,6 +121,15 @@ export function colHistory(col: SectorColumn | undefined, key: string): SectorCe
 /** A column's scorecard integrity checklist, if the API attached one. */
 export function colIntegrity(col: SectorColumn | undefined): IntegrityCheck[] | undefined {
   return (col as unknown as { _integrity?: IntegrityCheck[] } | undefined)?._integrity;
+}
+
+/** Why one cell of this column is empty, when the payload explained it (same
+ *  smuggled-field convention as `_history`). Written by lib/peerRanking.ts from
+ *  the exposure rows' `notApplicable` map, and shown as the cell's hover text
+ *  so a bank's empty column reads as a reason rather than a bare n/a. */
+export function colNote(col: SectorColumn | undefined, key: string): string | undefined {
+  const notes = (col as unknown as { _notes?: Record<string, string> } | undefined)?._notes;
+  return notes?.[key];
 }
 
 /**

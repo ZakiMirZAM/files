@@ -70,3 +70,25 @@ export function subscribeDefinition(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+/**
+ * Where a definition's Part 9 questions save their answers when the opener
+ * supplied no scope, which is every click on a metric LABEL.
+ *
+ * The key is the one `openMetricHistory` builds for a clicked CELL of the
+ * page's own column, so a label click and a cell click of that column land on
+ * the same saved answer. A cell of another column keeps that column's key.
+ *
+ * Economic and credit metrics already render their questions inside the metric
+ * dropdown, so those two pages get nothing here and keep their old behaviour.
+ */
+export function derivePanelScope(
+  openNumber: number | null,
+  page: { section?: SectionKey; subjectKey?: string; dataContext?: string },
+): DefinitionQuestionScope | undefined {
+  if (openNumber == null || openNumber <= 0) return undefined;
+  const { section, subjectKey, dataContext } = page;
+  if (!section || !subjectKey) return undefined;
+  if (section === "economic" || section === "credit") return undefined;
+  return { section, scopeKey: `${subjectKey}-def-${openNumber}`, dataContext };
+}

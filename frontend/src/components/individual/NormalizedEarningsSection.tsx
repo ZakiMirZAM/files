@@ -9,6 +9,7 @@ import { formatCurrency } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, PiggyBank, Sparkles, Layers } from "lucide-react";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
+import { NotApplicable } from "../NotApplicable";
 
 interface NormalizedEarningsSectionProps {
   data?: NormalizedEarnings | null;
@@ -98,7 +99,7 @@ function LeasesCard({ l }: { l: NormalizedLeases }) {
   if (!l.applicable) {
     return (
       <CardShell icon={icon} title={title}>
-        <p className="text-sm text-white/55">{l.reason}</p>
+        <NotApplicable reason={l.reason} />
       </CardShell>
     );
   }
@@ -139,7 +140,7 @@ function InvestmentIncomeCard({ i }: { i: NormalizedInvestmentIncome }) {
   if (!i.applicable) {
     return (
       <CardShell icon={icon} title={title}>
-        <p className="text-sm text-white/55">{i.reason}</p>
+        <NotApplicable reason={i.reason} />
       </CardShell>
     );
   }
@@ -170,7 +171,7 @@ function OneTimeCard({ o }: { o: NormalizedOneTime }) {
   if (!o.applicable) {
     return (
       <CardShell icon={icon} title={title}>
-        <p className="text-sm text-white/55">{o.reason}</p>
+        <NotApplicable reason={o.reason} />
       </CardShell>
     );
   }
