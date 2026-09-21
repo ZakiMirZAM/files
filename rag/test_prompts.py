@@ -72,8 +72,13 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # and the no-en-dash clause, and adds a repeat-words-freely rule plus a
 # competitive-strategy qualitative mandate on every number. EXPLAIN_SYSTEM drops
 # its whole trailing STYLE block. DEFINE_SYSTEM unchanged.
+#
+# ASK_SYSTEM re-recorded 2026-09-21: owner edit of 2026-09-20 to frame text. The
+# sentence "A frame that genuinely has nothing to say for this subject gets one
+# honest sentence saying so, not a paragraph of padding." was removed.
+# EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "5710e81049f8e6eeb377e9037ff6e3c867bf3baa201ff527f0748328369a3ad7",
+    "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
@@ -135,7 +140,11 @@ def test_prompt_still_carries_its_load_bearing_rules(name):
     """A prompt could be replaced wholesale and still hash-fail informatively, but
     these are the clauses other code depends on, so assert them by content."""
     text = getattr(server, name)
-    assert "em dash" in text.lower(), f"{name} lost the no-em-dash style rule"
+    # EXPLAIN_SYSTEM dropped its whole trailing STYLE block in the owner's
+    # 2026-08-11 trim (recorded above EXPECTED), so the no-em-dash rule is
+    # asserted only on the two prompts that still carry one.
+    if name != "EXPLAIN_SYSTEM":
+        assert "em dash" in text.lower(), f"{name} lost the no-em-dash style rule"
     if name != "DEFINE_SYSTEM":
         assert "vault" in text.lower(), f"{name} lost its vault-first sourcing rule"
 
@@ -229,7 +238,8 @@ def test_ask_carries_the_humanizer_anti_patterns():
         "vague attribution": "No vague attribution",
         "knowledge-cutoff disclaimer": "No knowledge-cutoff disclaimers",
         "negative parallelism": "No negative parallelism",
-        "superficial -ing clause": 'superficial clauses ending in "-ing"',
+        # The superficial "-ing" clause rule was dropped from ASK_SYSTEM in the
+        # owner's 2026-08-11 trim (recorded above EXPECTED), so it is not asserted.
         "copula avoidance": 'Write "is"',
         "curly quotes and emoji": "Straight quotes only",
         "conversational artifacts": "No conversational artifacts",
@@ -315,29 +325,26 @@ def test_effort_is_keyed_by_label_not_model():
     assert server.EFFORT_BY_LABEL["/define"] == server.DEFINE_EFFORT
 
 
-def test_every_route_runs_high_effort():
-    """All three routes run "high" effort as of 2026-08-07 (owner decision;
-    /explain and /define were "low" while they ran Haiku).
+def test_every_route_runs_medium_effort():
+    """All three routes run "medium" effort as of 2026-09-05 (owner decision).
+    They ran "low" from 2026-08-14 to 2026-09-05, and "high" from 2026-08-07 to
+    2026-08-14.
 
-    "high", NOT "max". "max" was shipped briefly on /ask and measured 15 turns at
-    $2.09 on one answer, overrunning the client's timeout so finished work was
-    discarded. Depth comes from the model rather than from spending the top
-    reasoning tier on every turn. Raising any of these to "max" without
-    re-measuring latency is the mistake this test exists to prevent.
+    Emphatically NOT "max". "max" was shipped briefly on /ask and measured 15
+    turns at $2.09 on one answer, overrunning the client's timeout so finished
+    work was discarded. Raising any of these without re-measuring latency is
+    the mistake this test exists to prevent.
     """
-    assert server.ASK_EFFORT == "high"
-    assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "high"
+    assert server.ASK_EFFORT == "medium"
+    assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "medium"
 
 
 def test_route_models_are_the_owner_pinned_set():
-    """Both short routes moved off Haiku 4.5 on 2026-08-07 (owner decision):
-    Haiku ignored the prompt's no-em-dash style rules and under-used the
-    page-data block. /ask and /explain run Opus 5 (both are read as analysis);
-    /define runs Sonnet 5 because tooltip definitions are one cached paragraph
-    where Opus depth would be wasted."""
-    assert server.ASK_MODEL == "claude-opus-5"
-    assert server.EXPLAIN_MODEL == "claude-opus-5"
-    assert server.DEFINE_MODEL == "claude-sonnet-5"
+    """All three routes were unified onto Opus 4.6 on 2026-09-05 (owner
+    decision). /define no longer stays on Sonnet."""
+    assert server.ASK_MODEL == "claude-opus-4-6"
+    assert server.EXPLAIN_MODEL == "claude-opus-4-6"
+    assert server.DEFINE_MODEL == "claude-opus-4-6"
 
 
 def test_run_agent_looks_up_effort_by_label_internally():

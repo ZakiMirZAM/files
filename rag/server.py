@@ -65,28 +65,27 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault.db")
 PORT = 3001
 # Overridable so a benchmark or an experiment can run a different model without a
 # code round-trip; the SHIPPED default is what matters and the tests pin it.
-ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5")  # deepest reasoning writes the analysis
+ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-4-6")  # owner decision 2026-09-05: all three routes on Opus 4.6
 # Both short routes moved off Haiku 4.5 on 2026-08-07 (owner decision): Haiku was
 # ignoring the prompt's hard style rules (em dashes throughout) and under-using
 # the page-data block, answering "the page does not show X" for figures the
-# dataContext carried. /explain runs Opus 5 (same as /ask; explanations are read
-# as analysis) and /define runs Sonnet 5 (tooltip definitions are glossary-cached
-# one-paragraph text, so the extra Opus depth would be wasted there).
-EXPLAIN_MODEL = "claude-opus-5"      # follows house style + page data; explains highlights
-DEFINE_MODEL = "claude-sonnet-5"     # cached term tooltips
-# Reasoning effort per route: "high" everywhere as of 2026-08-07 (owner decision;
-# /explain and /define were "low" while they ran Haiku).
+# dataContext carried. All three routes were unified onto Opus 4.6 on 2026-09-05
+# (owner decision) — /define no longer stays on Sonnet.
+EXPLAIN_MODEL = "claude-opus-4-6"    # follows house style + page data; explains highlights
+DEFINE_MODEL = "claude-opus-4-6"     # cached term tooltips
+# Reasoning effort per route: "medium" everywhere as of 2026-09-05 (owner decision).
+# It was "low" everywhere from 2026-08-14 to 2026-09-05, and "high" from 2026-08-07
+# to 2026-08-14.
 #
 # /ask was "max" until 2026-07-29 and it was the wrong call. A real answer logged
 # 15 turns at $2.09 and ran past the client's 300 second ceiling, so the browser
 # threw away work the server had finished. "max" is the top tier and it is spent on
-# EVERY turn, which is the whole compounding problem. Owner's decision: Opus 5 at
-# "high" rather than Sonnet 5 at "max", buying depth from the model instead of from
-# the reasoning tier. Note "xhigh" exists but is Opus-4.7-only and silently degrades
-# to "high" elsewhere, so it is deliberately not used.
-ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "high")  # type: ignore[assignment]
-EXPLAIN_EFFORT: EffortLevel = "high"
-DEFINE_EFFORT: EffortLevel = "high"
+# EVERY turn, which is the whole compounding problem.
+# Note "xhigh" exists but is Opus-4.7-only and silently degrades to "high"
+# elsewhere, so it is deliberately not used. Opus 4.6 supports low/medium/high/max only.
+ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "medium")  # type: ignore[assignment]
+EXPLAIN_EFFORT: EffortLevel = "medium"
+DEFINE_EFFORT: EffortLevel = "medium"
 # Keyed by `label` (the string run_agent already logs with, e.g. "/ask"), not by
 # model: two routes sharing one model string (as /explain and /define did until
 # 2026-08-07) would let one route's effort silently clobber the other's in the dict.
@@ -237,8 +236,7 @@ ANSWER SHAPE (answer first)
 THE EIGHT ANALYTICAL FRAMES (work through every one of these, in every answer)
 These are the frames that separate an analysis from a summary. Work them into the argument under ###
 headings or inside tables. Never render them as a bulleted checklist, and never announce a frame by
-number. A frame that genuinely has nothing to say for this subject gets one honest sentence saying so,
-not a paragraph of padding.
+number.
 1. Who, what, where, when, why and how, plus the significance of the answer and the ASSUMPTIONS the
    conclusion rests on. You do not justify with only financial numbers. You must justify with qualitative analysis and research. 
 2. The LIMITATIONS if applicable.

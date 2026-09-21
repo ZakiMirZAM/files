@@ -19,6 +19,11 @@ Flag: RAG_VERIFY in {on, shadow, off}, default **shadow**.
             evidence with zero user-visible consequence.
   on      - additionally issues a token so /verify can run Tier 1.
 
+Tier 0's per-claim flags stay server-side in every mode. `on` means Tier 1 runs
+on a flagged answer and the revised text is what reaches the user, while the wire
+carries only the counts. The per-claim lists ship only when RAG_VERIFY_EXPOSE=1,
+which exists for local debugging and is off in production.
+
 `tier0()` is TOTAL. It catches everything and returns None on any failure. A
 verification bug must never turn a good answer into a 500; the answer is the
 product, the report is commentary.
@@ -26,8 +31,8 @@ product, the report is commentary.
 Calibration status (2026-07-28): across 48 real answers, 18 flags were adjudicated
 by reading the sentence and ALL were grader artefacts, not model errors. One class
 is still open (a derived quantity such as a spread inheriting its base metric's
-label). So `shadow` is the correct production mode today, and `on` should wait
-until a flag sample is confirmed to contain real defects.
+label). Production now runs `on`, which is safe against those artefacts because a
+flag only ever triggers a Tier 1 rewrite; no per-claim judgement is published.
 """
 from __future__ import annotations
 
@@ -35,6 +40,9 @@ import os
 import time
 
 MODE = os.environ.get("RAG_VERIFY", "shadow").lower()
+# Debug-only escape hatch. Leave unset in production: the per-claim lists come
+# from a grader that is still being calibrated and must not reach a client.
+EXPOSE = os.environ.get("RAG_VERIFY_EXPOSE", "0") == "1"
 
 # Reconciliation lives in eval/ because that is where it is measured and tested.
 # It is nonetheless REQUEST-PATH code now; treat a change to it as a change to the
@@ -128,13 +136,15 @@ def log_line(label: str, report: dict | None) -> None:
 def public(report: dict | None) -> dict | None:
     """What goes into the HTTP response.
 
-    In `shadow` the counts are returned so the shape can be exercised end to end,
-    but the flagged CLAIMS are withheld: nothing should be able to render a
-    per-claim badge from a grader that is still being calibrated.
+    The counts are returned in every mode so the shape can be exercised end to
+    end, but the flagged CLAIMS are withheld: nothing should be able to render a
+    per-claim badge from a grader that is still being calibrated. `on` changes
+    what the server DOES with a flag (Tier 1 runs), not what it publishes.
+    RAG_VERIFY_EXPOSE=1 lifts the strip for local debugging only.
     """
     if not report:
         return None
-    if MODE == "shadow":
-        return {k: v for k, v in report.items()
-                if k not in ("flagged", "arithmeticErrors", "transcriptionErrors")}
-    return report
+    if EXPOSE:
+        return report
+    return {k: v for k, v in report.items()
+            if k not in ("flagged", "arithmeticErrors", "transcriptionErrors")}

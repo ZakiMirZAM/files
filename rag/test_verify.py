@@ -61,10 +61,23 @@ def test_shadow_withholds_the_per_claim_detail(shadow):
     assert public["mismatched"] >= 2
 
 
-def test_on_exposes_the_detail(monkeypatch):
+def test_on_also_withholds_the_per_claim_detail(monkeypatch):
+    """`on` changes what the server DOES with a flag (Tier 1 runs), not what it
+    publishes. The per-claim lists stay server-side in every mode."""
     monkeypatch.setattr(verify, "MODE", "on")
     public = verify.public(verify.tier0(BAD, CTX))
+    for key in ("flagged", "arithmeticErrors", "transcriptionErrors"):
+        assert key not in public
+    assert public["mismatched"] >= 2
+
+
+def test_expose_flag_returns_the_detail(monkeypatch):
+    """The debug escape hatch, off in production."""
+    monkeypatch.setattr(verify, "MODE", "on")
+    monkeypatch.setattr(verify, "EXPOSE", True)
+    public = verify.public(verify.tier0(BAD, CTX))
     assert public["flagged"] and public["flagged"][0]["expected"] is not None
+    assert "arithmeticErrors" in public and "transcriptionErrors" in public
 
 
 def test_contradictions_are_named_informational(shadow):
