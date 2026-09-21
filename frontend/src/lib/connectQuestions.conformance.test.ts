@@ -1,6 +1,6 @@
 // Copy conformance for the connect decks, in two halves.
 //
-// 1. The 25 questions and their hidden prompts are the writer's, and they are
+// 1. The 33 questions and their hidden prompts are the writer's, and they are
 //    written in docs/connect-questions.final.md. That document used to reach
 //    lib/connectQuestions.ts through a one-off hand transfer, so the two could
 //    drift in silence. They are now diffed against each other, word for word
@@ -55,7 +55,7 @@ const FIELDS: [string, keyof DocQuestion][] = [
 ];
 
 /**
- * The document's 25 questions, by id.
+ * The document's 33 questions, by id.
  *
  * Both fields are written as one quoted line, so the value is everything
  * between the first and the last double quote. A value carrying a double quote
@@ -159,7 +159,7 @@ describe("the connect questions match the writer's document", () => {
   });
 
   it("the document parsed", () => {
-    expect(doc.size).toBe(25);
+    expect(doc.size).toBe(33);
     for (const [id, entry] of doc) {
       expect(entry.text.length, `${id} question`).toBeGreaterThan(0);
       expect(entry.guidance.length, `${id} hidden prompt`).toBeGreaterThan(0);

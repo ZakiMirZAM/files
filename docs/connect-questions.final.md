@@ -1,6 +1,6 @@
 # Connect Questions: Final Wording and Hidden Prompts
 
-25 questions across 5 decks, polished into the house voice. Each question carries its own hidden prompt for the AI tutor.
+33 questions across 5 decks, polished into the house voice. Each question carries its own hidden prompt for the AI tutor.
 
 Metric family lists verified against: `sectorRotation.ts` GROUPS (economic groups), `api.py` `_SECTOR_METRIC_DEFS` (sector/industry matrix rows), `industry_structure/UNITS.md` (structure evidence), `api.py` `_RANKING_COLS` / `_PER_SHARE_DEFS` (ranking columns), `individualanalysis.py` `DISPLAY_METRICS` (company metric families), `content/credit/00-INDEX.md` (credit metrics).
 
@@ -44,6 +44,24 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 - [x] Sector matrix: interest coverage, net debt, leverage
 - [x] Share of companies that barely cover interest
 - [x] Comparison: all eleven sectors ranked by credit exposure
+
+---
+
+### credit.connect.cycle
+
+**Status:** new 2026-09-21
+
+**Question:** "Read the credit readings in the order a credit cycle usually moves: lending standards first, then loan growth, then delinquencies and charge-offs, then bank capital and reserves. Which of these has already turned and which has not? What does that order say about the next year for companies that borrow and for the banks that lend to them?"
+
+**Hidden prompt:** "Work through the credit and banking series in the ECONOMY section of the data block in the order a credit cycle usually moves. First the lending standards survey, which leads because it shows willingness to lend before the volume responds. Then the loan growth series (bank credit, C&I, CRE, consumer, deposits), the volume response to those standards. Then the delinquency and charge-off rates (all loans, C&I, mortgages, net charge-offs), the lagging quality signal. Then bank equity to assets, net interest margin, reserves and the financial stress index, the capital cushion. For each family, state its current level and its ten-year percentile, whether it is rising or falling, and whether it points to loosening or tightening. State which of these families has already turned and which has not. If the leading series has turned but the lagging series has not yet followed, state what that gap implies. Show the arithmetic when comparing levels to their ten-year percentiles. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Finish by stating what the order implies over the next year for companies that borrow, and separately for the banks that lend to them. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] Lending standards (leading indicator, turned or not)
+- [x] Loan growth series: bank credit, C&I, CRE, consumer, deposits (turned or not)
+- [x] Delinquency and charge-off rates: all loans, C&I, mortgages, net charge-offs (turned or not)
+- [x] Bank capital, reserves, net interest margin, financial stress index
+- [x] Leading vs lagging gap and what it implies
+- [x] Next-year outlook: companies that borrow vs banks that lend
 
 ---
 
@@ -148,6 +166,24 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 - [x] Sector fundamentals (all matrix families)
 - [x] Classification: temporary vs durable for each
 - [x] Comparison: {sector}'s advantages and disadvantages against the other ten sectors
+
+---
+
+### sec.connect.triggers
+
+**Status:** new 2026-09-21
+
+**Question:** "Of all the economic and credit readings, name the three that matter most to {sector}'s earnings and say why each one does. For each, give today's reading, the reading that would change your view of the sector, and how far today's value is from that point."
+
+**Hidden prompt:** "Work through the section of the data block titled 'How each reading classifies {sector}.' It lists every economic and credit metric, its current named reading (for example 'Above 4% and rising'), and whether that reading classifies {sector} as favored, not favored or not affected. Each line also carries an earnings link sentence that names the channel (volume, price, input costs, financing or discount rate) through which that metric reaches {sector}'s earnings. Read every line. Then pick the three metrics that matter most to {sector}'s earnings, chosen by the size and directness of the earnings channel each one acts through. For each of the three, state today's named reading and its classification. Then identify the named reading on that same line that would flip the classification (for example, from favored to not favored). That is the reading that would change the view. To state how far today's value is from that point, read the metric's latest value from its ECONOMY series line and compare it with the numeric bound stated inside the flipping reading's label (for example, if the label says 'Above 4% and rising' and today's value is 3.35%, the distance is 0.65 percentage points). When the flipping label carries no numeric bound, or when the metric has no determined reading, say that the distance cannot be stated in the series' own units. Show the arithmetic for each distance. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] Classification section: every economic and credit metric mapped to {sector}
+- [x] Earnings link channel per metric (volume, price, input costs, financing, discount rate)
+- [x] Three most important metrics chosen by earnings channel size
+- [x] Today's named reading and classification for each of the three
+- [x] The named reading that would flip the classification (the view-changing reading)
+- [x] Arithmetic distance from today's value to the flipping bound
 
 ---
 
@@ -267,6 +303,43 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 
 ---
 
+### ind.connect.cost_passthrough
+
+**Status:** new 2026-09-21
+
+**Question:** "Set today's inflation, producer price, wage and commodity readings against {industry}'s cost evidence: its gross margin, how widely gross margins differ across its companies, and what its gross margin did from 2020 to 2022 when input costs rose. Does this industry pass higher costs to its customers or absorb them? Which of today's cost readings would it feel first?"
+
+**Hidden prompt:** "Start from the ECONOMY section of the data block. Read the cost readings: CPI YoY Inflation, PPI YoY Inflation, Import Price Index YoY %, Real Avg Hourly Earnings YoY %, PPI All Commodities (Index), and the Commodities tiles (Copper, Gold, Silver, Wheat, WTI Crude, Brent Crude, Henry Hub NatGas, Heavy Trucks). For each, state its latest value, its direction and its automatic reading. Then work through the INDUSTRY section. Read the gross margin line (2020 through 2023) and state whether gross margin expanded, contracted or held flat through the 2021 to 2022 inflation period. Read the entry barriers subsection's gross margin median and gross margin spread: a wide spread means some companies pass costs through while others absorb them, so the industry does not move as one. Read the leader cost of goods lines for the top four companies (if available) and compare each company's cost of goods with the industry's median gross margin. Compare {industry}'s gross margin path with {parentSector}'s from the SECTOR section. Now connect the two halves: which of today's cost readings reaches {industry} first and through which cost line (materials, labor, energy, imported components), and whether the 2021 to 2022 record says the cost is passed on to customers or absorbed. Show the arithmetic when comparing margins, spreads and cost levels. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Finish by stating whether this industry passes higher costs to its customers or absorbs them, and which of today's cost readings it would feel first. Do not re-decide the economic reading; apply it. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] ECONOMY cost readings: CPI, PPI, Import Price Index, Real Avg Hourly Earnings, PPI All Commodities, Commodities tiles
+- [x] Gross margin 2020 through 2023 (industry level)
+- [x] Gross margin median and gross margin spread (entry barriers)
+- [x] Leader cost of goods for top companies
+- [x] {industry} vs {parentSector} gross margin comparison
+- [x] Connection: which cost reading reaches {industry} first, through which cost line
+- [x] 2021 to 2022 record: passed on or absorbed
+
+---
+
+### ind.connect.cost_of_money
+
+**Status:** new 2026-09-21
+
+**Question:** "Set today's rate and credit readings (Treasury yields, credit spreads, lending standards, loan growth) against how {industry} is financed and how much capital it needs: its median interest coverage and net debt, the share of its companies covering interest less than two times, and its capital spending against revenue and against depreciation. If borrowing stays at today's cost, what gives way first: new capacity, the weaker companies, or payouts to shareholders?"
+
+**Hidden prompt:** "Start from the ECONOMY section of the data block. Read the rate and credit readings the question names: the Treasury yields (3-month, 1-year, 2-year, 10-year), the credit spreads (high-yield OAS, investment-grade OAS), the lending standards survey, and the loan growth series (bank credit, C&I). For each, state its latest value, direction and automatic reading. Then work through the INDUSTRY section. Read the financing line: median interest coverage, median net debt to EBITDA, and the share of companies covering interest below two times. A negative net debt to EBITDA means the median company holds more cash than debt. Read the entry barriers subsection for capital spending to revenue and the evolution series for capital spending to depreciation: a ratio above one means the industry is investing faster than it depreciates, so it is capital-hungry and more sensitive to the cost of that capital. Read the incumbent cash to assets figure if available. Compare {industry}'s financing line with {parentSector}'s from the SECTOR section: state whether {industry} is more or less levered than its sector and by how much. Now connect the two halves: given the direction of rates, credit spreads and lending standards, state what gives way first if borrowing stays at today's cost: new capacity (compare capex against depreciation and the capital spending to revenue ratio), the weaker companies (the share covering interest below two times), or payouts to shareholders (use the incumbent cash to assets figure if available as a buffer indicator). Show all arithmetic. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Do not re-decide the economic reading; apply it. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] ECONOMY rate and credit readings: Treasury yields, credit spreads, lending standards, loan growth
+- [x] Financing line: median interest coverage, median net debt to EBITDA, share below two times
+- [x] Capital intensity: capital spending to revenue, capex to depreciation
+- [x] Incumbent cash to assets (if available)
+- [x] {industry} vs {parentSector} financing comparison
+- [x] What gives way first: new capacity, weaker companies, or payouts
+
+---
+
 ### ind.connect.synthesis
 
 **Status:** kept verbatim
@@ -357,6 +430,41 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 - [x] Each company's exposure to current conditions
 - [x] Returns on capital
 - [x] Comparison: best-placed vs most expensive; favorable conditions already in the price
+
+---
+
+### comp.connect.demand_leverage
+
+**Status:** new 2026-09-21
+
+**Question:** "Take the growth and activity readings that drive {industry}'s sales and set them against each company's operating leverage, its 2020 revenue change and its margins. If industry sales rise or fall a few points from here, whose operating profit moves most and whose least? Show the arithmetic for the two extremes."
+
+**Hidden prompt:** "Start from the ECONOMY section of the data block. Read the growth and activity families that drive {industry}'s sales: Real GDP Growth, Industrial Production Index, Capacity Utilization, Retail Sales YoY %, and any other series whose classification line names {industry}'s demand channel. State each one's latest value, direction and automatic reading, and say why it matters to {industry}'s volume. Then work through the PEERS section. Read the ranking table's Operating Leverage DOL column and the Revenue Growth column for every company. Then read the exposure rows for the twenty largest companies: find each company's 2020 revenue change and its operating leverage figure. A high DOL means a small change in revenue produces a large change in operating income. The 2020 revenue change shows whether each company actually felt the last demand swing. Now state an assumed change in industry sales (for example plus three points and minus three points from the current revenue growth rate). For the company with the highest DOL, multiply that change by its DOL to estimate the change in operating profit, and use its operating margin to show what the new margin would be. Do the same for the company with the lowest DOL. Show the full arithmetic for both extremes. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] ECONOMY growth and activity readings that drive {industry}'s sales
+- [x] Ranking table: Operating Leverage DOL, Revenue Growth
+- [x] Exposure rows: 2020 revenue change, operating leverage per company
+- [x] Assumed sales change: arithmetic for highest and lowest DOL companies
+- [x] Operating margin impact at both extremes
+
+---
+
+### comp.connect.above_industry
+
+**Status:** new 2026-09-21
+
+**Question:** "Set each company's return on capital against its cost of capital, beside the same figure for {industry} as a whole and for {parentSector}. Which companies earn more than their industry, by how much, and has that gap widened or narrowed over five years? Do today's sector and economic conditions help the leaders keep the gap or help the others close it?"
+
+**Hidden prompt:** "Work through the PEERS section's ranking table in the data block. Read the ROIC, WACC and Spread (ROIC minus WACC) columns for every company. Then read the INDUSTRY section's industry matrix row for {industry} and the SECTOR section's sector matrix row for {parentSector} to find the industry and sector average ROIC, WACC and spread. For each company, state whether its spread is above the industry average, between the industry and sector averages, or below both. Count how many companies earn a positive spread and how many earn a negative spread. The ranking table does not carry per-company five-year history, so the five-year direction comes from the INDUSTRY section's trend metrics for ROIC and WACC and the SECTOR section's trend metrics: state whether the industry-level gap has been widening or narrowing. Then read the ECONOMY section's Treasury yields, implied equity risk premium and the SECTOR section's current conditions to state whether today's environment helps the leaders keep the gap (for example, rising rates punish the levered laggards more) or helps the others close it (for example, strong demand lifts returns for everyone). Show the arithmetic when comparing each company's spread with the industry and sector benchmarks. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Finish by naming the companies whose spread is most durable and the companies whose spread is most at risk. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] Ranking table: ROIC, WACC, Spread per company
+- [x] INDUSTRY matrix: industry average ROIC, WACC, spread
+- [x] SECTOR matrix: sector average ROIC, WACC, spread
+- [x] Trend metrics: five-year ROIC and WACC direction (industry and sector level, not per company)
+- [x] ECONOMY: Treasury yields, implied equity risk premium
+- [x] SECTOR conditions: whether they help leaders keep the gap or help others close it
 
 ---
 
@@ -474,6 +582,47 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 
 ---
 
+### indiv.connect.rates_to_value
+
+**Status:** new 2026-09-21
+
+**Question:** "Follow the rate readings into {company}'s valuation. Its cost of capital is built from the risk-free rate, the equity risk premium, its beta and its cost of debt. Set each against today's Treasury yield, the implied equity risk premium and the credit spread readings. If the ten-year yield moved one point, what happens to its cost of capital, and what does the extra interest on its debt do to operating income? Show the arithmetic."
+
+**Hidden prompt:** "Work through the COMPANY section's cost of capital build in the data block. Read the weighted average cost of capital, the cost of equity, the risk-free rate, the equity risk premium, the beta, the pre-tax cost of debt, the equity weight and the debt weight. Then read the ECONOMY section's Treasury yields (the 10-year yield is the risk-free rate proxy), the implied equity risk premium, and the credit spreads (high-yield OAS, investment-grade OAS). Compare the risk-free rate in the build with the latest 10-year Treasury yield. Compare the equity risk premium in the build with the implied equity risk premium line and state whether the build uses a higher or lower premium. Compare {company}'s pre-tax cost of debt with the credit spread readings; if the block prints a synthetic rating spread, compare it with the market spread for that rating tier. Now model a one-point rise in the 10-year yield. The cost of equity moves by beta times the change. The after-tax cost of debt rises by one point times (1 minus the tax rate). Recompute the weighted average using the existing equity and debt weights. Then read the interest stress line: {company}'s total debt, the extra annual interest from a one-point rise, and that extra interest as a share of operating income. If the interest stress line says not applicable (as it does for banks and insurers), explain why: a rate rise passes through a lender's asset side as well as its funding side, so the net effect depends on the duration mismatch, not on a simple coverage ratio. If the block marks the margin of safety or the market quote as not applicable or not currency reconciled, do not use that figure. Show all arithmetic step by step. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Finish by stating whether {company}'s valuation is more sensitive to a rate move through its cost of capital or through its interest expense. Do not re-teach macro or sector calls; apply the ones in the block to this company. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] COMPANY cost of capital build: WACC, cost of equity, risk-free rate, ERP, beta, cost of debt, weights
+- [x] ECONOMY: Treasury yields, implied equity risk premium, credit spreads
+- [x] ERP comparison: build vs implied
+- [x] Cost of debt comparison: build vs credit spread readings and synthetic rating spread
+- [x] One-point rate rise: recomputed cost of equity, cost of debt, WACC
+- [x] Interest stress: total debt, extra interest, share of operating income
+- [x] Bank/insurer handling: not applicable explained (duration mismatch)
+- [x] Margin of safety or market quote caveat when not applicable or not currency reconciled
+
+---
+
+### indiv.connect.drivers
+
+**Status:** new 2026-09-21
+
+**Question:** "Take what {company} sells and who buys it (its business description, its segments and its cost structure) and match each part to the economic readings that drive it. Which readings drive demand for its largest segment, and which drive its largest cost? What did its revenue and gross margin do in 2020 and through the 2021 to 2022 inflation, when those readings last moved sharply?"
+
+**Hidden prompt:** "Work through the COMPANY section of the data block. Read the business profile line and the segments line. If segments are available, name each segment, its revenue and its share of total revenue; identify the segment that contributes the most. If segments are marked not available, say so and work from the business profile instead. Read the cost structure line: cost of goods as a share of revenue, research and development as a share, and the operating margin. If cost of goods is marked not applicable (as it is for banks and insurers that report no cost of revenue), explain why and assess the cost structure from the operating margin alone. Now match each part to the ECONOMY section. For the largest segment (or the business profile if no segments), identify the economic readings that drive its customers' spending: the growth and activity series, the consumer series, or the trade series, whichever fits the segment's market. For the largest cost line, identify the cost readings that drive it: CPI, PPI, Import Price Index, Real Avg Hourly Earnings, commodity prices, or interest rates for a lender. Say which named readings those series show today. Then read the 2020 revenue change percentage and the gross margin line from 2020 through 2023: these are the record of what happened when those same readings last moved sharply. If gross margin is marked not available for all years (as it is for banks), say so and assess from the operating margin trend instead. Compare {company}'s cost of goods and margin path with the industry median from the INDUSTRY section's connections line. Show the arithmetic when comparing margins and cost shares. Use only the figures in the data block and do not invent a score or a grade. If a figure is marked not available, not applicable or not loaded, skip it and say so. Finish by stating which economic readings drive demand for {company}'s largest segment and which drive its largest cost, and what the 2020 and 2021 to 2022 record says about how it handles those readings when they move sharply. Do not re-teach macro or sector calls; apply the ones in the block to this company. Aim for roughly 1,200 words."
+
+**Families covered:**
+- [x] COMPANY business profile and segments (name, revenue, share)
+- [x] Cost structure: cost of goods, R&D, operating margin
+- [x] Bank/insurer handling: cost of goods not applicable
+- [x] ECONOMY readings matched to the largest segment (demand drivers)
+- [x] ECONOMY readings matched to the largest cost line (cost drivers)
+- [x] Named readings those series show today
+- [x] 2020 revenue change and gross margin 2020 through 2023 as the historical record
+- [x] Gross margin not available handling (banks)
+- [x] Comparison: company vs industry median (INDUSTRY connections line)
+
+---
+
 ### indiv.connect.synthesis
 
 **Status:** kept verbatim
@@ -494,32 +643,40 @@ Metric family lists verified against: `sectorRotation.ts` GROUPS (economic group
 
 ## Self-check
 
-All 25 ids present:
+All 33 ids present (3 credit, 7 sector, 8 industry, 7 comparative, 8 individual):
 1. credit.connect.rates
 2. credit.connect.sectors
-3. sec.connect.readings
-4. sec.connect.credit
-5. sec.connect.score_vs_matrix
-6. sec.connect.industries
-7. sec.connect.temporary
-8. sec.connect.synthesis
-9. ind.connect.channels
-10. ind.connect.profit_share
-11. ind.connect.structure
-12. ind.connect.groups
-13. ind.connect.stress_test
-14. ind.connect.synthesis
-15. comp.connect.exposure
-16. comp.connect.structure
-17. comp.connect.share_change
-18. comp.connect.valuation
-19. comp.connect.synthesis
-20. indiv.connect.channels
-21. indiv.connect.industry
-22. indiv.connect.peers
-23. indiv.connect.growth_split
-24. indiv.connect.valuation
-25. indiv.connect.synthesis
+3. credit.connect.cycle
+4. sec.connect.readings
+5. sec.connect.credit
+6. sec.connect.score_vs_matrix
+7. sec.connect.industries
+8. sec.connect.temporary
+9. sec.connect.triggers
+10. sec.connect.synthesis
+11. ind.connect.channels
+12. ind.connect.profit_share
+13. ind.connect.structure
+14. ind.connect.groups
+15. ind.connect.stress_test
+16. ind.connect.cost_passthrough
+17. ind.connect.cost_of_money
+18. ind.connect.synthesis
+19. comp.connect.exposure
+20. comp.connect.structure
+21. comp.connect.share_change
+22. comp.connect.valuation
+23. comp.connect.demand_leverage
+24. comp.connect.above_industry
+25. comp.connect.synthesis
+26. indiv.connect.channels
+27. indiv.connect.industry
+28. indiv.connect.peers
+29. indiv.connect.growth_split
+30. indiv.connect.valuation
+31. indiv.connect.rates_to_value
+32. indiv.connect.drivers
+33. indiv.connect.synthesis
 
 None missing.
 
@@ -575,3 +732,35 @@ Added "Aim for roughly 1,200 words." to the hidden prompt of all 21 non-synthesi
 9. **sec.connect.synthesis, ind.connect.synthesis, comp.connect.synthesis, indiv.connect.synthesis** -- added "If the block carries a READER'S EARLIER CONCLUSIONS section, read it and build on those findings rather than re-deriving them."
 
 **Question text not edited** (owner-approved, immutable). No new mismatches introduced.
+
+### 2026-09-21
+
+**Eight new connect questions added (25 to 33), deck counts now 3/7/8/7/8:**
+
+1. **credit.connect.cycle** -- maps lending standards, loan growth, delinquency/charge-off rates and bank capital into the four canonical credit-cycle phases (early/late loosening, early/late tightening); identifies the leading vs lagging series and what the gap implies.
+2. **sec.connect.triggers** -- reads the "How each reading classifies {sector}" section; groups every economic metric into favored/not favored/not affected; names the single reversal that would do the most damage and the one that would help the most, via the earnings link channel.
+3. **ind.connect.cost_passthrough** -- reads {industry}'s gross margin 2020-2023, median gross margin, gross margin spread, and leader cost of goods for top companies; assesses whether the industry passed input-cost inflation through or absorbed it; compares with {parentSector}.
+4. **ind.connect.cost_of_money** -- reads {industry}'s financing line (median interest coverage, median net debt to EBITDA, share below two times) and capital intensity (capex to revenue, capex to depreciation); models a one-point rate rise; compares with {parentSector}; names the companies that would feel it first.
+5. **comp.connect.demand_leverage** -- reads DOL and Revenue Growth from the ranking table plus 2020 revenue change and operating leverage from exposure rows; sorts companies into confirmed amplifiers, untested amplifiers and low-leverage names; connects to ECONOMY growth direction.
+6. **comp.connect.above_industry** -- reads ROIC, WACC and Spread from the ranking table; compares each company with the industry and sector averages from earlier stages; reads five-year trend metrics to state whether spreads are widening or narrowing; connects to ECONOMY rate direction.
+7. **indiv.connect.rates_to_value** -- reads the COMPANY cost of capital build (risk-free rate, ERP, beta, cost of equity, pre-tax cost of debt, weights, WACC) and the interest stress line; models a one-point rate rise through both the discount rate channel and the interest expense channel; handles bank/insurer "not applicable" (duration mismatch); connects to ECONOMY Treasury yields and implied ERP.
+8. **indiv.connect.drivers** -- reads COMPANY segments, cost structure, 2020 revenue change and gross margin 2020-2023; handles "segments not available" (works from business profile), "cost of goods not applicable" (banks), and "gross margin not available" (banks); compares with INDUSTRY connections line; assesses operating leverage vs pricing power.
+
+**Block anchoring per question:**
+
+- credit.connect.cycle: ECONOMY section credit and banking series (lending standards, loan growth families, delinquency/charge-off families, bank capital/reserves/NIM/stress index)
+- sec.connect.triggers: "How each reading classifies {sector}" section (per-metric classification lines + earnings link sentence)
+- ind.connect.cost_passthrough: INDUSTRY section gross margin line, entry barriers (gross margin median, gross margin spread, leader cost of goods), connections line (gross margin 2020-2023, 2020 revenue change); SECTOR section for comparison
+- ind.connect.cost_of_money: INDUSTRY section financing line (median interest coverage, median net debt to EBITDA, share below two times), entry barriers (capital spending to revenue, capex to depreciation); SECTOR section for comparison; ECONOMY section Treasury yields and credit spreads
+- comp.connect.demand_leverage: PEERS ranking table (Operating Leverage DOL, Revenue Growth), exposure rows (2020 revenue change, operating leverage per company); ECONOMY section growth and activity
+- comp.connect.above_industry: PEERS ranking table (ROIC, WACC, Spread); INDUSTRY matrix (industry averages); SECTOR matrix (sector averages); INDUSTRY trend metrics (five-year ROIC, WACC); ECONOMY Treasury yields, implied ERP
+- indiv.connect.rates_to_value: COMPANY cost of capital build (all components), interest stress line; ECONOMY Treasury yields, implied ERP
+- indiv.connect.drivers: COMPANY business profile, segments, cost structure, 2020 revenue change, gross margin 2020-2023; INDUSTRY connections line (industry median gross margin)
+
+**Absence handling:** all 8 prompts carry the full three-token legend "not available, not applicable or not loaded." Q7 and Q8 carry explicit bank/insurer handling clauses for "not applicable" on interest stress, cost of goods and gross margin. Q8 handles "segments not available."
+
+**No existing entries edited.** No em dashes (U+2014). No author names. No curly quotes.
+
+### 2026-09-21 (hidden prompt correction pass)
+
+Hidden prompts corrected on all eight new entries to match the owner's approved question texts. Changes: (1) credit.connect.cycle: removed four canonical phase classification, replaced with which series have turned and which have not, finish now answers what the order implies for borrowers and separately for lenders. (2) sec.connect.triggers: now picks three readings by earnings channel size instead of sorting all readings, names the flipping named reading, computes arithmetic distance from today's value to the flipping bound. (3) ind.connect.cost_passthrough: added economy half (CPI, PPI, Import Price Index, Real Avg Hourly Earnings, PPI All Commodities, Commodities tiles) before the industry cost evidence, finish answers the question's two asks. (4) ind.connect.cost_of_money: starts from ECONOMY rate and credit readings, removed the debt-total multiplication (the industry block carries no absolute debt figure), finish now answers what gives way first (new capacity, weaker companies, or payouts). (5) comp.connect.demand_leverage: starts from ECONOMY growth and activity readings, removed three-group classification, added arithmetic (assumed sales change times DOL for highest and lowest company). (6) comp.connect.above_industry: noted that per-company five-year history is not in the ranking table so direction comes from industry and sector trend lines, added the question's last ask (whether conditions help leaders keep the gap or help others close it). (7) indiv.connect.rates_to_value: added credit spread comparison against pre-tax cost of debt and synthetic rating spread, added ERP comparison (build vs implied), added margin-of-safety/currency-reconciled caveat. (8) indiv.connect.drivers: added economy half (match largest segment to demand-driving readings, match largest cost line to cost-driving readings, state named readings today), finish answers the question's asks. Stage rules added: industry stage prompts carry "Do not re-decide the economic reading; apply it.", individual stage prompts carry "Do not re-teach macro or sector calls; apply the ones in the block to this company." Question texts not edited.

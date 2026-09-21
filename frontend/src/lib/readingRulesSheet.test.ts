@@ -38,7 +38,9 @@ function snapshotTail(disk: string): string {
 }
 
 describe("the reading-rules review sheet", () => {
-  const disk = readFileSync(SHEET, "utf8");
+  // Line endings are normalised before comparing: with core.autocrlf on, a git
+  // checkout rewrites this file with CRLF, which is not a change to the sheet.
+  const disk = readFileSync(SHEET, "utf8").replace(/\r\n/g, "\n");
   const fresh = buildReadingRulesSheet(ALL_RULES) + snapshotTail(disk);
 
   it.skipIf(!WRITE)("rewrites the generated tables and keeps the snapshot", () => {

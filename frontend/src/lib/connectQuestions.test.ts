@@ -1,4 +1,4 @@
-// The connect deck: the exact 25 ids the plan names, each built with its names
+// The connect deck: the exact 33 ids the plan names, each built with its names
 // filled in and its own hidden prompt attached.
 
 import { describe, expect, it } from "vitest";
@@ -13,13 +13,14 @@ import {
 
 /** The ids the plan lists, in the order it lists them. */
 const PLAN_IDS: Record<ConnectStage, string[]> = {
-  credit: ["credit.connect.rates", "credit.connect.sectors"],
+  credit: ["credit.connect.rates", "credit.connect.sectors", "credit.connect.cycle"],
   sector: [
     "sec.connect.readings",
     "sec.connect.credit",
     "sec.connect.score_vs_matrix",
     "sec.connect.industries",
     "sec.connect.temporary",
+    "sec.connect.triggers",
     "sec.connect.synthesis",
   ],
   industry: [
@@ -28,6 +29,8 @@ const PLAN_IDS: Record<ConnectStage, string[]> = {
     "ind.connect.structure",
     "ind.connect.groups",
     "ind.connect.stress_test",
+    "ind.connect.cost_passthrough",
+    "ind.connect.cost_of_money",
     "ind.connect.synthesis",
   ],
   comparative: [
@@ -35,6 +38,8 @@ const PLAN_IDS: Record<ConnectStage, string[]> = {
     "comp.connect.structure",
     "comp.connect.share_change",
     "comp.connect.valuation",
+    "comp.connect.demand_leverage",
+    "comp.connect.above_industry",
     "comp.connect.synthesis",
   ],
   company: [
@@ -43,6 +48,8 @@ const PLAN_IDS: Record<ConnectStage, string[]> = {
     "indiv.connect.peers",
     "indiv.connect.growth_split",
     "indiv.connect.valuation",
+    "indiv.connect.rates_to_value",
+    "indiv.connect.drivers",
     "indiv.connect.synthesis",
   ],
 };
@@ -57,7 +64,7 @@ const NAMES = {
 const STAGES = Object.keys(PLAN_IDS) as ConnectStage[];
 
 /** The sentence the writer repeats at the end of every hidden prompt, at every
- *  stage. It is the one rule that holds across all twenty-five. */
+ *  stage. It is the one rule that holds across all thirty-three. */
 const SHARED_RULE =
   "Use only the figures in the data block and do not invent a score or a grade.";
 
@@ -81,15 +88,20 @@ const WITHOUT_STAGE_RULE = new Set([
   "sec.connect.synthesis",
   "sec.connect.industries",
   "sec.connect.temporary",
+  // Added 2026-09-21. Each follows one mechanism back to the economy and
+  // closes on its own question, not on a ranking or a list of companies.
+  "sec.connect.triggers",
+  "comp.connect.demand_leverage",
+  "comp.connect.above_industry",
 ]);
 
 describe("the connect deck ids", () => {
-  it("carries exactly the twenty-five questions the plan lists", () => {
+  it("carries exactly the thirty-three questions the plan lists", () => {
     const built = STAGES.flatMap((s) => CONNECT_QUESTIONS[s].map((x) => x.id));
     const planned = STAGES.flatMap((s) => PLAN_IDS[s]);
 
     expect(built).toEqual(planned);
-    expect(built).toHaveLength(25);
+    expect(built).toHaveLength(33);
   });
 
   it("every id is unique", () => {
@@ -151,7 +163,7 @@ describe("buildConnectDeck", () => {
         seen.set(guidance, question.id);
       }
     }
-    expect(seen.size).toBe(25);
+    expect(seen.size).toBe(33);
   });
 
   it("closes every hidden prompt on the rule the writer applied to that stage", () => {
@@ -251,7 +263,7 @@ describe("a name the page could not supply", () => {
   });
 
   it("builds the credit deck, which names nothing", () => {
-    expect(buildConnectDeck("credit", {})[0].questions).toHaveLength(2);
+    expect(buildConnectDeck("credit", {})[0].questions).toHaveLength(3);
   });
 
   it("returns null from fill rather than a half-written sentence", () => {
