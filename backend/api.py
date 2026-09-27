@@ -35,6 +35,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict, Field
 
 # ── Path wiring ──────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +132,7 @@ try:
         DISPLAY_METRICS,
         MARGINAL_TAX_RATE,
     )
+    from story_dcf import build_story_forecast, story_inputs_from_body  # type: ignore
     from comparitivestockanalysis import (  # type: ignore
         build_snapshot as build_comparative_snapshot,
         score_industry,
@@ -6244,15 +6246,19 @@ def individual_benchmarks_endpoint(request: Request,
 # The response is cached for thirty minutes, so the extra allowance costs
 # nothing (finding M2).
 @limiter.limit("30/minute")
-@cached(ttl_seconds=30 * 60, key_prefix="db")
 def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
     # Phase 2: fold an alias (GS-PA, BRK.B, MS-PO, GOOGL) onto its primary listing
     # BEFORE load_ticker_rows / the tickers + financials SELECTs, all of which key
     # off ticker_upper. _resolve_symbol also does the uppercase + dot->dash
     # normalize, so it fully replaces the old ticker.upper(); with security_map
     # absent it IS ticker.upper()-with-dots-dashed, i.e. unchanged behaviour.
-    ticker_upper = _resolve_symbol(ticker)
+    return _individual_payload(_resolve_symbol(ticker))
 
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _individual_payload(ticker_upper: str) -> dict[str, Any]:
+    """The individual page payload for a resolved ticker, shared by the page
+    route and the story route (a route never calls another route)."""
     # Build full snapshot using the existing analysis pipeline (DCF, verdict,
     # ratios, horizontal/vertical, per-share). Returns None if no data.
     snap_dict: dict[str, Any] | None = None
@@ -6372,6 +6378,49 @@ def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER
         # analysis being None by design — None when the pipeline was healthy.
         "analysis_error": snap_error,
     }
+
+
+# ── Story DCF (the reader's story priced on the page's own engine) ───────────
+
+_STORY_NO_VALUATION = "No valuation is available for this company, so the story cannot be priced."
+
+
+def _story_base(tk: str) -> tuple[dict | None, list]:
+    """The cached analysis block plus the company's rows, ascending by year.
+    Raises the page route's 404 for an unknown ticker."""
+    payload = _individual_payload(tk)
+    rows = sorted(load_ticker_rows(get_db(), tk), key=lambda r: int(r["Calendar Year"]))
+    return payload.get("analysis"), rows
+
+
+class StoryDcfBody(BaseModel):
+    """Story inputs; null keeps the model's number. These bounds are the only
+    range guard (valuation/story.py validates nothing), so they match the C2
+    contract exactly. strict: a JSON true or "0.5" is not a number here."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+
+    totalMarket: Optional[float] = Field(None, gt=0, lt=1e16)
+    marketGrowth10y: Optional[float] = Field(None, ge=-0.5, le=1.0)
+    shareYear10: Optional[float] = Field(None, ge=0, le=10)
+    targetMargin: Optional[float] = Field(None, ge=-2, le=2)
+    salesToCapital: Optional[float] = Field(None, gt=0, le=100)
+    failureProbability: Optional[float] = Field(None, ge=0, le=1)
+    distressProceeds: Optional[float] = Field(None, ge=0, lt=1e16)
+    stableRoic: Optional[float] = Field(None, gt=0, le=2)
+
+
+@app.post("/api/individual/{ticker}/story-dcf")
+@limiter.limit("30/minute")
+# Never cached: every body is a different story.
+def story_dcf_endpoint(request: Request, body: StoryDcfBody,
+                       ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    analysis, rows = _story_base(_resolve_symbol(ticker))
+    if not analysis or not analysis.get("forecast") or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    return build_story_forecast(analysis["forecast"], rows[-1],
+                                story_inputs_from_body(body.model_dump()))
 
 
 # ── Live quote (yfinance) ────────────────────────────────────────────────────
