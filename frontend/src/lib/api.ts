@@ -1,6 +1,7 @@
 import type {
   IndividualBenchmarks,
   IndustryEntry,
+  ReverseBreakeven,
   SectionData,
   SectorEtfData,
   SectorMetricsData,
@@ -403,6 +404,17 @@ export async function fetchStoryContext(ticker: string, signal?: AbortSignal): P
   return getJson<StoryContext>(
     `${API_BASE}/api/individual/${enc}/story-context`,
     "story figures",
+    signal,
+    SLOW_ROUTE_TIMEOUT_MS,
+  );
+}
+
+/** What each valuation driver must be for value per share to equal the price. */
+export async function fetchReverseBreakeven(ticker: string, signal?: AbortSignal): Promise<ReverseBreakeven> {
+  const enc = encodeURIComponent(ticker.toUpperCase());
+  return getJson<ReverseBreakeven>(
+    `${API_BASE}/api/individual/${enc}/reverse-dcf`,
+    "reverse DCF figures",
     signal,
     SLOW_ROUTE_TIMEOUT_MS,
   );

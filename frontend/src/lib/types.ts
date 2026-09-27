@@ -857,6 +857,62 @@ export interface ReverseDcf {
   note?: string;
 }
 
+// ── Reverse breakeven: what each driver must be for value to equal price ──────
+// GET /api/individual/{ticker}/reverse-dcf. Rates are decimals; per-share values
+// are in the price's currency.
+
+export type BreakevenDriverName = "revenueGrowth" | "targetMargin" | "stableRoic" | "salesToCapital";
+export type BreakevenStatus = "solved" | "above_range" | "below_range";
+
+export interface BreakevenDriver {
+  driver: BreakevenDriverName;
+  model: number | null;
+  /** Makes value per share equal the price. Null unless status is "solved". */
+  implied: number | null;
+  low: number;
+  high: number;
+  /** Null only when no value in the range could be computed at all. */
+  status: BreakevenStatus | null;
+  firm: number | null;
+  firmBasis: "fiveYearMedian" | "latest";
+  peerMedian: number | null;
+  peerTopDecile: number | null;
+}
+
+export interface BreakevenCell {
+  value: number | null;
+  atOrAbovePrice: boolean;
+}
+
+export interface BreakevenGrid {
+  rowDriver: BreakevenDriverName;
+  colDriver: BreakevenDriverName;
+  rowAxis: number[];
+  colAxis: number[];
+  /** cells[rowIndex][colIndex]; the centre is the model's numbers. */
+  cells: BreakevenCell[][];
+}
+
+export interface ReverseBreakevenApplicable {
+  applicable: true;
+  priceUsed: number;
+  valueAtModel: number | null;
+  wacc: number | null;
+  stableGrowth: number | null;
+  drivers: BreakevenDriver[];
+  grids: { growthMargin: BreakevenGrid; growthRoic: BreakevenGrid };
+  plausibility: {
+    impliedRevenueYear10: number | null;
+    peerTotalRevenue: number | null;
+    impliedShareOfPeerRevenue: number | null;
+    impliedStableRoic: number | null;
+    currentRoic: number | null;
+    wacc: number | null;
+  };
+}
+
+export type ReverseBreakeven = ReverseBreakevenApplicable | { applicable: false; reason: string };
+
 // ── EPV / Tobin's Q / owner earnings (value lenses beside the DCF) ────────────
 
 export interface EpvBlock {

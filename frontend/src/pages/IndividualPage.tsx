@@ -323,9 +323,7 @@ export function IndividualPage() {
           />
         )}
 
-        {data?.analysis?.forecast?.reverseDcf && (
-          <ReverseDcfSection data={data.analysis.forecast.reverseDcf} />
-        )}
+        {data?.analysis?.forecast && ticker && <ReverseDcfSection ticker={ticker} />}
 
         {/* What today's price implies, beside the section that works it out.
             Keyed by the route ticker, the key its answers are saved under. */}
