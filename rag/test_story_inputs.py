@@ -95,7 +95,7 @@ def test_validate_request():
     answers = {qid: "an answer" for qid, _n, _l in story_inputs.STORY_QUESTIONS[:8]}
     ok = {"ticker": "RACE", "company": "Ferrari", "answers": answers, "data": BLOCK}
     assert story_inputs.validate_request(ok)[0] is None
-    # Blank answers are allowed: each gets its input's fallback in the prompt.
+    # Blank answers are tolerated (only a failed /story-answer call leaves one).
     assert story_inputs.validate_request({**ok, "answers": {**answers, "indiv.story.size": "  "}})[0] is None
     assert story_inputs.validate_request({**ok, "answers": {}})[0] is None
     assert story_inputs.validate_request({**ok, "data": ""})[0]
@@ -109,7 +109,7 @@ def test_prompt_carries_the_block_and_only_answered_questions():
     assert "Question 7, what could end the story:\nanswer 7" in p
     assert "Question 9" not in p
 
-def test_prompt_marks_blank_answers_for_their_fallback():
+def test_prompt_marks_blank_answers():
     p = story_inputs.build_prompt({"ticker": "RACE", "company": "Ferrari", "answers": {}, "data": BLOCK})
     assert f"Question 1, what market it is really in:\n{story_inputs.NO_ANSWER}" in p
     assert f"Question 8, how long the advantage lasts:\n{story_inputs.NO_ANSWER}" in p

@@ -24,8 +24,10 @@ UNITS = {
     "salesToCapital": "ratio",
 }
 
-# (answer id, question number, label the prompt uses). Any answer may be blank; a
-# blank one reaches the model as NO_ANSWER and gets that input's fallback.
+# (answer id, question number, label the prompt uses). The page researches every
+# blank or thin answer through /story-answer first, so a blank one arrives only when
+# that research failed; it reaches the model as NO_ANSWER and the prompt's
+# null-with-reason rule covers it.
 NO_ANSWER = "(No answer given.)"
 STORY_QUESTIONS = [
     ("indiv.story.market", 1, "what market it is really in"),
@@ -65,7 +67,7 @@ def validate_request(data) -> tuple[str | None, dict | None]:
         value = raw.get(qid)
         text = value.strip() if isinstance(value, str) else ""
         if not text:
-            # A blank answer is allowed: the prompt's fallback rule covers it.
+            # Tolerated: see NO_ANSWER above.
             continue
         if len(text) > MAX_ANSWER:
             return ERR_ANSWER_LONG, None
@@ -92,8 +94,8 @@ def validate_request(data) -> tuple[str | None, dict | None]:
 
 def build_prompt(payload: dict) -> str:
     answers = payload["answers"]
-    # The eight input questions always appear, blank ones marked so the model applies
-    # each input's fallback; the optional ninth appears only when answered.
+    # The eight input questions always appear, blank ones marked NO_ANSWER; the
+    # ninth appears only when answered.
     blocks = [f"Question {n}, {label}:\n{answers.get(qid) or NO_ANSWER}"
               for qid, n, label in STORY_QUESTIONS
               if answers.get(qid) or qid != STORY_QUESTIONS[-1][0]]

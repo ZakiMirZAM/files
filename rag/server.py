@@ -10,6 +10,8 @@ in this process. Run `claude login` (Max) once before starting.
   POST /define  {term}                 -> {term, definition, cached}
   POST /story-inputs  {ticker, company, answers, data}
                                        -> {rows, riskFlags, weakestLink, counterStory}
+  POST /story-answer  {ticker, company, questionId, question, userAnswer, data, otherAnswers?}
+                                       -> {adequate, answer, sources}
 
 Start:  python server.py        (listens on http://localhost:3001)
 Needs:  ollama serve + `ollama pull nomic-embed-text`, and `claude login`.
@@ -48,6 +50,7 @@ import calc_tools
 import rarr
 import research_tools
 import retrieval
+import story_answer
 import story_inputs
 import verify
 from news_tools import NEWS_MCP, NEWS_TOOLS
@@ -97,7 +100,7 @@ STORY_EFFORT: EffortLevel = "medium"
 # 2026-08-07) would let one route's effort silently clobber the other's in the dict.
 EFFORT_BY_LABEL: dict[str, EffortLevel] = {
     "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
-    "/story-inputs": STORY_EFFORT,
+    "/story-inputs": STORY_EFFORT, "/story-answer": STORY_EFFORT,
 }
 VAULT_TOOL = "mcp__vault__search_vault"
 # The agent may use the vault search plus the web (vault-first sourcing, web for
@@ -483,14 +486,14 @@ Return one JSON object and nothing else: no text before or after it and no code 
 Units: totalMarket and distressProceeds are "currency", a full amount in the company's reporting currency, never in thousands or millions. marketGrowth10y is "rate", a yearly decimal (0.05 means 5 percent a year). shareYear10, targetMargin, failureProbability and stableRoic are "fraction", a decimal (0.2 means 20 percent). salesToCapital is "ratio" (1.42 means 1.42 of new sales for each 1 of capital invested).
 
 THE CONVERSION RULES
-Each input comes from one answer. Apply its rule. When the answer is too thin to apply the rule, use the fallback and say in the proof that the fallback was used.
-totalMarket, from question 1: what customers spend in total today on everything inside the market the reader drew, using the source or derivation the answer gives. Fallback: the Peer total revenue in the data block.
-marketGrowth10y, from question 2: the reader's choice sets the rate. A market that stays the same size apart from inflation grows at the risk-free rate, the proxy for the growth of the whole economy. A market that grows by about a quarter over ten years grows at the risk-free rate plus 0.023. About half: the risk-free rate plus 0.041. Double: the risk-free rate plus 0.072. Fallback: the same size.
-shareYear10, from question 3: no pull from size keeps today's share, which is the Firm share of peer revenue in the data block or the Firm revenue divided by the reader's market. Pull in a few local markets sets a moderately higher share. Pull in many local markets, or pull that carries into new markets, sets a higher share. The share never goes above a legal limit the answer names and never above 1. Fallback: today's share.
-targetMargin, from question 4: the pre-tax operating margin in year 10. Anchor on the Peer median operating margin. An edge that passes steps 3 and 4 of question 4 sets a margin above the median, up to the Peer top decile operating margin. An edge that fails either step sets the median. A company with no history of margins or returns above its peers sits at or below the median. Fallback: the Peer median operating margin.
-salesToCapital, from question 5: start from the Marginal sales to capital over five years, the Firm sales to capital and the Peer median sales to capital. Move higher when the answer says spending per new dollar of sales will fall, and lower when it says that spending will rise. Fallback: the Peer median sales to capital.
-failureProbability and distressProceeds, from question 7: anchor the chance that the story ends within ten years on the ten-year default rate for the company's synthetic rating class in the data block. Adjust it for what the answer says about cash, debt falling due, and access to banks, bond buyers and new shareholders. A figure near zero is right for a large, profitable, investment-grade company with little debt. distressProceeds is what shareholders would receive in a forced sale after lenders are repaid, and it is 0 unless the answer gives a reason to expect more. Fallbacks: near zero for a profitable investment-grade company, the rating class default rate otherwise, and 0 for the proceeds.
-stableRoic, from question 8: the return on capital after year 10 is exactly one of three values. It is the WACC in the data block when no edge survives. It is the Peer median ROIC when the edge is one the whole industry shares. It is above the Peer median ROIC only when a named edge survives steps 2 and 3 of question 8. Fallback: the WACC.
+Each input comes from one answer. Apply its rule.
+totalMarket, from question 1: what customers spend in total today on everything inside the market the reader drew, using the source or derivation the answer gives.
+marketGrowth10y, from question 2: the reader's choice sets the rate. A market that stays the same size apart from inflation grows at the risk-free rate, the proxy for the growth of the whole economy. A market that grows by about a quarter over ten years grows at the risk-free rate plus 0.023. About half: the risk-free rate plus 0.041. Double: the risk-free rate plus 0.072.
+shareYear10, from question 3: no pull from size keeps today's share, which is the Firm share of peer revenue in the data block or the Firm revenue divided by the reader's market. Pull in a few local markets sets a moderately higher share. Pull in many local markets, or pull that carries into new markets, sets a higher share. The share never goes above a legal limit the answer names and never above 1.
+targetMargin, from question 4: the pre-tax operating margin in year 10. Anchor on the Peer median operating margin. An edge that passes steps 3 and 4 of question 4 sets a margin above the median, up to the Peer top decile operating margin. An edge that fails either step sets the median. A company with no history of margins or returns above its peers sits at or below the median.
+salesToCapital, from question 5: start from the Marginal sales to capital over five years, the Firm sales to capital and the Peer median sales to capital. Move higher when the answer says spending per new dollar of sales will fall, and lower when it says that spending will rise.
+failureProbability and distressProceeds, from question 7: anchor the chance that the story ends within ten years on the ten-year default rate for the company's synthetic rating class in the data block. Adjust it for what the answer says about cash, debt falling due, and access to banks, bond buyers and new shareholders. A figure near zero is right for a large, profitable, investment-grade company with little debt. distressProceeds is what shareholders would receive in a forced sale after lenders are repaid, and it is 0 unless the answer gives a reason to expect more.
+stableRoic, from question 8: the return on capital after year 10 is exactly one of three values. It is the WACC in the data block when no edge survives. It is the Peer median ROIC when the edge is one the whole industry shares. It is above the Peer median ROIC only when a named edge survives steps 2 and 3 of question 8.
 Question 6 sets no input. The site builds the cost of capital itself, and you never change it. Use question 6 only for riskFlags. Each flag names one risk the reader raised that the cost of capital does not capture, or a year of profit earned at an unusually high or low level of an outside force. Return an empty list when there are none.
 Question 9, when present, is the reader's whole story. Check the eight numbers against it and against each other. When two answers pull in different directions, follow the one with more evidence and say so in the proof.
 
@@ -503,6 +506,34 @@ weakestLink names the one answer with the least evidence behind it and says what
 
 STYLE
 Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. Never name an author; name a book by its title. Apply no grades, labels or verdicts such as strong, weak, good or bad: state the figures and the rule."""
+
+# --- Prompt E: answer one story question (POST /story-answer) ---
+# Owner-approved 2026-09-27, its own hash in rag/test_prompts.py. When the reader
+# clicks "Turn my story into numbers", the page calls this once per question: the
+# agent keeps an answer that follows the question's steps, and researches and
+# writes one otherwise (vault + web + the research tools /ask gets).
+STORY_ANSWER_MAX_TURNS = 16
+STORY_ANSWER_BUDGET_USD = 1.5
+STORY_ANSWER_SYSTEM = """You answer one question of a reader's story about one company, and you first decide whether the reader's own answer already does the job.
+
+WHAT YOU RECEIVE
+"Computed data on the page" is AUTHORITATIVE: the site computed these exact figures from its own data, so use them over any other figure for this company. "The question" is the question with its numbered steps and its closing sentence. "The reader's answer" is what the reader wrote, and it may be empty. For the whole-story question and the two checks, "The story being tested" holds the story answers the page will use, one per question.
+
+STEP 1: JUDGE THE READER'S ANSWER
+Judge the reader's answer strictly against the question's own steps. The answer is adequate only when it works through every step and gives specific reasons: named customers, products, rivals, contracts, figures or events that belong to this company. An empty answer, a restatement of the question, an answer that skips a step, or an answer whose reasons would read the same for any other company is not adequate. When the question has no numbered steps, the answer is adequate only when it answers every part of the question with specific reasons.
+
+STEP 2: WHEN THE ANSWER IS NOT ADEQUATE, RESEARCH AND WRITE ONE
+Work through the question's steps in order. Search the vault library with search_vault first, once for each step that needs a different idea, and read the full passages a step rests on. Then use the web for the facts about this company and its industry: the company's annual report, filings and investor relations pages, and industry sources. Use the data block's figures for this company over any figure found elsewhere. Keep anything useful the reader wrote and build on it. Where a step asks for a choice, make the choice and give the reason. For the whole-story question and the two checks, test the story being tested, not a story of your own, and say where its answers support or contradict each other. Never invent a figure, a source or an event. When a fact cannot be found, say so and reason without it.
+Write the answer as plain prose that follows the steps in order, 150 to 400 words.
+
+WHAT YOU RETURN
+Return one JSON object and nothing else: no text before or after it and no code fence.
+When the reader's answer is adequate: {"adequate": true, "answer": "", "sources": []}
+When it is not: {"adequate": false, "answer": "<your answer>", "sources": ["<book title, chapter>", "<full URL>"]}
+List every source the answer rests on: each book as its title and chapter, each web page as its full URL.
+
+STYLE
+Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No headings and no bullet lists. Never name an author, and never name a book in the answer text: book titles go only in the sources list."""
 
 # --- local retrieval (no Claude) ---
 _db_lock = threading.Lock()
@@ -924,6 +955,33 @@ async def handle_story_inputs(request: web.Request) -> web.Response:
     return web.json_response({**parsed, "rows": rows})
 
 
+async def handle_story_answer(request: web.Request) -> web.Response:
+    """One story question in: the reader's answer kept, or a researched one written."""
+    try:
+        data = await request.json()
+    except Exception:                          # noqa: BLE001 - a bad body is a 400
+        return web.json_response({"error": "invalid JSON"}, status=400)
+    err, payload = story_answer.validate_request(data)
+    if err:
+        return web.json_response({"error": err}, status=400)
+    # Same research-tool note /ask appends, in the user message (prompts are immutable).
+    guidance = research_tools.GUIDANCE if research_tools.MODE == "on" else ""
+    try:
+        text, _sources = await run_agent(
+            story_answer.build_prompt(payload, guidance), ASK_MODEL, STORY_ANSWER_SYSTEM,
+            max_turns=STORY_ANSWER_MAX_TURNS, label="/story-answer",
+            budget_usd=STORY_ANSWER_BUDGET_USD)
+    except Exception as exc:
+        print(f"[/story-answer] agent failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response({"error": "AI backend temporarily unavailable"}, status=503)
+    parsed = story_answer.parse_answer_output(text)
+    if parsed is None:
+        print(f"[/story-answer] unreadable model output ({len(text)} chars)", flush=True)
+        return web.json_response(
+            {"error": "The AI answer could not be read. Try again."}, status=503)
+    return web.json_response(parsed)
+
+
 async def handle_verify(request: web.Request) -> web.Response:
     """Run Tier 1 against a parked answer and return the minimal revision.
 
@@ -976,6 +1034,7 @@ def main() -> None:
     app.router.add_post("/explain", handle_explain)
     app.router.add_post("/define", handle_define)
     app.router.add_post("/story-inputs", handle_story_inputs)
+    app.router.add_post("/story-answer", handle_story_answer)
     app.router.add_post("/verify", handle_verify)
     app.router.add_get("/health", handle_health)
     print(f"RAG server on http://localhost:{PORT}  (ask={ASK_MODEL}, explain={EXPLAIN_MODEL}, define={DEFINE_MODEL})")

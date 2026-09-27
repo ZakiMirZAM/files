@@ -82,14 +82,21 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # other three prompts unchanged. Re-recorded the same day so its label names and
 # proof examples follow the story data block's Firm/Peer grammar (commit 48bd93b),
 # with the proof-phrasing rules the Tier 0 grader needs.
+#
+# STORY_SYSTEM re-recorded and STORY_ANSWER_SYSTEM recorded 2026-09-27 (owner
+# approval, Task 9): every story answer now arrives (the reader's, or one the new
+# /story-answer route researched), so STORY_SYSTEM drops its "too thin, use the
+# fallback" sentence and every "Fallback:" clause, keeping each input's rule and
+# the null-with-reason rule. ASK, EXPLAIN and DEFINE unchanged.
 EXPECTED = {
     "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
-    "STORY_SYSTEM": "231dcf1bd088e9534bde6dd3aa59eb7280e45b25a1d233c9696d94271d5d111a",
+    "STORY_SYSTEM": "bfff71405e1ed1d375c8ec187c8b6daa321a1508f25107fa2a7f2059520f53f3",
+    "STORY_ANSWER_SYSTEM": "6ca21a98ab76c4284d717af8bdcdf8dbfabbea22e9a807adff56331328d9be7a",
 }
 
-PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM")
+PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM", "STORY_ANSWER_SYSTEM")
 
 
 def digest(text: str) -> str:
@@ -101,7 +108,8 @@ def test_prompt_text_is_unchanged(name):
     """Pins the prompt bytes. Regenerate with:
        python -c "import sys;sys.path.insert(0,'rag');import server,hashlib;\
 print({n: hashlib.sha256(getattr(server,n).encode()).hexdigest() for n in \
-['ASK_SYSTEM','EXPLAIN_SYSTEM','DEFINE_SYSTEM','STORY_SYSTEM']})"
+['ASK_SYSTEM','EXPLAIN_SYSTEM','DEFINE_SYSTEM','STORY_SYSTEM',\
+'STORY_ANSWER_SYSTEM']})"
     """
     actual = digest(getattr(server, name))
     assert actual == EXPECTED[name], (
@@ -264,12 +272,19 @@ def test_ask_prompt_obeys_its_own_typography_rules():
         assert ch not in text, "ASK_SYSTEM contains a curly quotation mark"
 
 
-def test_story_prompt_obeys_its_own_typography_rules():
-    text = server.STORY_SYSTEM
+@pytest.mark.parametrize("name", ("STORY_SYSTEM", "STORY_ANSWER_SYSTEM"))
+def test_story_prompt_obeys_its_own_typography_rules(name):
+    text = getattr(server, name)
     assert "—" not in text and "–" not in text
     for ch in ("“", "”", "‘", "’"):
         assert ch not in text
     assert "AUTHORITATIVE" in text and "search_vault" in text
+
+
+def test_story_system_has_no_fallbacks_but_keeps_the_null_rule():
+    text = server.STORY_SYSTEM
+    assert "allback" not in text
+    assert "set value to null and say why in the proof" in text
 
 
 def test_ask_puts_the_sources_line_last():
