@@ -107,6 +107,7 @@ def test_solver_refuses_what_it_cannot_reach():
     assert st.solve_high_growth(1000.0, 1e9, 0.04) is None      # needs over 100% a year
     assert st.solve_high_growth(1000.0, 0.0, 0.04) is None
     assert st.solve_high_growth(0.0, 1000.0, 0.04) is None
+    assert st.solve_high_growth(None, 1000.0, 0.04) is None
 
 
 def test_iron_triangle_on_ferrari():
@@ -190,6 +191,19 @@ def test_margin_at_100_and_low_stable_return_keep_the_model_numbers():
     assert v["checks"]["targetMargin"] == {"status": "kept", "rule": "marginAtOrAbove100"}
     assert v["checks"]["stableRoic"] == {"status": "kept", "rule": "stableRoicNotAboveStableGrowth"}
     assert v["engine"]["rows"][-1]["operatingMargin"] == approx(0.12)
+
+
+def test_story_sales_to_capital_keeps_the_model_stable_return():
+    # The story switches an earnings-method model to sales to capital but says
+    # nothing about the stable return: the model's own 10% must reach the engine.
+    story = st.StoryInputs(sales_to_capital=2.5)
+    r = st.resolve_story(MODEL, story)
+    assert r["kwargs"]["reinvest_method"] == "salesToCapital"
+    assert r["kwargs"]["roic_stable"] == 0.10
+    assert r["checks"]["stableRoic"] == {"status": "kept", "rule": "missingInput"}
+    v = st.value_story(MODEL, story, _wacc)
+    ref = run_fcff_revenue(**{**r["kwargs"], "wacc_of_beta": _wacc})
+    assert v["engine"]["intrinsicPerShare"] == ref["intrinsicPerShare"] == approx(15.55)
 
 
 def test_unsolvable_story_returns_none():

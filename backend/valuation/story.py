@@ -130,7 +130,7 @@ def solve_high_growth(base_revenue: float, target_revenue: float, rf: float,
 
     Year-10 revenue rises with g, so bisection on [lo, hi] converges; a target
     outside the bracket's reach returns None rather than an invented rate."""
-    if base_revenue <= 0 or target_revenue <= 0:
+    if base_revenue is None or base_revenue <= 0 or target_revenue <= 0:
         return None
     if not (_revenue_after_path(base_revenue, lo, rf) <= target_revenue
             <= _revenue_after_path(base_revenue, hi, rf)):
@@ -221,9 +221,12 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
     if rules["stableRoic"] is None:
         roic_stable = roic
     else:
-        # The engine's own sales-to-capital terminal convention: the same call
-        # compute_forecast makes, so an all-null story equals the 3-stage variant.
-        roic_stable = model.roic_stable if reinvest_method == "earnings" else None
+        # Keep the stable return the model itself used: compute_forecast passes
+        # roic_stable only on the earnings method (sales-to-capital models use the
+        # engine's own terminal convention), so an all-null story equals the
+        # 3-stage variant. Keyed on the MODEL's method, not the resolved one, so
+        # a story that only switches to sales to capital keeps the model's return.
+        roic_stable = model.roic_stable if model.reinvest_method == "earnings" else None
 
     # 6. Failure inputs default to no failure.
     rules["failureProbability"] = RULE_MISSING if story.failure_probability is None else None
