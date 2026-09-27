@@ -6,7 +6,7 @@ import type { StoryUnit } from "./aiApi";
 import { formatCurrency } from "./format";
 import { formatStoryValue } from "./story";
 import type {
-  BreakevenCell, BreakevenDriver, BreakevenDriverName, ReverseBreakevenApplicable,
+  BreakevenCell, BreakevenDriver, BreakevenGrid, BreakevenDriverName, ReverseBreakevenApplicable,
 } from "./types";
 
 export const BREAKEVEN_DRIVERS: Record<BreakevenDriverName, { label: string; def: number; unit: StoryUnit }> = {
@@ -71,4 +71,9 @@ export function plausibilityLines(r: ReverseBreakevenApplicable): string[] {
     lines.push("No return on capital after growth ends reaches today's price on its own.");
   }
   return lines;
+}
+
+/** The line under a grid none of whose cells reaches the price; null when one does. */
+export function gridNote(grid: BreakevenGrid): string | null {
+  return grid.reachesPrice ? null : "No combination in this grid reaches today's price";
 }

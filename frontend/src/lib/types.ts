@@ -888,9 +888,14 @@ export interface BreakevenGrid {
   rowDriver: BreakevenDriverName;
   colDriver: BreakevenDriverName;
   rowAxis: number[];
+  /** Ascending and unrounded; the model's own number sits at rowModelIndex / colModelIndex. */
   colAxis: number[];
-  /** cells[rowIndex][colIndex]; the centre is the model's numbers. */
+  rowModelIndex: 0 | 6;
+  colModelIndex: 0 | 6;
+  /** cells[rowIndex][colIndex]; cells[rowModelIndex][colModelIndex] is the model's numbers. */
   cells: BreakevenCell[][];
+  /** True when any cell is at or above the price. */
+  reachesPrice: boolean;
 }
 
 export interface ReverseBreakevenApplicable {

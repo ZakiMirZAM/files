@@ -5,7 +5,7 @@ import { SLOW_ROUTE_TIMEOUT_MS, useResource } from "../../lib/useResource";
 import { formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import {
-  BREAKEVEN_DRIVERS, cellTint, firmFigure, formatDriver, plausibilityLines, statusSentence,
+  BREAKEVEN_DRIVERS, cellTint, firmFigure, formatDriver, gridNote, plausibilityLines, statusSentence,
 } from "../../lib/reverseBreakeven";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
 
@@ -71,7 +71,7 @@ function BreakevenPanel({ data }: { data: ReverseBreakevenApplicable }) {
       <p className="text-[0.95rem] leading-7 text-white/70">
         Today's price is {formatPerShare(data.priceUsed)} a share
         {data.valueAtModel != null && <>; on the model's numbers the company is worth {formatPerShare(data.valueAtModel)}</>}.
-        {" "}Each row changes one number, holds the rest at the model's, and finds the value that makes the two equal.
+        {" "}Each row changes one number, holds the rest at the model's, and finds the value that makes the two equal. In the grids below, the ringed cell is the model's numbers and green cells are worth at least today's price.
       </p>
 
       <div>
@@ -121,10 +121,11 @@ function BreakevenPanel({ data }: { data: ReverseBreakevenApplicable }) {
   );
 }
 
-/** A breakeven grid in the sensitivity-grid style; the centre is the model's numbers. */
+/** A breakeven grid in the sensitivity-grid style, running from the model's numbers
+ *  (a corner cell, ringed) past the values the price needs. */
 function GridTable({ grid }: { grid: BreakevenGrid }) {
-  const centre = Math.floor(grid.rowAxis.length / 2);
-  const colCentre = Math.floor(grid.colAxis.length / 2);
+  const { rowModelIndex: mr, colModelIndex: mc } = grid;
+  const note = gridNote(grid);
   return (
     <div>
       <p className="eyebrow mb-3">
@@ -138,7 +139,7 @@ function GridTable({ grid }: { grid: BreakevenGrid }) {
                 <Term driver={grid.rowDriver} /> ＼ <Term driver={grid.colDriver} />
               </th>
               {grid.colAxis.map((c, ci) => (
-                <th key={ci} className={cn("px-3 py-2 text-right border-b border-gold/10 min-w-[78px]", ci === colCentre && "bg-gold/5")}>
+                <th key={ci} className={cn("px-3 py-2 text-right border-b border-gold/10 min-w-[78px]", ci === mc && "bg-gold/5")}>
                   <span className="text-[0.7rem] font-mono text-white/60">{formatDriver(grid.colDriver, c)}</span>
                 </th>
               ))}
@@ -147,7 +148,7 @@ function GridTable({ grid }: { grid: BreakevenGrid }) {
           <tbody>
             {grid.cells.map((row, ri) => (
               <tr key={ri}>
-                <th scope="row" className={cn("px-3 py-2 text-left border-b border-r border-gold/10", ri === centre && "bg-gold/5")}>
+                <th scope="row" className={cn("px-3 py-2 text-left border-b border-r border-gold/10", ri === mr && "bg-gold/5")}>
                   <span className="text-[0.7rem] font-mono text-white/60">{formatDriver(grid.rowDriver, grid.rowAxis[ri])}</span>
                 </th>
                 {row.map((cell, ci) => (
@@ -156,7 +157,7 @@ function GridTable({ grid }: { grid: BreakevenGrid }) {
                     className={cn(
                       "px-3 py-2 text-right border-b border-white/[0.05] tabular-nums font-mono text-[0.76rem]",
                       cell.value == null ? "text-white/20" : "text-white/85",
-                      ri === centre && ci === colCentre && "ring-1 ring-inset ring-gold/50",
+                      ri === mr && ci === mc && "ring-1 ring-inset ring-gold/50",
                     )}
                     style={{ backgroundColor: cellTint(cell) }}
                   >
@@ -168,6 +169,7 @@ function GridTable({ grid }: { grid: BreakevenGrid }) {
           </tbody>
         </table>
       </div>
+      {note && <p className="text-[0.95rem] leading-7 text-white/70 mt-3">{note}.</p>}
     </div>
   );
 }

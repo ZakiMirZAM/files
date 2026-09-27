@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BREAKEVEN_DRIVERS, cellTint, firmFigure, formatDriver, plausibilityLines, statusSentence } from "./reverseBreakeven";
+import { BREAKEVEN_DRIVERS, cellTint, firmFigure, formatDriver, gridNote, plausibilityLines, statusSentence } from "./reverseBreakeven";
 import { anyDefByNumber } from "./allDefinitions";
 import { EM_DASH } from "./copyHygiene.test-helper";
-import type { BreakevenDriver, ReverseBreakevenApplicable } from "./types";
+import type { BreakevenDriver, BreakevenGrid, ReverseBreakevenApplicable } from "./types";
 
 const driver = (over: Partial<BreakevenDriver>): BreakevenDriver => ({
   driver: "revenueGrowth", model: 0.062, implied: null, low: -0.1, high: 0.6, status: "above_range",
@@ -42,6 +42,12 @@ describe("reverse breakeven helpers", () => {
     expect(cellTint({ value: 400, atOrAbovePrice: true })).toBeDefined();
     expect(cellTint({ value: 90, atOrAbovePrice: false })).toBeUndefined();
     expect(cellTint({ value: null, atOrAbovePrice: true })).toBeUndefined();
+  });
+  it("says so under a grid no cell of which reaches the price", () => {
+    const grid = (reachesPrice: boolean): BreakevenGrid => ({ rowDriver: "revenueGrowth", colDriver: "targetMargin",
+      rowAxis: [], colAxis: [], rowModelIndex: 6, colModelIndex: 0, cells: [], reachesPrice });
+    expect(gridNote(grid(false))).toBe("No combination in this grid reaches today's price");
+    expect(gridNote(grid(true))).toBeNull();
   });
   it("writes the plausibility lines for a solved and an unsolved price", () => {
     expect(plausibilityLines(payload({ impliedStableRoic: 0.41 }))).toEqual([
