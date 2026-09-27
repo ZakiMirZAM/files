@@ -948,7 +948,13 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     {
       title: PRICE_DECK_TITLE,
       questions: [
-        { id: "indiv.reverse_dcf", text: "What growth and margin does today's price imply (reverse DCF), and is that more or less optimistic than my own forecast?" },
+        { id: "indiv.price.bet", text: "What does the market have to believe about {company}'s future for today's price to be fair, and which of those beliefs carries the most weight? A price that rests on one bold belief breaks when that belief fails; a price spread across several modest ones is harder to break." },
+        { id: "indiv.price.market_size", text: "Is the market {company} sells into large enough, and growing fast enough, to support the growth the price assumes, or does the price quietly assume {company} will enter markets it is not in today? Revenue can never outgrow the market it comes from." },
+        { id: "indiv.price.margin_edge", text: "What would let {company} earn the margin the price assumes when most rivals cannot, and is that advantage already proven or still a promise? A margin far above competitors' is only as safe as the edge that produces it." },
+        { id: "indiv.price.edge_duration", text: "How long can {company} keep earning more on its investments than those investments cost, and what would eventually close that gap: new rivals, new technology, regulators, or customers who stop paying a premium? When a price needs excess returns forever, it is betting that nobody ever catches up." },
+        { id: "indiv.price.value_or_price", text: "Is the market valuing {company} on the cash it will produce, or pricing it on something else, such as index buying, momentum, scarcity of similar companies, or a story investors love? A price driven by demand for the stock can stay away from value for a long time, so being right about value does not tell you when the gap closes." },
+        { id: "indiv.price.your_story", text: "Where does your own story for {company} part ways with the story the price tells, and what evidence would eventually show which one is right? Disagreeing with the market is only useful when you can name the belief you disagree on and what would settle it." },
+        { id: "indiv.price.synthesis", text: "Write the story the market is telling about {company} through today's price, say which parts of it you believe and which you do not, and what you would be willing to pay for the story you do believe. No length limit; pull together everything above into the best complete picture you can." },
       ],
     },
     {

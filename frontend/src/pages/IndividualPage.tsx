@@ -51,6 +51,7 @@ import { PEER_RANKING } from "../lib/connectionsCopy";
 import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
 import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
 import { PRICE_DECK_TITLE, STORY_DECK_TITLE } from "../lib/questions";
+import { buildPriceDeck } from "../lib/story";
 import type { IndividualBenchmarks } from "../lib/types";
 import { Search } from "lucide-react";
 
@@ -127,6 +128,8 @@ export function IndividualPage() {
   // "TICKER {em dash} Name" heading: interpolated into a question it would put
   // an em dash into rendered copy.
   const companyName = analysis?.name ?? ticker;
+
+  const priceDeck = useMemo(() => buildPriceDeck(companyName ?? ""), [companyName]);
 
   const connectDeck = useMemo(
     () =>
@@ -324,14 +327,14 @@ export function IndividualPage() {
           <ReverseDcfSection data={data.analysis.forecast.reverseDcf} />
         )}
 
-        {/* The one question about what today's price implies, beside the
-            section that works it out. */}
-        {ticker && (
+        {/* What today's price implies, beside the section that works it out.
+            Keyed by the route ticker, the key its answers are saved under. */}
+        {ticker && priceDeck.length > 0 && (
           <div className="pt-2">
             <QualitativeBlock
               section="individual"
               scopeKey={ticker}
-              onlyTitles={[PRICE_DECK_TITLE]}
+              groups={priceDeck}
               storageSuffix="price"
               hideHeader
               dataContext={aiDataContext}

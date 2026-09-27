@@ -5,7 +5,7 @@
 import type { StoryAnswerReply, StoryAnswerRequest, StoryRow, StoryRowStatus, StoryUnit } from "./aiApi";
 import { fill } from "./connectQuestions";
 import { formatCurrency } from "./format";
-import { QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
+import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
 import type {
   RuntimeGroup, RuntimeQuestion, StoryDcfInputs, StoryInputCheck, StoryInputName, StoryStageCount,
 } from "./types";
@@ -52,7 +52,16 @@ export const STORY_QUESTION_LABELS: Record<string, string> = {
  * question about nobody.
  */
 export function buildStoryDeck(company: string): RuntimeGroup[] {
-  const group = QUALITATIVE_QUESTIONS.individual.find((g) => g.title === STORY_DECK_TITLE);
+  return buildCompanyDeck(STORY_DECK_TITLE, company);
+}
+
+/** The "What the Price Implies" deck, its `{company}` filled the same way. */
+export function buildPriceDeck(company: string): RuntimeGroup[] {
+  return buildCompanyDeck(PRICE_DECK_TITLE, company);
+}
+
+function buildCompanyDeck(title: string, company: string): RuntimeGroup[] {
+  const group = QUALITATIVE_QUESTIONS.individual.find((g) => g.title === title);
   if (!group) return [];
   const names = { company };
   const questions: RuntimeQuestion[] = [];

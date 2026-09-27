@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
 import { STORY_ANSWER_IDS, STORY_CHECK_IDS, STORY_INPUTS, STORY_QUESTION_LABELS, STORY_RESEARCH_IDS,
-         STORY_SYNTHESIS_ID, STORY_VALUATION_DEFS, buildStoryDeck, checkedLabel, formatStoryValue,
+         STORY_SYNTHESIS_ID, STORY_VALUATION_DEFS, buildPriceDeck, buildStoryDeck, checkedLabel, formatStoryValue,
          inStoryBounds, researchStory, stageShapeLabel, storyDcfBody, storyQuestionText,
          type ResearchStatus } from "./story";
 import { anyDefByNumber } from "./allDefinitions";
@@ -18,6 +18,16 @@ const group = (t: string) => QUALITATIVE_QUESTIONS.individual.find((g) => g.titl
 const IDS = ["indiv.story.market", "indiv.story.new_customers", "indiv.story.size", "indiv.story.edge",
              "indiv.story.growth_cost", "indiv.story.outside_forces", "indiv.story.end",
              "indiv.story.edge_duration", "indiv.story.synthesis"];
+// The owner-approved "What the Price Implies" questions, pinned verbatim.
+const PRICE_QUESTIONS: Array<[string, string]> = [
+  ["indiv.price.bet", "What does the market have to believe about {company}'s future for today's price to be fair, and which of those beliefs carries the most weight? A price that rests on one bold belief breaks when that belief fails; a price spread across several modest ones is harder to break."],
+  ["indiv.price.market_size", "Is the market {company} sells into large enough, and growing fast enough, to support the growth the price assumes, or does the price quietly assume {company} will enter markets it is not in today? Revenue can never outgrow the market it comes from."],
+  ["indiv.price.margin_edge", "What would let {company} earn the margin the price assumes when most rivals cannot, and is that advantage already proven or still a promise? A margin far above competitors' is only as safe as the edge that produces it."],
+  ["indiv.price.edge_duration", "How long can {company} keep earning more on its investments than those investments cost, and what would eventually close that gap: new rivals, new technology, regulators, or customers who stop paying a premium? When a price needs excess returns forever, it is betting that nobody ever catches up."],
+  ["indiv.price.value_or_price", "Is the market valuing {company} on the cash it will produce, or pricing it on something else, such as index buying, momentum, scarcity of similar companies, or a story investors love? A price driven by demand for the stock can stay away from value for a long time, so being right about value does not tell you when the gap closes."],
+  ["indiv.price.your_story", "Where does your own story for {company} part ways with the story the price tells, and what evidence would eventually show which one is right? Disagreeing with the market is only useful when you can name the belief you disagree on and what would settle it."],
+  ["indiv.price.synthesis", "Write the story the market is telling about {company} through today's price, say which parts of it you believe and which you do not, and what you would be willing to pay for the story you do believe. No length limit; pull together everything above into the best complete picture you can."],
+];
 
 describe("the Your Story deck", () => {
   it("holds the nine story questions, then the two moved ones", () => {
@@ -47,9 +57,10 @@ describe("the Your Story deck", () => {
     expect(ids).not.toContain("indiv.narrative_break");
     expect(QUALITATIVE_QUESTIONS.individual.map((g) => g.title)).not.toContain("Narrative & Expectations");
   });
-  it("puts reverse_dcf in its own deck without the author parenthetical", () => {
-    expect(group(PRICE_DECK_TITLE).questions).toEqual([{ id: "indiv.reverse_dcf",
-      text: "What growth and margin does today's price imply (reverse DCF), and is that more or less optimistic than my own forecast?" }]);
+  it("holds the seven price questions verbatim, with no steps or close", () => {
+    expect(group(PRICE_DECK_TITLE).questions).toEqual(PRICE_QUESTIONS.map(([id, text]) => ({ id, text })));
+    const ids = QUALITATIVE_QUESTIONS.individual.flatMap((g) => g.questions.map((q) => q.id));
+    expect(ids).not.toContain("indiv.reverse_dcf");
   });
   it("keeps both decks out of the page-bottom bank", () => {
     const exclude = PAGE.slice(PAGE.indexOf("excludeTitles={["), PAGE.indexOf("]}", PAGE.indexOf("excludeTitles={[")));
@@ -67,6 +78,18 @@ describe("buildStoryDeck", () => {
   });
   it("builds nothing without a name", () => {
     expect(buildStoryDeck("")).toEqual([]);
+  });
+});
+
+describe("buildPriceDeck", () => {
+  it("fills the company name into every price question", () => {
+    const [g] = buildPriceDeck("Ferrari");
+    expect(g.title).toBe(PRICE_DECK_TITLE);
+    expect(g.questions.map((q) => q.text)).toEqual(PRICE_QUESTIONS.map(([, t]) => t.split("{company}").join("Ferrari")));
+    expect(buildPriceDeck("")).toEqual([]);
+  });
+  it("renders the filled deck beside the Reverse DCF", () => {
+    expect(PAGE).toMatch(/groups=\{priceDeck\}/);
   });
 });
 
