@@ -74,11 +74,14 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  // The step after research: the conversion and the valuation show no per-question line.
+  const [stage, setStage] = useState<string | null>(null);
 
   const convert = async () => {
     setBusy(true);
     setMessage(null);
     setProgress(null);
+    setStage(null);
     let failed = false;
     try {
       const ctx = await fetchStoryContext(ticker).catch((err: unknown) => {
@@ -98,12 +101,14 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
           setProgress((p) => ({ ...p, [id]: { status, detail } }));
         },
       });
+      setStage("Turning the answers into numbers (about a minute)");
       const conversion = await convertStory({ ticker, company: name, answers, dataBlock });
       setStoredStory(ticker, { version: STORED_STORY_VERSION, conversion, research: results, savedAt: Date.now() });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "The story could not be turned into numbers. Try again.");
     } finally {
       setBusy(false);
+      setStage(null);
       // A finished run keeps its list only when a line failed, so the failure stays readable.
       if (!failed) setProgress(null);
     }
@@ -140,6 +145,8 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
           {busy ? "Turning your story into numbers..." : "Turn my story into numbers"}
         </button>
         {message && <p className="text-sm text-white/70">{message}</p>}
+        {stage && <p className="text-sm text-white/85">{stage}</p>}
+        {!busy && stored && story.state === "loading" && <p className="text-sm text-white/85">Valuing the story</p>}
         {progress && (
           <ul className="text-sm space-y-1">
             {STORY_RESEARCH_IDS.filter((id) => progress[id]).map((id) => {
