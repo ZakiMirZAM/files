@@ -122,3 +122,39 @@ describe("convertStory", () => {
     expect((await convertStory(params)).rows.map((r) => r.input)).toEqual(NAMES);
   });
 });
+
+import { answerStoryQuestion } from "./aiApi";
+describe("answerStoryQuestion", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const reply = (body: string) => {
+    const f = vi.fn(async (_url: string, _init?: RequestInit) => new Response(body, { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    return f;
+  };
+  const params = { ticker: "RACE", company: "Ferrari", questionId: "indiv.story.market", question: "Q",
+                   userAnswer: "", dataBlock: "d" };
+  it("shows the proxy's error sentence when the RAG server is down", async () => {
+    reply('  {"answer":"","explanation":"","definition":"","sources":[],"error":"AI backend temporarily unavailable"}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("AI backend temporarily unavailable");
+  });
+  it("treats a reply without a verdict, or an empty AI answer, as a failure", async () => {
+    reply('{"answer":"text"}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+    reply('{"adequate":false,"answer":"  ","sources":[]}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+  });
+  it("returns the kept and the answered shapes", async () => {
+    reply('{"adequate":true,"answer":"x","sources":["y"]}');
+    expect(await answerStoryQuestion(params)).toEqual({ adequate: true, answer: "", sources: [] });
+    reply('{"adequate":false,"answer":" researched ","sources":["Book, chapter 1", 3]}');
+    expect(await answerStoryQuestion(params)).toEqual({ adequate: false, answer: "researched", sources: ["Book, chapter 1"] });
+  });
+  it("posts the server's field names", async () => {
+    const f = reply('{"adequate":true,"answer":"","sources":[]}');
+    await answerStoryQuestion({ ...params, otherAnswers: { "indiv.story.edge": "e" } });
+    const [url, init] = f.mock.calls[0];
+    expect(url.endsWith("/story-answer")).toBe(true);
+    expect(JSON.parse(init!.body as string)).toEqual({ ticker: "RACE", company: "Ferrari",
+      questionId: "indiv.story.market", question: "Q", userAnswer: "", otherAnswers: { "indiv.story.edge": "e" }, data: "d" });
+  });
+});

@@ -440,3 +440,46 @@ export async function convertStory(p: {
   if (!conversion) throw new Error("The AI answer could not be read. Try again.");
   return conversion;
 }
+
+// ── Story research (POST /story-answer) ────────────────────────────────────
+
+/** The server's verdict on one story question: the reader's answer kept, or the AI's. */
+export interface StoryAnswerReply {
+  adequate: boolean;
+  answer: string;
+  sources: string[];
+}
+
+export interface StoryAnswerRequest {
+  questionId: string;
+  /** The ask, its numbered steps and its closing sentence, as plain text. */
+  question: string;
+  userAnswer: string;
+  /** The story being tested, for the synthesis and the two checks. */
+  otherAnswers?: Record<string, string>;
+}
+
+/**
+ * Answer one story question: the server keeps the reader's answer when it follows
+ * the question's steps, and researches and writes one otherwise. Metered in its own
+ * nginx zone (story_answer_zone), not the ask budget. `error` is read first because
+ * ai_proxy's fallback body is a 200 with an error and no answer.
+ */
+export async function answerStoryQuestion(
+  p: StoryAnswerRequest & { ticker: string; company: string; dataBlock: string },
+): Promise<StoryAnswerReply> {
+  const data = await postAi(
+    "/story-answer",
+    { ticker: p.ticker, company: p.company, questionId: p.questionId, question: p.question,
+      userAnswer: p.userAnswer, otherAnswers: p.otherAnswers ?? {}, data: p.dataBlock },
+    600_000,
+  );
+  const r = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
+  if (typeof r.error === "string" && r.error) throw new Error(r.error);
+  if (typeof r.adequate !== "boolean" || (!r.adequate && !str(r.answer).trim())) {
+    throw new Error("The AI answer could not be read. Try again.");
+  }
+  return r.adequate
+    ? { adequate: true, answer: "", sources: [] }
+    : { adequate: false, answer: str(r.answer).trim(), sources: strings(r.sources) };
+}

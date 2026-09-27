@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { toStoryConversion, type StoryConversion } from "./aiApi";
+import { STORY_RESEARCH_IDS, type ResearchedAnswer } from "./story";
 
 /** The reader's converted story per company, and which numbers the FCFF
  *  valuation shows ("model" or "story").
@@ -12,8 +13,14 @@ import { toStoryConversion, type StoryConversion } from "./aiApi";
 
 export type StoryMode = "model" | "story";
 
+/** Bumped whenever the stored shape changes; an entry of any other version reads as no story. */
+export const STORED_STORY_VERSION = 2;
+
 export interface StoredStory {
+  version: typeof STORED_STORY_VERSION;
   conversion: StoryConversion;
+  /** Each researched question's answer as the conversion used it, by question id. */
+  research: Record<string, ResearchedAnswer>;
   savedAt: number;
 }
 
@@ -59,10 +66,27 @@ export function parseStoredStory(raw: string | null): StoredStory | null {
     return null;
   }
   if (typeof parsed !== "object" || parsed === null) return null;
-  const { conversion, savedAt } = parsed as Record<string, unknown>;
+  const { version, conversion, research, savedAt } = parsed as Record<string, unknown>;
+  if (version !== STORED_STORY_VERSION) return null;
   const table = toStoryConversion(conversion);
-  if (!table || typeof savedAt !== "number" || !Number.isFinite(savedAt)) return null;
-  return { conversion: table, savedAt };
+  const answers = toResearch(research);
+  if (!table || !answers || typeof savedAt !== "number" || !Number.isFinite(savedAt)) return null;
+  return { version: STORED_STORY_VERSION, conversion: table, research: answers, savedAt };
+}
+
+function toResearch(raw: unknown): Record<string, ResearchedAnswer> | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const out: Record<string, ResearchedAnswer> = {};
+  for (const id of STORY_RESEARCH_IDS) {
+    const x = (raw as Record<string, unknown>)[id];
+    if (x === undefined) continue;
+    if (typeof x !== "object" || x === null) return null;
+    const { source, text, sources, error } = x as Record<string, unknown>;
+    if ((source !== "user" && source !== "ai") || typeof text !== "string"
+      || !Array.isArray(sources) || !sources.every((s) => typeof s === "string")) return null;
+    out[id] = { source, text, sources, ...(typeof error === "string" ? { error } : {}) };
+  }
+  return out;
 }
 
 export function readStoredStory(key: string): StoredStory | null {

@@ -31,7 +31,6 @@ The conversion sets the target from the answer about what lets the company charg
 | An advantage that shows up in outside evidence and that rivals cannot copy | Above the industry median, up to the industry's upper range |
 | An advantage that fails either test | The industry median |
 | No history of margins or returns above the company's peers | At or below the industry median |
-| An answer too thin to apply the rule | The industry median |
 
 The industry's upper range is the margin the top tenth of the company's industry earns. The site also rejects any target of 100 percent or more.
 

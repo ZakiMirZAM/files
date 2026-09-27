@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
-import { STORY_ANSWER_IDS, STORY_INPUTS, STORY_SYNTHESIS_ID, buildStoryDeck, checkedLabel, collectStoryAnswers,
-         formatStoryValue, inStoryBounds, storyDcfBody } from "./story";
-import type { StoryRow } from "./aiApi";
+import { STORY_ANSWER_IDS, STORY_CHECK_IDS, STORY_INPUTS, STORY_QUESTION_LABELS, STORY_RESEARCH_IDS,
+         STORY_SYNTHESIS_ID, buildStoryDeck, checkedLabel, formatStoryValue, inStoryBounds, researchStory,
+         storyDcfBody, storyQuestionText, type ResearchStatus } from "./story";
+import type { StoryAnswerReply, StoryAnswerRequest, StoryRow } from "./aiApi";
 import { EM_DASH } from "./copyHygiene.test-helper";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,17 +68,88 @@ describe("buildStoryDeck", () => {
   });
 });
 
-describe("story answers", () => {
-  const full = new Map(IDS.slice(0, 8).map((id) => [id, "answer"]));
-  it("sends all eight answers, blank ones empty, so the AI uses each fallback", () => {
+describe("story research", () => {
+  const questions = buildStoryDeck("Ferrari")[0].questions;
+  const saved = new Map([["indiv.story.market", "luxury goods"], ["indiv.story.edge", "the brand"]]);
+  type Call = StoryAnswerRequest;
+  // A fake server: keeps the market answer, fails the edge question, answers the rest.
+  const fake = (calls: Call[], opts: { failId?: string; delay?: number } = {}) =>
+    async (req: Call): Promise<StoryAnswerReply> => {
+      calls.push(req);
+      await new Promise((r) => setTimeout(r, opts.delay ?? 0));
+      if (req.questionId === opts.failId) throw new Error("AI backend temporarily unavailable");
+      if (req.questionId === "indiv.story.market") return { adequate: true, answer: "", sources: [] };
+      return { adequate: false, answer: `ai ${req.questionId}`, sources: ["Book, chapter 1"] };
+    };
+
+  it("covers all eleven questions and names each one", () => {
     expect(STORY_ANSWER_IDS).toEqual(IDS.slice(0, 8));
-    const blank = collectStoryAnswers(new Map());
-    expect(Object.keys(blank)).toEqual(IDS.slice(0, 8));
-    expect(Object.values(blank).every((a) => a === "")).toBe(true);
+    expect(STORY_RESEARCH_IDS).toEqual([...IDS, ...STORY_CHECK_IDS]);
+    expect(STORY_RESEARCH_IDS.every((id) => STORY_QUESTION_LABELS[id])).toBe(true);
   });
-  it("sends the synthesis only when it is answered", () => {
-    expect(Object.keys(collectStoryAnswers(full))).toEqual(IDS.slice(0, 8));
-    expect(collectStoryAnswers(new Map([...full, [STORY_SYNTHESIS_ID, "whole story"]]))[STORY_SYNTHESIS_ID]).toBe("whole story");
+  it("sends the ask, the numbered steps and the close as plain text", () => {
+    const q = questions[0];
+    const text = storyQuestionText(q);
+    expect(text.startsWith(`${q.text}\nWork it out in steps:\n1. ${q.steps![0]}`)).toBe(true);
+    expect(text.endsWith(q.close!)).toBe(true);
+    expect(storyQuestionText(questions[9])).toBe(questions[9].text);   // a check has no steps
+  });
+  it("keeps an adequate answer, replaces an inadequate one, and converts the effective answers", async () => {
+    const calls: Call[] = [];
+    const { results, answers } = await researchStory({ questions, saved, answer: fake(calls) });
+    expect(results["indiv.story.market"]).toEqual({ source: "user", text: "luxury goods", sources: [] });
+    expect(results["indiv.story.edge"]).toEqual({ source: "ai", text: "ai indiv.story.edge", sources: ["Book, chapter 1"] });
+    expect(Object.keys(answers)).toEqual([...IDS.slice(0, 8), STORY_SYNTHESIS_ID]);
+    expect(answers["indiv.story.market"]).toBe("luxury goods");
+    expect(answers[STORY_SYNTHESIS_ID]).toBe(`ai ${STORY_SYNTHESIS_ID}`);
+    expect(calls.find((c) => c.questionId === "indiv.story.edge")!.userAnswer).toBe("the brand");
+  });
+  it("tests the synthesis against the eight effective answers and the checks against all nine", async () => {
+    const calls: Call[] = [];
+    await researchStory({ questions, saved, answer: fake(calls) });
+    const order = calls.map((c) => c.questionId);
+    expect(order.slice(8)).toEqual([STORY_SYNTHESIS_ID, ...STORY_CHECK_IDS]);
+    const synthesis = calls.find((c) => c.questionId === STORY_SYNTHESIS_ID)!;
+    expect(Object.keys(synthesis.otherAnswers!)).toEqual(IDS.slice(0, 8));
+    expect(synthesis.otherAnswers!["indiv.story.market"]).toBe("luxury goods");
+    expect(synthesis.otherAnswers!["indiv.story.size"]).toBe("ai indiv.story.size");
+    const check = calls.find((c) => c.questionId === "indiv.big_market")!;
+    expect(check.otherAnswers![STORY_SYNTHESIS_ID]).toBe(`ai ${STORY_SYNTHESIS_ID}`);
+    expect(calls.find((c) => c.questionId === "indiv.story.market")!.otherAnswers).toBeUndefined();
+  });
+  it("never runs more than three research calls at once", async () => {
+    let live = 0, most = 0;
+    const answer = async (): Promise<StoryAnswerReply> => {
+      most = Math.max(most, ++live);
+      await new Promise((r) => setTimeout(r, 5));
+      live--;
+      return { adequate: false, answer: "a", sources: [] };
+    };
+    await researchStory({ questions, saved, answer });
+    expect(most).toBe(3);
+  });
+  it("turns one failed call into an error line and keeps the reader's text for it", async () => {
+    const lines: Array<[string, ResearchStatus, string | undefined]> = [];
+    const { results, answers } = await researchStory({
+      questions, saved, answer: fake([], { failId: "indiv.story.edge" }),
+      onProgress: (id, status, detail) => lines.push([id, status, detail]),
+    });
+    expect(results["indiv.story.edge"]).toEqual({ source: "user", text: "the brand", sources: [],
+      error: "AI backend temporarily unavailable" });
+    expect(answers["indiv.story.edge"]).toBe("the brand");
+    expect(lines).toContainEqual(["indiv.story.edge", "failed", "AI backend temporarily unavailable"]);
+    expect(lines).toContainEqual(["indiv.story.market", "kept", undefined]);
+    expect(lines).toContainEqual(["indiv.story.size", "answered", undefined]);
+    expect(lines.filter(([, s]) => s === "researching")).toHaveLength(11);
+  });
+  it("refuses to run without the deck", async () => {
+    await expect(researchStory({ questions: [], saved, answer: fake([]) })).rejects.toThrow("not loaded");
+  });
+  it("maps every input to the question that feeds it", () => {
+    expect(Object.fromEntries(STORY_INPUTS.map((i) => [i.input, i.question]))).toEqual({
+      totalMarket: IDS[0], marketGrowth10y: IDS[1], shareYear10: IDS[2], targetMargin: IDS[3],
+      salesToCapital: IDS[4], failureProbability: IDS[6], distressProceeds: IDS[6], stableRoic: IDS[7],
+    });
   });
 });
 
