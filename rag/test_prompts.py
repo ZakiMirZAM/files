@@ -77,13 +77,17 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # sentence "A frame that genuinely has nothing to say for this subject gets one
 # honest sentence saying so, not a paragraph of padding." was removed.
 # EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
+#
+# STORY_SYSTEM recorded 2026-09-27: new owner-approved /story-inputs route; the
+# other three prompts unchanged.
 EXPECTED = {
     "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
+    "STORY_SYSTEM": "56f008180914f9c04cc5ece8464a09d492e3fac6a68effc875b25e59089adc5a",
 }
 
-PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM")
+PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM")
 
 
 def digest(text: str) -> str:
@@ -95,7 +99,7 @@ def test_prompt_text_is_unchanged(name):
     """Pins the prompt bytes. Regenerate with:
        python -c "import sys;sys.path.insert(0,'rag');import server,hashlib;\
 print({n: hashlib.sha256(getattr(server,n).encode()).hexdigest() for n in \
-['ASK_SYSTEM','EXPLAIN_SYSTEM','DEFINE_SYSTEM']})"
+['ASK_SYSTEM','EXPLAIN_SYSTEM','DEFINE_SYSTEM','STORY_SYSTEM']})"
     """
     actual = digest(getattr(server, name))
     assert actual == EXPECTED[name], (
@@ -256,6 +260,14 @@ def test_ask_prompt_obeys_its_own_typography_rules():
     assert "–" not in text, "ASK_SYSTEM contains an en dash"
     for ch in ("“", "”", "‘", "’"):
         assert ch not in text, "ASK_SYSTEM contains a curly quotation mark"
+
+
+def test_story_prompt_obeys_its_own_typography_rules():
+    text = server.STORY_SYSTEM
+    assert "—" not in text and "–" not in text
+    for ch in ("“", "”", "‘", "’"):
+        assert ch not in text
+    assert "AUTHORITATIVE" in text and "search_vault" in text
 
 
 def test_ask_puts_the_sources_line_last():

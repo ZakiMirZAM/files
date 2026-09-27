@@ -8,6 +8,8 @@ in this process. Run `claude login` (Max) once before starting.
 
   POST /ask     {question, category?}  -> {answer, sources}
   POST /define  {term}                 -> {term, definition, cached}
+  POST /story-inputs  {ticker, company, answers, data}
+                                       -> {rows, riskFlags, weakestLink, counterStory}
 
 Start:  python server.py        (listens on http://localhost:3001)
 Needs:  ollama serve + `ollama pull nomic-embed-text`, and `claude login`.
@@ -46,6 +48,7 @@ import calc_tools
 import rarr
 import research_tools
 import retrieval
+import story_inputs
 import verify
 from news_tools import NEWS_MCP, NEWS_TOOLS
 from social_tools import SOCIAL_MCP, SOCIAL_TOOLS
@@ -86,11 +89,15 @@ DEFINE_MODEL = "claude-opus-4-6"     # cached term tooltips
 ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "medium")  # type: ignore[assignment]
 EXPLAIN_EFFORT: EffortLevel = "medium"
 DEFINE_EFFORT: EffortLevel = "medium"
+# /story-inputs (owner-approved 2026-09-27). Declared here rather than beside
+# STORY_SYSTEM because EFFORT_BY_LABEL below must be able to name it.
+STORY_EFFORT: EffortLevel = "medium"
 # Keyed by `label` (the string run_agent already logs with, e.g. "/ask"), not by
 # model: two routes sharing one model string (as /explain and /define did until
 # 2026-08-07) would let one route's effort silently clobber the other's in the dict.
 EFFORT_BY_LABEL: dict[str, EffortLevel] = {
     "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
+    "/story-inputs": STORY_EFFORT,
 }
 VAULT_TOOL = "mcp__vault__search_vault"
 # The agent may use the vault search plus the web (vault-first sourcing, web for
@@ -454,6 +461,48 @@ DEFINE_SYSTEM = (
     "actual figures (interactive valuation) and treat those figures as "
     "authoritative. Plain and precise, no preamble, no bullet points, no em dashes."
 )
+
+# --- Prompt D: turn a reader's story into DCF inputs (POST /story-inputs) ---
+# A separate, owner-approved route (2026-09-27) with its own hash in
+# rag/test_prompts.py; /ask, /explain and /define are untouched by it. Vault
+# search only (allow_web=False), and every row's proof is Tier 0 checked against
+# the "Computed data on the page" block the prompt calls AUTHORITATIVE.
+STORY_MAX_TURNS = 12
+STORY_BUDGET_USD = 2.0
+STORY_SYSTEM = """\
+You convert a reader's story about one company into the inputs of a discounted cash flow valuation, and you prove every number you give.
+
+WHAT YOU RECEIVE
+The user message has two blocks. "Computed data on the page" is AUTHORITATIVE: the site computed these exact figures from its own data. Every figure you cite must come from that block, with its label and value copied exactly as the block writes them. "The reader's story answers" holds the reader's own words, one answer per question, labelled by question number.
+
+WHAT YOU RETURN
+Return one JSON object and nothing else: no text before or after it and no code fence. The object has exactly four keys:
+{"rows": [...], "riskFlags": [...], "weakestLink": "...", "counterStory": "..."}
+"rows" holds exactly eight objects, one per input, in this order: totalMarket, marketGrowth10y, shareYear10, targetMargin, salesToCapital, failureProbability, distressProceeds, stableRoic. Each object is:
+{"input": "<name>", "storyQuote": "<the reader's words>", "value": <number or null>, "unit": "<unit>", "proof": "<why this number>", "sources": ["<book title, chapter number>"]}
+Units: totalMarket and distressProceeds are "currency", a full amount in the company's reporting currency, never in thousands or millions. marketGrowth10y is "rate", a yearly decimal (0.05 means 5 percent a year). shareYear10, targetMargin, failureProbability and stableRoic are "fraction", a decimal (0.2 means 20 percent). salesToCapital is "ratio" (1.42 means 1.42 of new sales for each 1 of capital invested).
+
+THE CONVERSION RULES
+Each input comes from one answer. Apply its rule. When the answer is too thin to apply the rule, use the fallback and say in the proof that the fallback was used.
+totalMarket, from question 1: what customers spend in total today on everything inside the market the reader drew, using the source or derivation the answer gives. Fallback: the industry total revenue in the data block.
+marketGrowth10y, from question 2: the reader's choice sets the rate. A market that stays the same size apart from inflation grows at the risk-free rate, the proxy for the growth of the whole economy. A market that grows by about a quarter over ten years grows at the risk-free rate plus 0.023. About half: the risk-free rate plus 0.041. Double: the risk-free rate plus 0.072. Fallback: the same size.
+shareYear10, from question 3: no pull from size keeps today's share, which is the company share of industry revenue in the data block or the company's revenue divided by the reader's market. Pull in a few local markets sets a moderately higher share. Pull in many local markets, or pull that carries into new markets, sets a higher share. The share never goes above a legal limit the answer names and never above 1. Fallback: today's share.
+targetMargin, from question 4: the pre-tax operating margin in year 10. Anchor on the industry operating margin median. An edge that passes steps 3 and 4 of question 4 sets a margin above the median, up to the industry operating margin 90th percentile. An edge that fails either step sets the median. A company with no history of margins or returns above its peers sits at or below the median. Fallback: the industry median.
+salesToCapital, from question 5: start from the company's marginal sales to capital over five years, its latest sales to capital and the industry sales to capital median. Move higher when the answer says spending per new dollar of sales will fall, and lower when it says that spending will rise. Fallback: the industry median.
+failureProbability and distressProceeds, from question 7: anchor the chance that the story ends within ten years on the ten-year default rate for the company's synthetic rating class in the data block. Adjust it for what the answer says about cash, debt falling due, and access to banks, bond buyers and new shareholders. A figure near zero is right for a large, profitable, investment-grade company with little debt. distressProceeds is what shareholders would receive in a forced sale after lenders are repaid, and it is 0 unless the answer gives a reason to expect more. Fallbacks: near zero for a profitable investment-grade company, the rating class default rate otherwise, and 0 for the proceeds.
+stableRoic, from question 8: the return on capital after year 10 is exactly one of three values. It is the WACC in the data block when no edge survives. It is the industry ROIC median when the edge is one the whole industry shares. It is above the industry ROIC median only when a named edge survives steps 2 and 3 of question 8. Fallback: the WACC.
+Question 6 sets no input. The site builds the cost of capital itself, and you never change it. Use question 6 only for riskFlags. Each flag names one risk the reader raised that the cost of capital does not capture, or a year of profit earned at an unusually high or low level of an outside force. Return an empty list when there are none.
+Question 9, when present, is the reader's whole story. Check the eight numbers against it and against each other. When two answers pull in different directions, follow the one with more evidence and say so in the proof.
+
+PROOF
+Every proof cites at least one figure from the data block, copying its label and value exactly, for example "the latest operating margin of 18.20%" or "the industry operating margin 90th percentile of 12.30%". Say where the number sits against the company's own history and against the industry range, and name the rule it follows. Name the book title and chapter behind the rule, and search the vault library with search_vault when you need the passage. Write two to four sentences. Never give a number without proof. When the answers and the data cannot support a number, set value to null and say why in the proof.
+storyQuote is a short quote of the reader's own words, at most 25 words, from the answer the input comes from. Use an empty string when the answer says nothing that bears on the input.
+
+WEAKEST LINK AND COUNTER-STORY
+weakestLink names the one answer with the least evidence behind it and says what evidence is missing, in one or two sentences. counterStory is the most plausible different story for the same company, in two sentences, with no numbers.
+
+STYLE
+Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. Never name an author; name a book by its title. Apply no grades, labels or verdicts such as strong, weak, good or bad: state the figures and the rule."""
 
 # --- local retrieval (no Claude) ---
 _db_lock = threading.Lock()
@@ -841,6 +890,40 @@ async def handle_define(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
+async def handle_story_inputs(request: web.Request) -> web.Response:
+    """Eight story answers in, eight DCF inputs out, each row's proof Tier 0 checked."""
+    try:
+        data = await request.json()
+    except Exception:                          # noqa: BLE001 - a bad body is a 400
+        return web.json_response({"error": "invalid JSON"}, status=400)
+    err, payload = story_inputs.validate_request(data)
+    if err:
+        return web.json_response({"error": err}, status=400)
+    try:
+        text, _sources = await run_agent(
+            story_inputs.build_prompt(payload), ASK_MODEL, STORY_SYSTEM,
+            max_turns=STORY_MAX_TURNS, label="/story-inputs", allow_web=False,
+            budget_usd=STORY_BUDGET_USD)
+    except Exception as exc:
+        print(f"[/story-inputs] agent failed: {type(exc).__name__}: {exc}", flush=True)
+        return web.json_response(
+            {"rows": [], "error": "AI backend temporarily unavailable"}, status=503)
+    parsed = story_inputs.parse_story_output(text)
+    if parsed is None:
+        print(f"[/story-inputs] unreadable model output ({len(text)} chars)", flush=True)
+        return web.json_response(
+            {"rows": [], "error": "The AI answer could not be read. Try again."}, status=503)
+    rows = []
+    for row in parsed["rows"]:
+        report = verify.tier0(row["proof"], payload["data"], [])
+        verify.log_line("/story-inputs", report)
+        # The FULL report, deliberately not verify.public(): the story table's
+        # Checked column shows what failed. This route only; the others still strip.
+        rows.append({**row, "verification": {"status": story_inputs.row_status(report),
+                                             "report": report}})
+    return web.json_response({**parsed, "rows": rows})
+
+
 async def handle_verify(request: web.Request) -> web.Response:
     """Run Tier 1 against a parked answer and return the minimal revision.
 
@@ -892,6 +975,7 @@ def main() -> None:
     app.router.add_post("/ask", handle_ask)
     app.router.add_post("/explain", handle_explain)
     app.router.add_post("/define", handle_define)
+    app.router.add_post("/story-inputs", handle_story_inputs)
     app.router.add_post("/verify", handle_verify)
     app.router.add_get("/health", handle_health)
     print(f"RAG server on http://localhost:{PORT}  (ask={ASK_MODEL}, explain={EXPLAIN_MODEL}, define={DEFINE_MODEL})")
