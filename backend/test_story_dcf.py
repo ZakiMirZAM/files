@@ -175,6 +175,14 @@ def test_company_history_and_marginal_sales_to_capital():
     assert sd.marginal_sales_to_capital(rows) == approx(100.0 / 50.0)
     assert sd.marginal_sales_to_capital(rows[:5]) is None
 
+def test_marginal_sales_to_capital_drops_ratios_outside_the_model_bounds():
+    # Buybacks can leave invested capital almost flat while revenue grows
+    # (AAPL printed 246x); the model discards the same ratios.
+    rows = [{"Calendar Year": y, "Revenue": 100.0 + 50.0 * i,
+             "Total Stockholders Equity": 50.0 + 0.1 * i, "Total Debt": 0.0,
+             "Cash And Cash Equivalents": 0.0} for i, y in enumerate(range(2019, 2025))]
+    assert sd.marginal_sales_to_capital(rows) is None
+
 def test_industry_ranges_on_a_fixture_database():
     conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
     fixture_db.create_schema(conn)

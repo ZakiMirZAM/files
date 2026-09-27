@@ -212,7 +212,10 @@ def marginal_sales_to_capital(rows: Iterable[Mapping], years: int = 5) -> float 
     cap0, cap1 = _capital(start), _capital(end)
     if None in (rev0, rev1, cap0, cap1) or cap1 - cap0 <= 0:
         return None
-    return (rev1 - rev0) / (cap1 - cap0)
+    ratio = (rev1 - rev0) / (cap1 - cap0)
+    # Same bounds the model applies to its own sales to capital: a near-flat
+    # capital base (heavy buybacks) otherwise prints an absurd ratio.
+    return ratio if ia._S2C_MIN <= ratio <= ia._S2C_MAX else None
 
 
 # Latest filing per company, plus the year before it for growth. Same universe as
