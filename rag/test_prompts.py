@@ -78,7 +78,7 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # honest sentence saying so, not a paragraph of padding." was removed.
 # EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
+    "ASK_SYSTEM": "e2ec22a8e1e8a3abd4d0a42ab270ccad613926a73932c480101750e8b5239b90",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }
