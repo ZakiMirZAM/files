@@ -240,6 +240,9 @@ export interface ForecastAssumptions {
   dilutedShares: number | null;
   exitPfcfMultiple: number | null;
   evEbitdaMultiple?: number | null;
+  /** Set on a story forecast (POST story-dcf) only. */
+  salesToCapital?: number | null;
+  stableRoic?: number | null;
 }
 
 export interface ForecastRow {
@@ -433,6 +436,58 @@ export interface IndividualForecast {
   betaOneIntrinsicPerShare?: number | null;
   eva?: EvaValuation | null;
   sensitivity: ForecastSensitivity;
+}
+
+// ── Story-based DCF (POST /api/individual/{t}/story-dcf, GET .../story-context) ──
+
+export type StoryInputName =
+  | "totalMarket"
+  | "marketGrowth10y"
+  | "shareYear10"
+  | "targetMargin"
+  | "salesToCapital"
+  | "failureProbability"
+  | "distressProceeds"
+  | "stableRoic";
+
+/** The story-dcf request body: null keeps the model's number. */
+export type StoryDcfInputs = Record<StoryInputName, number | null>;
+
+export interface StoryInputCheck {
+  status: "applied" | "kept";
+  /** The site rule that kept the model's number, when status is "kept". */
+  rule: string | null;
+}
+
+export interface StoryChecks {
+  inputs: Record<StoryInputName, StoryInputCheck>;
+  revenueGrowth: { story: number | null; model: number; used: number };
+  marketYear10: number | null;
+  revenueYear10: number;
+  impliedShareYear10: number | null;
+  stableGrowth: number;
+  riskFreeRate: number;
+  ironTriangleReturn: number | null;
+  wacc: number;
+  valueIfStoryWorksPerShare: number;
+  failureProbability: number;
+  distressPerShare: number;
+  failureAdjustedPerShare: number;
+}
+
+export type StoryForecast = IndividualForecast & { storyChecks: StoryChecks };
+
+export type StoryDcfResult = StoryForecast | { applicable: false; reason: string };
+
+/** The factual bundle the story conversion reads. Only the fields the page
+ *  uses are typed; the rest is passed through untouched. */
+export interface StoryContext {
+  applicable: boolean;
+  reason?: string;
+  companyName?: string;
+  currency?: string | null;
+  dataBlock?: string;
+  [key: string]: unknown;
 }
 
 // Metadata for a fundamental display metric (from the backend registry).

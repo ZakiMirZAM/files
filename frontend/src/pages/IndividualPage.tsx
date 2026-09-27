@@ -16,6 +16,7 @@ import { MetricsTrendsSection } from "../components/individual/MetricsTrendsSect
 import { DupontSection } from "../components/individual/DupontSection";
 import { LeverageRoeSection } from "../components/individual/LeverageRoeSection";
 import { ForecastSection } from "../components/individual/ForecastSection";
+import { StorySection } from "../components/individual/StorySection";
 import { EVAValuationSection } from "../components/individual/EVAValuationSection";
 import { ResidualIncomeSection } from "../components/individual/ResidualIncomeSection";
 import { EquityModelsSection } from "../components/individual/EquityModelsSection";
@@ -299,6 +300,12 @@ export function IndividualPage() {
             metricHistory={data.analysis.metricHistory}
             metricMeta={data.analysis.metricMeta}
           />
+        )}
+
+        {/* The reader's own story of the company, turned into DCF inputs. Keyed by
+            the route ticker, the key its answers are saved under. */}
+        {data?.analysis?.forecast && data.analysis.forecast.applicable !== false && ticker && (
+          <StorySection ticker={ticker} companyName={companyName ?? ticker} dataContext={aiDataContext} />
         )}
 
         {data?.analysis?.forecast && (

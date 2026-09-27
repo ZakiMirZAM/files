@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
-import { STORY_ANSWER_IDS, STORY_SYNTHESIS_ID, buildStoryDeck, collectStoryAnswers, storyAnswersReady } from "./story";
+import { STORY_ANSWER_IDS, STORY_INPUTS, STORY_SYNTHESIS_ID, buildStoryDeck, checkedLabel, collectStoryAnswers,
+         formatStoryValue, inStoryBounds, storyAnswersReady, storyDcfBody } from "./story";
+import type { StoryRow } from "./aiApi";
 import { EM_DASH } from "./copyHygiene.test-helper";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,5 +77,51 @@ describe("story answers", () => {
   it("sends the synthesis only when it is answered", () => {
     expect(Object.keys(collectStoryAnswers(full))).toEqual(IDS.slice(0, 8));
     expect(collectStoryAnswers(new Map([...full, [STORY_SYNTHESIS_ID, "whole story"]]))[STORY_SYNTHESIS_ID]).toBe("whole story");
+  });
+});
+
+const row = (input: StoryRow["input"], value: number | null, status: StoryRow["verification"]["status"] = "verified"): StoryRow =>
+  ({ input, value, unit: "fraction", storyQuote: "", proof: "", sources: [], verification: { status } });
+
+describe("storyDcfBody", () => {
+  it("sends only verified, in-range numbers and null for the rest", () => {
+    const body = storyDcfBody([row("targetMargin", 0.2), row("stableRoic", 0.1, "flagged"),
+      row("marketGrowth10y", 9), row("failureProbability", 1.5), row("shareYear10", 1.2),
+      row("salesToCapital", null)]);
+    expect(body).toEqual({ totalMarket: null, marketGrowth10y: null, shareYear10: 1.2, targetMargin: 0.2,
+      salesToCapital: null, failureProbability: null, distressProceeds: null, stableRoic: null });
+    expect(Object.keys(body)).toEqual(STORY_INPUTS.map((i) => i.input));
+  });
+  it("mirrors the backend bounds", () => {
+    expect(inStoryBounds("totalMarket", 0)).toBe(false);
+    expect(inStoryBounds("marketGrowth10y", 1)).toBe(true);
+    expect(inStoryBounds("salesToCapital", 100)).toBe(true);
+    expect(inStoryBounds("stableRoic", 0)).toBe(false);
+  });
+});
+
+describe("checkedLabel", () => {
+  it("names the reason a row is not used", () => {
+    expect(checkedLabel(row("targetMargin", 0.2), { status: "applied", rule: null })).toBe("Verified");
+    expect(checkedLabel(row("targetMargin", null))).toBe("Not supported: the story gives no number here");
+    expect(checkedLabel(row("targetMargin", 0.2, "flagged"))).toBe("Not supported: a figure in the proof does not match the data");
+    expect(checkedLabel(row("targetMargin", 0.2, "unchecked"))).toBe("Not supported: the proof cites no figure the site can check");
+    expect(checkedLabel(row("targetMargin", 0.2, "unavailable"))).toBe("Not supported: the check is not running");
+    expect(checkedLabel(row("marketGrowth10y", 9))).toBe("Not supported: the number is outside the range the site accepts");
+    expect(checkedLabel(row("shareYear10", 1.2), { status: "kept", rule: "shareAbove100" }))
+      .toBe("Not supported: the share is above 100 percent of the market");
+  });
+  it("carries no em dash in any label", () => {
+    const rules = ["revenueNeedsAllThree", "shareAbove100", "growthUnsolvable", "marginAtOrAbove100", "stableRoicNotAboveStableGrowth", "missingInput"];
+    for (const rule of rules) expect(checkedLabel(row("targetMargin", 0.2), { status: "kept", rule }).includes(EM_DASH)).toBe(false);
+  });
+});
+
+describe("formatStoryValue", () => {
+  it("formats by unit", () => {
+    expect(formatStoryValue("fraction", 0.1234)).toBe("12.34%");
+    expect(formatStoryValue("rate", 0.05)).toBe("5.00%");
+    expect(formatStoryValue("ratio", 1.4)).toBe("1.40x");
+    expect(formatStoryValue("fraction", null)).toBe("n/a");
   });
 });
