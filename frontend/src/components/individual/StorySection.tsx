@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { QualitativeBlock } from "../QualitativeBlock";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
+import { StoryValuation } from "./StoryValuation";
 import { cn } from "../../lib/cn";
 import { plainName } from "../../lib/connectQuestions";
 import { answerStoryQuestion, convertStory } from "../../lib/aiApi";
@@ -34,8 +35,8 @@ const COLUMNS = ["Input", "Source", "What your story says", "Number", "Proof", "
 
 const PROGRESS_LABELS: Record<ResearchStatus, string> = {
   researching: "Researching",
-  kept: "Your answer kept",
   answered: "AI answered",
+  built: "AI built on your answer",
   failed: "Research failed, your answer was used",
 };
 
@@ -43,10 +44,10 @@ type Progress = Record<string, { status: ResearchStatus; detail?: string }>;
 
 /**
  * "Your Story of {company}": the story deck, the button that turns the answers
- * into eight proven DCF inputs (after AI research answers every blank or thin
- * question), the AI's answers beside the reader's own, and the table of what
- * came back. The AI runs only on the button; the story valuation re-runs from
- * the stored table.
+ * into nine proven DCF inputs (after AI research writes every answer, building
+ * on the reader's), the AI's answers beside the reader's own, the table of what
+ * came back, and the story's valuation. The AI runs only on the button; the
+ * story valuation re-runs from the stored table.
  */
 export function StorySection({ ticker, companyName, dataContext }: StorySectionProps) {
   const name = plainName(companyName);
@@ -68,7 +69,8 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
   // While a new story is loading the previous result is still held, so the
   // checks are read only from a settled one.
   const result = story.state === "ready" ? story.data : null;
-  const checks = result && isStoryForecast(result) ? result.storyChecks : undefined;
+  const storyForecast = result && isStoryForecast(result) ? result : null;
+  const checks = storyForecast?.storyChecks;
   const notApplicable = result && !isStoryForecast(result) ? result.reason : null;
 
   const [busy, setBusy] = useState(false);
@@ -114,8 +116,12 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
     }
   };
 
+  // Every question the AI answered; a failed call left the reader's own text.
   const aiAnswers = stored
-    ? STORY_RESEARCH_IDS.filter((id) => stored.research[id]?.source === "ai")
+    ? STORY_RESEARCH_IDS.filter((id) => {
+        const source = stored.research[id]?.source;
+        return source === "ai" || source === "built";
+      })
     : [];
 
   return (
@@ -171,7 +177,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
               return (
                 <details key={id} className="border-b border-white/[0.06] pb-2">
                   <summary className="cursor-pointer text-sm text-white/85">
-                    {`AI's answer: ${STORY_QUESTION_LABELS[id]}`}
+                    {`${answer.source === "built" ? "AI built on your answer" : "AI's answer"}: ${STORY_QUESTION_LABELS[id]}`}
                   </summary>
                   <p className="mt-2 text-sm text-white/75 leading-relaxed whitespace-pre-line">{answer.text}</p>
                   {answer.sources.length > 0 && (
@@ -207,6 +213,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
                     const row = stored.conversion.rows.find((r) => r.input === input);
                     if (!row) return null;
                     const verdict = checkedLabel(row, checks?.inputs[input]);
+                    const source = stored.research[question]?.source;
                     return (
                       <tr key={input} className="align-top">
                         <th scope="row" className="text-left px-3 py-2 border-b border-white/[0.06] font-normal min-w-[150px]">
@@ -215,7 +222,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
                           </span>
                         </th>
                         <td className="px-3 py-2 border-b border-white/[0.05] text-white/70 whitespace-nowrap">
-                          {stored.research[question]?.source === "ai" ? "AI's answer" : "Your answer"}
+                          {source === "ai" ? "AI's answer" : source === "built" ? "Your answer, built on by the AI" : "Your answer"}
                         </td>
                         <td className="px-3 py-2 border-b border-white/[0.05] text-white/70 leading-snug">{row.storyQuote}</td>
                         <td className="px-3 py-2 border-b border-white/[0.05] font-mono tabular-nums text-[0.76rem] text-white/85 whitespace-nowrap">
@@ -225,7 +232,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
                         <td
                           className={cn(
                             "px-3 py-2 border-b border-white/[0.05] leading-snug min-w-[140px]",
-                            verdict === "Verified" ? "text-gain" : "text-gold/80",
+                            verdict === "Verified" || verdict.startsWith("Used") ? "text-gain" : "text-gold/80",
                           )}
                         >
                           {verdict}
@@ -269,6 +276,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
           {stored.conversion.counterStory && (
             <StoryLine label="Strongest counter-story" def={890}>{stored.conversion.counterStory}</StoryLine>
           )}
+          {storyForecast && <StoryValuation forecast={storyForecast} />}
           {story.state === "error" && <p className="text-sm text-white/70">{story.error}</p>}
           {notApplicable && <p className="text-sm text-white/70">{notApplicable}</p>}
         </div>

@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
 import { STORY_ANSWER_IDS, STORY_CHECK_IDS, STORY_INPUTS, STORY_QUESTION_LABELS, STORY_RESEARCH_IDS,
-         STORY_SYNTHESIS_ID, buildStoryDeck, checkedLabel, formatStoryValue, inStoryBounds, researchStory,
-         storyDcfBody, storyQuestionText, type ResearchStatus } from "./story";
+         STORY_SYNTHESIS_ID, STORY_VALUATION_DEFS, buildStoryDeck, checkedLabel, formatStoryValue,
+         inStoryBounds, researchStory, stageShapeLabel, storyDcfBody, storyQuestionText,
+         type ResearchStatus } from "./story";
+import { anyDefByNumber } from "./allDefinitions";
 import type { StoryAnswerReply, StoryAnswerRequest, StoryRow } from "./aiApi";
 import { EM_DASH } from "./copyHygiene.test-helper";
 
@@ -72,14 +74,13 @@ describe("story research", () => {
   const questions = buildStoryDeck("Ferrari")[0].questions;
   const saved = new Map([["indiv.story.market", "luxury goods"], ["indiv.story.edge", "the brand"]]);
   type Call = StoryAnswerRequest;
-  // A fake server: keeps the market answer, fails the edge question, answers the rest.
+  // A fake server: answers every question, building on the reader's text when there is one.
   const fake = (calls: Call[], opts: { failId?: string; delay?: number } = {}) =>
     async (req: Call): Promise<StoryAnswerReply> => {
       calls.push(req);
       await new Promise((r) => setTimeout(r, opts.delay ?? 0));
       if (req.questionId === opts.failId) throw new Error("AI backend temporarily unavailable");
-      if (req.questionId === "indiv.story.market") return { adequate: true, answer: "", sources: [] };
-      return { adequate: false, answer: `ai ${req.questionId}`, sources: ["Book, chapter 1"] };
+      return { answer: `ai ${req.questionId}`, sources: ["Book, chapter 1"], builtOnReader: req.userAnswer !== "" };
     };
 
   it("covers all eleven questions and names each one", () => {
@@ -94,13 +95,13 @@ describe("story research", () => {
     expect(text.endsWith(q.close!)).toBe(true);
     expect(storyQuestionText(questions[9])).toBe(questions[9].text);   // a check has no steps
   });
-  it("keeps an adequate answer, replaces an inadequate one, and converts the effective answers", async () => {
+  it("uses the AI's answer for every question, marking the ones built on the reader's", async () => {
     const calls: Call[] = [];
     const { results, answers } = await researchStory({ questions, saved, answer: fake(calls) });
-    expect(results["indiv.story.market"]).toEqual({ source: "user", text: "luxury goods", sources: [] });
-    expect(results["indiv.story.edge"]).toEqual({ source: "ai", text: "ai indiv.story.edge", sources: ["Book, chapter 1"] });
+    expect(results["indiv.story.market"]).toEqual({ source: "built", text: "ai indiv.story.market", sources: ["Book, chapter 1"] });
+    expect(results["indiv.story.size"]).toEqual({ source: "ai", text: "ai indiv.story.size", sources: ["Book, chapter 1"] });
     expect(Object.keys(answers)).toEqual([...IDS.slice(0, 8), STORY_SYNTHESIS_ID]);
-    expect(answers["indiv.story.market"]).toBe("luxury goods");
+    expect(answers["indiv.story.market"]).toBe("ai indiv.story.market");
     expect(answers[STORY_SYNTHESIS_ID]).toBe(`ai ${STORY_SYNTHESIS_ID}`);
     expect(calls.find((c) => c.questionId === "indiv.story.edge")!.userAnswer).toBe("the brand");
   });
@@ -111,11 +112,17 @@ describe("story research", () => {
     expect(order.slice(8)).toEqual([STORY_SYNTHESIS_ID, ...STORY_CHECK_IDS]);
     const synthesis = calls.find((c) => c.questionId === STORY_SYNTHESIS_ID)!;
     expect(Object.keys(synthesis.otherAnswers!)).toEqual(IDS.slice(0, 8));
-    expect(synthesis.otherAnswers!["indiv.story.market"]).toBe("luxury goods");
+    expect(synthesis.otherAnswers!["indiv.story.market"]).toBe("ai indiv.story.market");
     expect(synthesis.otherAnswers!["indiv.story.size"]).toBe("ai indiv.story.size");
     const check = calls.find((c) => c.questionId === "indiv.big_market")!;
     expect(check.otherAnswers![STORY_SYNTHESIS_ID]).toBe(`ai ${STORY_SYNTHESIS_ID}`);
     expect(calls.find((c) => c.questionId === "indiv.story.market")!.otherAnswers).toBeUndefined();
+  });
+  it("never marks a blank reader answer as built on", async () => {
+    const answer = async (): Promise<StoryAnswerReply> => ({ answer: "a", sources: [], builtOnReader: true });
+    const { results } = await researchStory({ questions, saved, answer });
+    expect(results["indiv.story.size"].source).toBe("ai");
+    expect(results["indiv.story.market"].source).toBe("built");
   });
   it("never runs more than three research calls at once", async () => {
     let live = 0, most = 0;
@@ -123,7 +130,7 @@ describe("story research", () => {
       most = Math.max(most, ++live);
       await new Promise((r) => setTimeout(r, 5));
       live--;
-      return { adequate: false, answer: "a", sources: [] };
+      return { answer: "a", sources: [], builtOnReader: false };
     };
     await researchStory({ questions, saved, answer });
     expect(most).toBe(3);
@@ -138,7 +145,7 @@ describe("story research", () => {
       error: "AI backend temporarily unavailable" });
     expect(answers["indiv.story.edge"]).toBe("the brand");
     expect(lines).toContainEqual(["indiv.story.edge", "failed", "AI backend temporarily unavailable"]);
-    expect(lines).toContainEqual(["indiv.story.market", "kept", undefined]);
+    expect(lines).toContainEqual(["indiv.story.market", "built", undefined]);
     expect(lines).toContainEqual(["indiv.story.size", "answered", undefined]);
     expect(lines.filter(([, s]) => s === "researching")).toHaveLength(11);
   });
@@ -149,6 +156,7 @@ describe("story research", () => {
     expect(Object.fromEntries(STORY_INPUTS.map((i) => [i.input, i.question]))).toEqual({
       totalMarket: IDS[0], marketGrowth10y: IDS[1], shareYear10: IDS[2], targetMargin: IDS[3],
       salesToCapital: IDS[4], failureProbability: IDS[6], distressProceeds: IDS[6], stableRoic: IDS[7],
+      stages: IDS[7],
     });
   });
 });
@@ -162,8 +170,17 @@ describe("storyDcfBody", () => {
       row("marketGrowth10y", 9), row("failureProbability", 1.5), row("shareYear10", 1.2),
       row("salesToCapital", null)]);
     expect(body).toEqual({ totalMarket: null, marketGrowth10y: null, shareYear10: 1.2, targetMargin: 0.2,
-      salesToCapital: null, failureProbability: null, distressProceeds: null, stableRoic: null });
+      salesToCapital: null, failureProbability: null, distressProceeds: null, stableRoic: null, stages: null });
     expect(Object.keys(body)).toEqual(STORY_INPUTS.map((i) => i.input));
+  });
+  it("sends a stage count of 1, 2 or 3 when verified or unchecked, and null otherwise", () => {
+    expect(storyDcfBody([row("stages", 2)]).stages).toBe(2);
+    expect(storyDcfBody([row("stages", 1, "unchecked")]).stages).toBe(1);
+    expect(storyDcfBody([row("stages", 3, "flagged")]).stages).toBeNull();
+    expect(storyDcfBody([row("stages", 3, "unavailable")]).stages).toBeNull();
+    expect(storyDcfBody([row("stages", 4)]).stages).toBeNull();
+    expect(storyDcfBody([row("stages", 2.5)]).stages).toBeNull();
+    expect(storyDcfBody([row("stableRoic", 0.1, "unchecked")]).stableRoic).toBeNull();
   });
   it("mirrors the backend bounds", () => {
     expect(inStoryBounds("totalMarket", 0)).toBe(false);
@@ -184,8 +201,16 @@ describe("checkedLabel", () => {
     expect(checkedLabel(row("shareYear10", 1.2), { status: "kept", rule: "shareAbove100" }))
       .toBe("Not supported: the share is above 100 percent of the market");
   });
+  it("labels the stage count row", () => {
+    expect(checkedLabel(row("stages", 2))).toBe("Verified");
+    expect(checkedLabel(row("stages", 2, "unchecked"))).toBe("Used: the proof rests on the answers");
+    expect(checkedLabel(row("stages", 2, "flagged"))).toBe("Not supported: a figure in the proof does not match the data");
+    expect(checkedLabel(row("stages", null))).toBe("Not supported: the story gives no number here");
+    expect(checkedLabel(row("shareYear10", 0.2), { status: "kept", rule: "oneStageNoHighGrowth" }))
+      .toBe("Not supported: a 1-stage story has no high growth for the market to drive");
+  });
   it("carries no em dash in any label", () => {
-    const rules = ["revenueNeedsAllThree", "shareAbove100", "growthUnsolvable", "marginAtOrAbove100", "stableRoicNotAboveStableGrowth", "missingInput"];
+    const rules = ["revenueNeedsAllThree", "shareAbove100", "growthUnsolvable", "marginAtOrAbove100", "stableRoicNotAboveStableGrowth", "oneStageNoHighGrowth", "missingInput"];
     for (const rule of rules) expect(checkedLabel(row("targetMargin", 0.2), { status: "kept", rule }).includes(EM_DASH)).toBe(false);
   });
 });
@@ -196,6 +221,19 @@ describe("formatStoryValue", () => {
     expect(formatStoryValue("rate", 0.05)).toBe("5.00%");
     expect(formatStoryValue("ratio", 1.4)).toBe("1.40x");
     expect(formatStoryValue("fraction", null)).toBe("n/a");
+    expect(formatStoryValue("count", 2)).toBe("2");
+  });
+});
+
+describe("the story's valuation", () => {
+  it("names the stage count in words", () => {
+    expect(stageShapeLabel(1)).toBe("1-stage: no high-growth years, stable growth from today");
+    expect(stageShapeLabel(2)).toBe("2-stage: 5 years of high growth, then stable");
+    expect(stageShapeLabel(3)).toBe("3-stage: 5 years of high growth, 5 years of transition, then stable");
+  });
+  it("opens a definition from every label", () => {
+    for (const n of Object.values(STORY_VALUATION_DEFS)) expect(anyDefByNumber(n), String(n)).toBeDefined();
+    expect(STORY_INPUTS.find((i) => i.input === "stages")!.def).toBe(883);
   });
 });
 

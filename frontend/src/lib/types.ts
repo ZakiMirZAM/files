@@ -448,9 +448,10 @@ export type StoryInputName =
   | "salesToCapital"
   | "failureProbability"
   | "distressProceeds"
-  | "stableRoic";
+  | "stableRoic"
+  | "stages";
 
-/** The story-dcf request body: null keeps the model's number. */
+/** The story-dcf request body: null keeps the model's number (and, for `stages`, runs 3). */
 export type StoryDcfInputs = Record<StoryInputName, number | null>;
 
 export interface StoryInputCheck {
@@ -459,9 +460,14 @@ export interface StoryInputCheck {
   rule: string | null;
 }
 
+/** The valuation's stage count: 1, 2 or 3. */
+export type StoryStageCount = 1 | 2 | 3;
+
 export interface StoryChecks {
-  inputs: Record<StoryInputName, StoryInputCheck>;
+  /** Every input but `stages`, whose story and used counts are in `stages`. */
+  inputs: Partial<Record<StoryInputName, StoryInputCheck>>;
   revenueGrowth: { story: number | null; model: number; used: number };
+  stages: { story: StoryStageCount | null; used: StoryStageCount };
   marketYear10: number | null;
   revenueYear10: number;
   impliedShareYear10: number | null;

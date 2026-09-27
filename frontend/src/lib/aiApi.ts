@@ -347,7 +347,7 @@ export async function verifyAnswer(token: string, timeoutMs = 60_000): Promise<V
 
 // ── Story conversion (POST /story-inputs) ──────────────────────────────────
 
-export type StoryUnit = "currency" | "rate" | "fraction" | "ratio";
+export type StoryUnit = "currency" | "rate" | "fraction" | "ratio" | "count";
 export type StoryRowStatus = "verified" | "flagged" | "unchecked" | "unavailable";
 
 /** One row of the conversion table: the number the story implies and its proof. */
@@ -376,7 +376,7 @@ const strings = (v: unknown): string[] =>
 
 /**
  * Coerce the /story-inputs reply into the typed table. Null unless every one
- * of the eight inputs appears exactly once: a partial table would price a
+ * of the nine inputs appears exactly once: a partial table would price a
  * story the reader never finished. Inside a row it is tolerant: a value that
  * is not a finite number is null, an unknown status is "unavailable", and the
  * unit is the input's canonical one.
@@ -443,11 +443,11 @@ export async function convertStory(p: {
 
 // ── Story research (POST /story-answer) ────────────────────────────────────
 
-/** The server's verdict on one story question: the reader's answer kept, or the AI's. */
+/** The AI's answer to one story question, built on the reader's when there was one. */
 export interface StoryAnswerReply {
-  adequate: boolean;
   answer: string;
   sources: string[];
+  builtOnReader: boolean;
 }
 
 export interface StoryAnswerRequest {
@@ -460,8 +460,8 @@ export interface StoryAnswerRequest {
 }
 
 /**
- * Answer one story question: the server keeps the reader's answer when it follows
- * the question's steps, and researches and writes one otherwise. Metered in its own
+ * Answer one story question: the server always researches and writes the answer,
+ * keeping and building on the reader's points when there are any. Metered in its own
  * nginx zone (story_answer_zone), not the ask budget. `error` is read first because
  * ai_proxy's fallback body is a 200 with an error and no answer.
  */
@@ -476,10 +476,8 @@ export async function answerStoryQuestion(
   );
   const r = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   if (typeof r.error === "string" && r.error) throw new Error(r.error);
-  if (typeof r.adequate !== "boolean" || (!r.adequate && !str(r.answer).trim())) {
+  if (typeof r.builtOnReader !== "boolean" || !str(r.answer).trim()) {
     throw new Error("The AI answer could not be read. Try again.");
   }
-  return r.adequate
-    ? { adequate: true, answer: "", sources: [] }
-    : { adequate: false, answer: str(r.answer).trim(), sources: strings(r.sources) };
+  return { answer: str(r.answer).trim(), sources: strings(r.sources), builtOnReader: r.builtOnReader };
 }

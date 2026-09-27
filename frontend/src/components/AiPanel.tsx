@@ -22,7 +22,7 @@ import { closeAi, getOpenAi, subscribeAi } from "../lib/aiPanelStore";
 import { CONNECT_AI } from "../lib/connectQuestions";
 
 type Status = "loading" | "done" | "error";
-const ASK_MODEL = "claude-sonnet-4-6";
+const ASK_MODEL = "claude-opus-5-5";
 
 /** Thrown to stop a run that must not reach the model: a newer request took
  *  over, or the reader navigated away while the figures were being gathered. */

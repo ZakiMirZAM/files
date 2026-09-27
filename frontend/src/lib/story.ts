@@ -6,7 +6,9 @@ import type { StoryAnswerReply, StoryAnswerRequest, StoryRow, StoryRowStatus, St
 import { fill } from "./connectQuestions";
 import { formatCurrency } from "./format";
 import { QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
-import type { RuntimeGroup, RuntimeQuestion, StoryDcfInputs, StoryInputCheck, StoryInputName } from "./types";
+import type {
+  RuntimeGroup, RuntimeQuestion, StoryDcfInputs, StoryInputCheck, StoryInputName, StoryStageCount,
+} from "./types";
 
 /** The eight story answers the conversion turns into inputs. */
 export const STORY_ANSWER_IDS = [
@@ -64,16 +66,18 @@ export function buildStoryDeck(company: string): RuntimeGroup[] {
   return [{ title: group.title, questions }];
 }
 
-/** One question's answer as the conversion used it: the reader's, or the AI's. */
+/** One question's answer as the conversion used it: the AI's ("ai" when the reader
+ *  wrote nothing, "built" when it built on the reader's), or the reader's own
+ *  ("user") when the call failed. */
 export interface ResearchedAnswer {
-  source: "user" | "ai";
+  source: "user" | "ai" | "built";
   text: string;
   sources: string[];
   /** Set when the research call failed and the reader's own text stood in. */
   error?: string;
 }
 
-export type ResearchStatus = "researching" | "kept" | "answered" | "failed";
+export type ResearchStatus = "researching" | "answered" | "built" | "failed";
 
 export const STORY_RESEARCH_CONCURRENCY = 3;
 
@@ -95,11 +99,11 @@ async function inPool<T>(items: T[], limit: number, fn: (item: T) => Promise<voi
 }
 
 /**
- * The research step behind "Turn my story into numbers". The eight input
- * questions are researched with at most `concurrency` calls at once, then the
- * synthesis against their effective answers, then the two checks against all
- * nine. A question whose call fails keeps the reader's own text and reports
- * "failed". Returns every question's result and the answers the conversion reads
+ * The research step behind "Turn my story into numbers". The AI writes every
+ * answer, building on the reader's where there is one: the eight input questions
+ * with at most `concurrency` calls at once, then the synthesis against their
+ * answers, then the two checks against all nine. A question whose call fails
+ * keeps the reader's own text and reports "failed". Returns every question's result and the answers the conversion reads
  * (the eight, plus the synthesis when it has text).
  */
 export async function researchStory(p: {
@@ -125,10 +129,9 @@ export async function researchStory(p: {
         questionId: id, question: storyQuestionText(byId.get(id)!), userAnswer,
         ...(otherAnswers ? { otherAnswers } : {}),
       });
-      results[id] = reply.adequate
-        ? { source: "user", text: userAnswer, sources: [] }
-        : { source: "ai", text: reply.answer, sources: reply.sources };
-      p.onProgress?.(id, reply.adequate ? "kept" : "answered");
+      const built = userAnswer !== "" && reply.builtOnReader;
+      results[id] = { source: built ? "built" : "ai", text: reply.answer, sources: reply.sources };
+      p.onProgress?.(id, built ? "built" : "answered");
     } catch (err) {
       const error = err instanceof Error ? err.message : "The research call failed.";
       results[id] = { source: "user", text: userAnswer, sources: [], error };
@@ -147,9 +150,10 @@ export async function researchStory(p: {
   return { results, answers };
 }
 
-/** The eight story inputs, in table order and story-dcf body key order, each
+/** The nine story inputs, in table order and story-dcf body key order, each
  *  with the label the table shows, the definition that label opens, and the
- *  question whose answer feeds it. */
+ *  question whose answer feeds it (the stage count reads questions 3, 4 and 8;
+ *  its Source is question 8's). */
 export const STORY_INPUTS: ReadonlyArray<{
   input: StoryInputName; label: string; def: number; unit: StoryUnit; question: string;
 }> = [
@@ -161,6 +165,7 @@ export const STORY_INPUTS: ReadonlyArray<{
   { input: "failureProbability", label: "Chance the story ends", def: 894, unit: "fraction", question: "indiv.story.end" },
   { input: "distressProceeds", label: "What owners get if it ends", def: 894, unit: "currency", question: "indiv.story.end" },
   { input: "stableRoic", label: "Return on capital after growth ends", def: 880, unit: "fraction", question: "indiv.story.edge_duration" },
+  { input: "stages", label: "Number of stages", def: 883, unit: "count", question: "indiv.story.edge_duration" },
 ];
 
 // The story-dcf body's bounds (backend/api.py StoryDcfBody), strict where it
@@ -175,6 +180,7 @@ const BOUNDS: Record<StoryInputName, (v: number) => boolean> = {
   failureProbability: (v) => v >= 0 && v <= 1,
   distressProceeds: (v) => v >= 0 && v < 1e16,
   stableRoic: (v) => v > 0 && v <= 2,
+  stages: (v) => v === 1 || v === 2 || v === 3,
 };
 
 /** True when the story-dcf route would accept this number for this input. */
@@ -182,15 +188,23 @@ export function inStoryBounds(input: StoryInputName, value: number): boolean {
   return Number.isFinite(value) && BOUNDS[input](value);
 }
 
+/** A row the story-dcf body sends. The stage count's proof rests mostly on the
+ *  answers, so a proof that cites no checkable figure ("unchecked") still counts;
+ *  a flagged or unavailable check does not. */
+function usable(row: StoryRow | undefined): row is StoryRow & { value: number } {
+  if (row?.value == null || !inStoryBounds(row.input, row.value)) return false;
+  const { status } = row.verification;
+  return status === "verified" || (row.input === "stages" && status === "unchecked");
+}
+
 /** The story-dcf body: a row's number only when its proof verified and the
- *  route accepts it, else null so that input keeps the model's number. */
+ *  route accepts it, else null so that input keeps the model's number (and a
+ *  null stage count runs 3 stages). */
 export function storyDcfBody(rows: StoryRow[]): StoryDcfInputs {
   return Object.fromEntries(
     STORY_INPUTS.map(({ input }) => {
       const row = rows.find((r) => r.input === input);
-      const ok = row != null && row.verification.status === "verified" && row.value != null
-        && inStoryBounds(input, row.value);
-      return [input, ok ? row.value : null];
+      return [input, usable(row) ? row.value : null];
     }),
   ) as StoryDcfInputs;
 }
@@ -208,10 +222,15 @@ const RULE_LABELS = new Map<string, string>([
   ["growthUnsolvable", "Not supported: no growth rate reaches that revenue"],
   ["marginAtOrAbove100", "Not supported: the margin is 100 percent or more"],
   ["stableRoicNotAboveStableGrowth", "Not supported: the return must be above the stable growth rate"],
+  ["oneStageNoHighGrowth", "Not supported: a 1-stage story has no high growth for the market to drive"],
 ]);
 
 /** The Checked column: "Verified", or the one reason the row keeps the model's number. */
 export function checkedLabel(row: StoryRow, check?: StoryInputCheck): string {
+  if (row.input === "stages") {
+    if (row.value != null && !inStoryBounds("stages", row.value)) return "Not supported: the count must be 1, 2 or 3";
+    if (usable(row)) return row.verification.status === "verified" ? "Verified" : "Used: the proof rests on the answers";
+  }
   if (row.value == null) return "Not supported: the story gives no number here";
   if (row.verification.status !== "verified") return STATUS_LABELS[row.verification.status];
   if (!inStoryBounds(row.input, row.value)) return "Not supported: the number is outside the range the site accepts";
@@ -224,5 +243,33 @@ export function formatStoryValue(unit: StoryUnit, value: number | null): string 
   if (value == null) return "n/a";
   if (unit === "currency") return formatCurrency(value);
   if (unit === "ratio") return `${value.toFixed(2)}x`;
+  if (unit === "count") return String(value);
   return `${(value * 100).toFixed(2)}%`;
 }
+
+/** The stage count in words, for the story's valuation. */
+export function stageShapeLabel(stages: StoryStageCount): string {
+  if (stages === 1) return "1-stage: no high-growth years, stable growth from today";
+  if (stages === 2) return "2-stage: 5 years of high growth, then stable";
+  return "3-stage: 5 years of high growth, 5 years of transition, then stable";
+}
+
+/** The definition each label of the story's valuation opens. */
+export const STORY_VALUATION_DEFS = {
+  stages: 883,
+  revenue: 82,
+  operatingMargin: 39,
+  afterTaxOperatingProfit: 23,
+  reinvestment: 47,
+  freeCashFlow: 25,
+  presentValue: 513,
+  terminalValue: 505,
+  sumOfPresentValues: 504,
+  enterpriseValue: 506,
+  cash: 113,
+  grossDebt: 141,
+  minorityInterest: 143,
+  equityValue: 507,
+  valuePerShare: 508,
+  failure: 894,
+} as const;

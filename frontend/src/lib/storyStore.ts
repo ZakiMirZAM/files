@@ -14,7 +14,7 @@ import { STORY_RESEARCH_IDS, type ResearchedAnswer } from "./story";
 export type StoryMode = "model" | "story";
 
 /** Bumped whenever the stored shape changes; an entry of any other version reads as no story. */
-export const STORED_STORY_VERSION = 2;
+export const STORED_STORY_VERSION = 3;
 
 export interface StoredStory {
   version: typeof STORED_STORY_VERSION;
@@ -82,7 +82,7 @@ function toResearch(raw: unknown): Record<string, ResearchedAnswer> | null {
     if (x === undefined) continue;
     if (typeof x !== "object" || x === null) return null;
     const { source, text, sources, error } = x as Record<string, unknown>;
-    if ((source !== "user" && source !== "ai") || typeof text !== "string"
+    if ((source !== "user" && source !== "ai" && source !== "built") || typeof text !== "string"
       || !Array.isArray(sources) || !sources.every((s) => typeof s === "string")) return null;
     out[id] = { source, text, sources, ...(typeof error === "string" ? { error } : {}) };
   }

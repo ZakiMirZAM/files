@@ -31,6 +31,7 @@ describe("parseStoredStory", () => {
     research: {
       "indiv.story.market": { source: "user" as const, text: "mine", sources: [] },
       "indiv.story.edge": { source: "ai" as const, text: "theirs", sources: ["Book, chapter 3"] },
+      "indiv.story.size": { source: "built" as const, text: "both", sources: ["Book, chapter 4"] },
       "indiv.story.end": { source: "user" as const, text: "", sources: [], error: "down" },
     },
     savedAt: 1,
@@ -44,6 +45,8 @@ describe("parseStoredStory", () => {
     const { version: _v, research: _r, ...v1 } = stored;
     expect(parseStoredStory(JSON.stringify(v1))).toBeNull();
     expect(parseStoredStory(JSON.stringify({ ...stored, version: 1 }))).toBeNull();
+    // Version 2 stored the verdict-era research (an answer kept unread) and eight rows.
+    expect(parseStoredStory(JSON.stringify({ ...stored, version: 2 }))).toBeNull();
     const badSource = { ...stored, research: { "indiv.story.edge": { source: "bot", text: "t", sources: [] } } };
     expect(parseStoredStory(JSON.stringify(badSource))).toBeNull();
   });

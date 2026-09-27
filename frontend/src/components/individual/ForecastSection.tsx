@@ -7,7 +7,7 @@ import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
 import { StageToggle, useActiveVariant } from "./StageToggle";
 import { isStoryForecast, postStoryDcf, storyDcfKey } from "../../lib/api";
 import { SLOW_ROUTE_TIMEOUT_MS, useResource } from "../../lib/useResource";
-import { storyDcfBody } from "../../lib/story";
+import { stageShapeLabel, storyDcfBody } from "../../lib/story";
 import { setStoryMode, useStoredStory, useStoryMode, type StoryMode } from "../../lib/storyStore";
 
 interface ForecastSectionProps {
@@ -137,7 +137,7 @@ function ForecastView({
   switcher?: ReactNode;
   storyChecks?: StoryChecks | null;
 }) {
-  // A story always uses the 5 + 5 shape: no model structure, no stage lens.
+  // A story sets its own stage count: no model structure, no stage lens.
   const sel = storyChecks ? null : f.valuationSelection ?? null;
   const active = useActiveVariant(ticker, sel?.stageVariants, sel?.recommendedStages);
   if (f.applicable === false) {
@@ -225,6 +225,16 @@ function ForecastView({
         <DefinitionLink number={71} prominent className="mt-3">How the FCFF model and WACC work</DefinitionLink>
         {switcher}
       </header>
+
+      {storyChecks && (
+        <div className="panel-soft p-5 mb-6">
+          <p className="eyebrow mb-2">Model Structure</p>
+          <p className="text-sm text-white/75">
+            <MetricTerm metric="Number of stages" resolve={() => 883} asSpan />
+            {`: ${stageShapeLabel(storyChecks.stages.used)}`}
+          </p>
+        </div>
+      )}
 
       {/* Model structure: selection rationale + the stage toggle + warnings */}
       {sel && (

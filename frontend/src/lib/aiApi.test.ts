@@ -90,10 +90,10 @@ describe("parseVerification", () => {
 });
 
 import { convertStory, toStoryConversion } from "./aiApi";
-const NAMES = ["totalMarket", "marketGrowth10y", "shareYear10", "targetMargin", "salesToCapital", "failureProbability", "distressProceeds", "stableRoic"];
+const NAMES = ["totalMarket", "marketGrowth10y", "shareYear10", "targetMargin", "salesToCapital", "failureProbability", "distressProceeds", "stableRoic", "stages"];
 const raw = { rows: NAMES.map((input) => ({ input, storyQuote: "q", value: 0.1, unit: "fraction", proof: "p", sources: [], verification: { status: "verified", report: null } })), riskFlags: [], weakestLink: "w", counterStory: "c" };
 describe("toStoryConversion", () => {
-  it("accepts the server shape", () => { expect(toStoryConversion(raw)?.rows).toHaveLength(8); });
+  it("accepts the server shape", () => { expect(toStoryConversion(raw)?.rows).toHaveLength(9); });
   it("rejects a table missing an input", () => { expect(toStoryConversion({ ...raw, rows: raw.rows.slice(1) })).toBeNull(); });
   it("coerces unknown statuses and non-numbers", () => {
     const odd = { ...raw, rows: [{ ...raw.rows[0], value: "9%", verification: { status: "weird" } }, ...raw.rows.slice(1)] };
@@ -137,20 +137,23 @@ describe("answerStoryQuestion", () => {
     reply('  {"answer":"","explanation":"","definition":"","sources":[],"error":"AI backend temporarily unavailable"}');
     await expect(answerStoryQuestion(params)).rejects.toThrow("AI backend temporarily unavailable");
   });
-  it("treats a reply without a verdict, or an empty AI answer, as a failure", async () => {
+  it("treats a reply without builtOnReader, or an empty AI answer, as a failure", async () => {
     reply('{"answer":"text"}');
     await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
-    reply('{"adequate":false,"answer":"  ","sources":[]}');
+    reply('{"answer":"  ","sources":[],"builtOnReader":false}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+    // The old verdict shape carries no answer to use.
+    reply('{"adequate":true,"answer":"","sources":[]}');
     await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
   });
-  it("returns the kept and the answered shapes", async () => {
-    reply('{"adequate":true,"answer":"x","sources":["y"]}');
-    expect(await answerStoryQuestion(params)).toEqual({ adequate: true, answer: "", sources: [] });
-    reply('{"adequate":false,"answer":" researched ","sources":["Book, chapter 1", 3]}');
-    expect(await answerStoryQuestion(params)).toEqual({ adequate: false, answer: "researched", sources: ["Book, chapter 1"] });
+  it("returns the written and the built-on shapes", async () => {
+    reply('{"answer":" researched ","sources":["Book, chapter 1", 3],"builtOnReader":false}');
+    expect(await answerStoryQuestion(params)).toEqual({ answer: "researched", sources: ["Book, chapter 1"], builtOnReader: false });
+    reply('{"answer":"built","sources":[],"builtOnReader":true}');
+    expect(await answerStoryQuestion(params)).toEqual({ answer: "built", sources: [], builtOnReader: true });
   });
   it("posts the server's field names", async () => {
-    const f = reply('{"adequate":true,"answer":"","sources":[]}');
+    const f = reply('{"answer":"a","sources":[],"builtOnReader":false}');
     await answerStoryQuestion({ ...params, otherAnswers: { "indiv.story.edge": "e" } });
     const [url, init] = f.mock.calls[0];
     expect(url.endsWith("/story-answer")).toBe(true);
