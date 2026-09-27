@@ -49,6 +49,7 @@ import { PeerRankingTable } from "../components/PeerRankingTable";
 import { PEER_RANKING } from "../lib/connectionsCopy";
 import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
 import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
+import { PRICE_DECK_TITLE, STORY_DECK_TITLE } from "../lib/questions";
 import type { IndividualBenchmarks } from "../lib/types";
 import { Search } from "lucide-react";
 
@@ -316,6 +317,21 @@ export function IndividualPage() {
           <ReverseDcfSection data={data.analysis.forecast.reverseDcf} />
         )}
 
+        {/* The one question about what today's price implies, beside the
+            section that works it out. */}
+        {ticker && (
+          <div className="pt-2">
+            <QualitativeBlock
+              section="individual"
+              scopeKey={ticker}
+              onlyTitles={[PRICE_DECK_TITLE]}
+              storageSuffix="price"
+              hideHeader
+              dataContext={aiDataContext}
+            />
+          </div>
+        )}
+
         {/* Is that growth genuine and sustainable? A standing deck the user answers. */}
         {growthDeck.length > 0 && (
           <section className="animate-fade-up" data-tour="growth-viability">
@@ -453,6 +469,10 @@ export function IndividualPage() {
               // here, in the page-bottom bank, and the deck would appear twice.
               "Capital Allocation",
               CONNECT_DECK_TITLE.company,
+              // Rendered by the story section and beside the Reverse DCF. Without
+              // this they would also render here, in the page-bottom bank, twice.
+              STORY_DECK_TITLE,
+              PRICE_DECK_TITLE,
             ]}
             dataContext={aiDataContext}
           />

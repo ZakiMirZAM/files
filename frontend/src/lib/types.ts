@@ -4,6 +4,10 @@ export interface QualitativeQuestion {
   id: string;
   text: string;
   hint?: string;
+  /** Numbered steps shown under "Work it out in steps:" and sent to the tutor. */
+  steps?: string[];
+  /** The closing teaching sentence after the steps. */
+  close?: string;
 }
 
 export interface QualitativeGroup {

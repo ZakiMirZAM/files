@@ -14,6 +14,20 @@ export function askPrompt(question: string, guidance?: string): string {
 }
 
 /**
+ * The question as the tutor reads it: the ask, then "Work it out in steps:"
+ * and the numbered steps, then the closing sentence. A question with neither
+ * comes back unchanged.
+ */
+export function questionWithSteps(text: string, steps?: string[], close?: string): string {
+  const parts = [text];
+  if (steps?.length) {
+    parts.push("Work it out in steps:", ...steps.map((s, i) => `${i + 1}. ${s}`));
+  }
+  if (close) parts.push(close);
+  return parts.join("\n");
+}
+
+/**
  * The `data` block of the AI request: the page's own figures FIRST, a blank
  * line, then whatever extra block was gathered for the click (the cross-stage
  * one). The order is the point: the figures the reader can see on the screen
