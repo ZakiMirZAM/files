@@ -61,6 +61,18 @@ def test_an_unreachable_price_is_above_range_and_a_tiny_one_below():
         assert low[name]["status"] == "below_range" and low[name]["implied"] is None
 
 
+def test_an_unsolved_driver_reports_the_value_nearest_the_price():
+    kw = _kw()
+    high = rb.solve_drivers(kw, VALUE, 1e6, RF)["targetMargin"]
+    low = rb.solve_drivers(kw, VALUE, 0.01, RF)["targetMargin"]
+    assert high["bestAt"] == 0.8                   # value rises with margin
+    assert high["bestValue"] == approx(VALUE(rb.with_margin(kw, 0.8)), abs=0.01)
+    assert low["bestAt"] < 0.05                    # the lowest margin that values
+    assert low["bestValue"] == approx(VALUE(rb.with_margin(kw, low["bestAt"])), abs=0.01)
+    solved = rb.solve_drivers(kw, VALUE, VALUE(kw), RF)["targetMargin"]
+    assert solved["bestValue"] is None and solved["bestAt"] is None
+
+
 def test_search_ranges_are_the_contract():
     kw = _kw()
     out = rb.solve_drivers(kw, VALUE, VALUE(kw), RF)

@@ -101,14 +101,17 @@ def solve_breakeven(value_at: Callable[[float], Optional[float]], price: float,
     and the root nearest `near` (the model's number) is reported. With no crossing,
     "above_range" means the price is above every value the range produces and
     "below_range" that it is below every one; status is None when nothing in the
-    range could be valued at all."""
+    range could be valued at all. Unsolved, bestValue is the scanned value nearest
+    the price (the highest when above_range, the lowest when below_range) and
+    bestAt the driver value that gives it; both are None otherwise."""
     points = []
     for i in range(_SCAN_POINTS):
         x = lo + (hi - lo) * i / (_SCAN_POINTS - 1)
         v = value_at(x)
         if v is not None:
             points.append((x, v - price))
-    base = {"implied": None, "low": round(lo, 4), "high": round(hi, 4)}
+    base = {"implied": None, "low": round(lo, 4), "high": round(hi, 4),
+            "bestValue": None, "bestAt": None}
     if not points:
         return {**base, "status": None}
 
@@ -131,7 +134,10 @@ def solve_breakeven(value_at: Callable[[float], Optional[float]], price: float,
         anchor = near if near is not None else (lo + hi) / 2.0
         return {**base, "implied": round(min(roots, key=lambda r: abs(r - anchor)), 4),
                 "status": "solved"}
-    return {**base, "status": "above_range" if all(f < 0 for _, f in points) else "below_range"}
+    above = all(f < 0 for _, f in points)
+    best_x, best_f = (max if above else min)(points, key=lambda p: p[1])
+    return {**base, "status": "above_range" if above else "below_range",
+            "bestValue": round(best_f + price, 2), "bestAt": round(best_x, 4)}
 
 
 def _driver_specs(kw: Kwargs, rf: float) -> dict:

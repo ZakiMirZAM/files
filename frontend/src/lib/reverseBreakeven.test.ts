@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  BREAKEVEN_DRIVERS, assumptionRows, cellTint, defaultValuationDriver, firmFigure, formatDriver, gridNote,
-  plausibilityLines, priceVerdict, statusSentence, terminalFormula,
+  BREAKEVEN_DRIVERS, assumptionRows, cellTint, firmFigure, formatDriver, gridNote,
+  plausibilityLines, priceVerdict, statusSentence, terminalFormula, valuationDrivers,
 } from "./reverseBreakeven";
 import { anyDefByNumber } from "./allDefinitions";
 import { EM_DASH } from "./copyHygiene.test-helper";
@@ -10,7 +10,7 @@ import type { BreakevenDriver, BreakevenGrid, DcfBreakdown, ReverseBreakevenAppl
 const driver = (over: Partial<BreakevenDriver>): BreakevenDriver => ({
   driver: "revenueGrowth", model: 0.062, implied: null, low: -0.1, high: 0.6, status: "above_range",
   firm: 0.021, firmBasis: "fiveYearMedian", peerMedian: 0.05, peerTopDecile: 0.21,
-  valuationAt: null, valuation: null, ...over,
+  bestValue: null, bestAt: null, valuationAt: null, valuation: null, ...over,
 });
 
 const payload = (p: Partial<ReverseBreakevenApplicable["plausibility"]>): ReverseBreakevenApplicable => ({
@@ -30,10 +30,11 @@ describe("reverse breakeven helpers", () => {
     expect(formatDriver("stableRoic", null)).toBe("n/a");
   });
   it("says why a driver cannot reach the price, and nothing when it solved", () => {
-    expect(statusSentence(driver({}))).toBe(
-      "No value from -10.00% to 60.00% reaches today's price: every one leaves the company worth less than the price.");
-    expect(statusSentence(driver({ driver: "salesToCapital", low: 0.2, high: 20, status: "below_range" }))).toBe(
-      "No value from 0.20x to 20.00x comes down to today's price: every one leaves the company worth more than the price.");
+    expect(statusSentence(driver({ bestValue: 98.4, bestAt: -0.1 }))).toBe(
+      "No revenue growth between -10.00% and 60.00% reaches today's price; the highest value it reaches is $98.400 a share at -10.00%.");
+    expect(statusSentence(driver({ driver: "salesToCapital", low: 0.2, high: 20, status: "below_range", bestValue: 512, bestAt: 20 }))).toBe(
+      "No sales to capital between 0.20x and 20.00x comes down to today's price; the lowest value it reaches is $512.000 a share at 20.00x.");
+    expect(statusSentence(driver({}))).toBe("No revenue growth between -10.00% and 60.00% reaches today's price.");
     expect(statusSentence(driver({ status: null }))).toBe("The model could not value the company anywhere from -10.00% to 60.00%.");
     expect(statusSentence(driver({ status: "solved", implied: 0.3 }))).toBeNull();
   });
@@ -75,15 +76,15 @@ const breakdown = (over: Partial<DcfBreakdown>): DcfBreakdown => ({
 
 describe("the valuation that justifies today's price", () => {
   const run = breakdown({});
-  it("opens on the first solved driver, else the first with a run, else none", () => {
+  it("offers only solved drivers for the calculation, never an unsolved run", () => {
     const drivers = [
-      driver({ driver: "revenueGrowth", valuation: run }),
+      driver({ driver: "revenueGrowth", valuation: run, valuationAt: -0.1 }),
       driver({ driver: "targetMargin", status: "solved", implied: 0.4, valuation: run }),
       driver({ driver: "stableRoic", status: "solved", implied: 0.08, valuation: run }),
+      driver({ driver: "salesToCapital", status: "below_range", valuation: run }),
     ];
-    expect(defaultValuationDriver(drivers)).toBe("targetMargin");
-    expect(defaultValuationDriver([driver({ driver: "salesToCapital", valuation: run })])).toBe("salesToCapital");
-    expect(defaultValuationDriver([driver({})])).toBeNull();
+    expect(valuationDrivers(drivers).map((d) => d.driver)).toEqual(["targetMargin", "stableRoic"]);
+    expect(valuationDrivers([driver({ driver: "salesToCapital", valuation: run })])).toEqual([]);
   });
   it("moves only the selected driver on the price's side", () => {
     const rows = assumptionRows([

@@ -873,6 +873,10 @@ export interface BreakevenDriver {
   high: number;
   /** Null only when no value in the range could be computed at all. */
   status: BreakevenStatus | null;
+  /** Unsolved only: the value per share nearest the price over the range (the highest
+   *  when above_range, the lowest when below_range) and the driver value giving it. */
+  bestValue: number | null;
+  bestAt: number | null;
   firm: number | null;
   firmBasis: "fiveYearMedian" | "latest";
   peerMedian: number | null;

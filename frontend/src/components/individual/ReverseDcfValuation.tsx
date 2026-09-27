@@ -4,7 +4,7 @@ import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { formatStoryValue, STORY_VALUATION_DEFS as D } from "../../lib/story";
 import {
-  BREAKEVEN_DRIVERS, assumptionRows, defaultValuationDriver, formatDriver, priceVerdict, terminalFormula,
+  BREAKEVEN_DRIVERS, assumptionRows, formatDriver, priceVerdict, statusSentence, terminalFormula, valuationDrivers,
   type AssumptionRow,
 } from "../../lib/reverseBreakeven";
 import { MetricTerm } from "./DefinitionsBlock";
@@ -29,38 +29,51 @@ const COLUMNS = [
  */
 export function ReverseDcfValuation({ data }: { data: ReverseBreakevenApplicable }) {
   const [picked, setPicked] = useState<BreakevenDriverName | null>(null);
-  const selected = picked ?? defaultValuationDriver(data.drivers);
-  const driver = data.drivers.find((d) => d.driver === selected);
-  if (!data.modelValuation || !driver?.valuation) return null;
-  const rows = assumptionRows(data.drivers, driver.driver);
-  const solved = driver.status === "solved";
+  if (!data.modelValuation) return null;
+  const choices = valuationDrivers(data.drivers);
+  const driver = choices.find((d) => d.driver === picked) ?? choices[0];
+  const rows = driver ? assumptionRows(data.drivers, driver.driver) : [];
+  const unsolved = data.drivers.map(statusSentence).filter((s): s is string => s != null);
 
   return (
     <div>
       <p className="eyebrow mb-3">The valuation that justifies today's price</p>
-      <div role="group" aria-label="Driver" className="inline-flex flex-wrap rounded-sm border border-gold/15 overflow-hidden mb-4">
-        {data.drivers.filter((d) => d.valuation).map((d, i) => (
-          <button
-            key={d.driver}
-            type="button"
-            onClick={() => setPicked(d.driver)}
-            aria-pressed={d.driver === driver.driver}
-            className={cn(
-              "px-2.5 py-1 text-[0.65rem] font-mono uppercase tracking-wider transition-colors",
-              i > 0 && "border-l border-gold/15",
-              d.driver === driver.driver ? "bg-gold/15 text-gold" : "text-white/40 hover:text-white/70",
-            )}
-          >
-            {BREAKEVEN_DRIVERS[d.driver].label}
-          </button>
-        ))}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Column title="Model's numbers" v={data.modelValuation} rows={rows} side="model"
-          verdict={priceVerdict(data.modelValuation, data.priceUsed, false)} />
-        <Column title="At the price's assumption" v={driver.valuation} rows={rows} side="atPrice"
-          verdict={priceVerdict(driver.valuation, data.priceUsed, solved)} />
-      </div>
+      {driver?.valuation ? (
+        <>
+          <div role="group" aria-label="Driver" className="inline-flex flex-wrap rounded-sm border border-gold/15 overflow-hidden mb-4">
+            {choices.map((d, i) => (
+              <button
+                key={d.driver}
+                type="button"
+                onClick={() => setPicked(d.driver)}
+                aria-pressed={d.driver === driver.driver}
+                className={cn(
+                  "px-2.5 py-1 text-[0.65rem] font-mono uppercase tracking-wider transition-colors",
+                  i > 0 && "border-l border-gold/15",
+                  d.driver === driver.driver ? "bg-gold/15 text-gold" : "text-white/40 hover:text-white/70",
+                )}
+              >
+                {BREAKEVEN_DRIVERS[d.driver].label}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Column title="Model's numbers" v={data.modelValuation} rows={rows} side="model"
+              verdict={priceVerdict(data.modelValuation, data.priceUsed, false)} />
+            <Column title="At the price's assumption" v={driver.valuation} rows={rows} side="atPrice"
+              verdict={priceVerdict(driver.valuation, data.priceUsed, true)} />
+          </div>
+        </>
+      ) : (
+        <p className="text-[0.95rem] leading-7 text-white/70">
+          No single driver reaches today's price on its own, so there is no valuation to lay out that justifies it.
+        </p>
+      )}
+      {unsolved.length > 0 && (
+        <ul className="mt-4 space-y-1.5 text-[0.95rem] leading-7 text-white/70">
+          {unsolved.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+      )}
     </div>
   );
 }

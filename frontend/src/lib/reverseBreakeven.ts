@@ -24,14 +24,15 @@ export function formatDriver(driver: BreakevenDriverName, value: number | null):
 /** Why a driver shows no implied number; null when it solved. */
 export function statusSentence(d: BreakevenDriver): string | null {
   if (d.status === "solved" && d.implied != null) return null;
-  const range = `${formatDriver(d.driver, d.low)} to ${formatDriver(d.driver, d.high)}`;
-  if (d.status === "above_range") {
-    return `No value from ${range} reaches today's price: every one leaves the company worth less than the price.`;
+  if (d.status == null) {
+    return `The model could not value the company anywhere from ${formatDriver(d.driver, d.low)} to ${formatDriver(d.driver, d.high)}.`;
   }
-  if (d.status === "below_range") {
-    return `No value from ${range} comes down to today's price: every one leaves the company worth more than the price.`;
-  }
-  return `The model could not value the company anywhere from ${range}.`;
+  const name = BREAKEVEN_DRIVERS[d.driver].label.toLowerCase();
+  const range = `between ${formatDriver(d.driver, d.low)} and ${formatDriver(d.driver, d.high)}`;
+  const above = d.status === "above_range";
+  const head = above ? `No ${name} ${range} reaches today's price` : `No ${name} ${range} comes down to today's price`;
+  if (d.bestValue == null || d.bestAt == null) return `${head}.`;
+  return `${head}; the ${above ? "highest" : "lowest"} value it reaches is ${formatPerShare(d.bestValue)} a share at ${formatDriver(d.driver, d.bestAt)}.`;
 }
 
 /** The firm's own figure, with the period it covers. */
@@ -80,10 +81,10 @@ export function gridNote(grid: BreakevenGrid): string | null {
 
 // ── The valuation that justifies today's price ─────────────────────────────
 
-/** The driver the side-by-side opens on: the first that solved, else the first with a run. */
-export function defaultValuationDriver(drivers: BreakevenDriver[]): BreakevenDriverName | null {
-  const withRun = drivers.filter((d) => d.valuation != null);
-  return (withRun.find((d) => d.status === "solved") ?? withRun[0])?.driver ?? null;
+/** The drivers the side-by-side can show: only those that solved (and have a run),
+ *  so an unsolved run is never laid out as the price's assumption. */
+export function valuationDrivers(drivers: BreakevenDriver[]): BreakevenDriver[] {
+  return drivers.filter((d) => d.status === "solved" && d.valuation != null);
 }
 
 export interface AssumptionRow {
