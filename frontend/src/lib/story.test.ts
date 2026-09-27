@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRICE_DECK_TITLE, QUALITATIVE_QUESTIONS, STORY_DECK_TITLE } from "./questions";
 import { STORY_ANSWER_IDS, STORY_INPUTS, STORY_SYNTHESIS_ID, buildStoryDeck, checkedLabel, collectStoryAnswers,
-         formatStoryValue, inStoryBounds, storyAnswersReady, storyDcfBody } from "./story";
+         formatStoryValue, inStoryBounds, storyDcfBody } from "./story";
 import type { StoryRow } from "./aiApi";
 import { EM_DASH } from "./copyHygiene.test-helper";
 
@@ -69,10 +69,11 @@ describe("buildStoryDeck", () => {
 
 describe("story answers", () => {
   const full = new Map(IDS.slice(0, 8).map((id) => [id, "answer"]));
-  it("is ready only when all eight answers have text", () => {
+  it("sends all eight answers, blank ones empty, so the AI uses each fallback", () => {
     expect(STORY_ANSWER_IDS).toEqual(IDS.slice(0, 8));
-    expect(storyAnswersReady(full)).toBe(true);
-    expect(storyAnswersReady(new Map([...full, ["indiv.story.end", "   "]]))).toBe(false);
+    const blank = collectStoryAnswers(new Map());
+    expect(Object.keys(blank)).toEqual(IDS.slice(0, 8));
+    expect(Object.values(blank).every((a) => a === "")).toBe(true);
   });
   it("sends the synthesis only when it is answered", () => {
     expect(Object.keys(collectStoryAnswers(full))).toEqual(IDS.slice(0, 8));

@@ -24,8 +24,9 @@ UNITS = {
     "salesToCapital": "ratio",
 }
 
-# (answer id, question number, label the prompt uses). The first eight are required;
-# the ninth, the reader's whole story, is optional.
+# (answer id, question number, label the prompt uses). Any answer may be blank; a
+# blank one reaches the model as NO_ANSWER and gets that input's fallback.
+NO_ANSWER = "(No answer given.)"
 STORY_QUESTIONS = [
     ("indiv.story.market", 1, "what market it is really in"),
     ("indiv.story.new_customers", 2, "who the new customers are"),
@@ -62,11 +63,9 @@ def validate_request(data) -> tuple[str | None, dict | None]:
     answers: dict[str, str] = {}
     for qid, _n, _label in STORY_QUESTIONS:
         value = raw.get(qid)
-        required = qid != STORY_QUESTIONS[-1][0]
         text = value.strip() if isinstance(value, str) else ""
         if not text:
-            if required:
-                return ERR_ANSWERS, None
+            # A blank answer is allowed: the prompt's fallback rule covers it.
             continue
         if len(text) > MAX_ANSWER:
             return ERR_ANSWER_LONG, None
@@ -93,8 +92,11 @@ def validate_request(data) -> tuple[str | None, dict | None]:
 
 def build_prompt(payload: dict) -> str:
     answers = payload["answers"]
-    blocks = [f"Question {n}, {label}:\n{answers[qid]}"
-              for qid, n, label in STORY_QUESTIONS if answers.get(qid)]
+    # The eight input questions always appear, blank ones marked so the model applies
+    # each input's fallback; the optional ninth appears only when answered.
+    blocks = [f"Question {n}, {label}:\n{answers.get(qid) or NO_ANSWER}"
+              for qid, n, label in STORY_QUESTIONS
+              if answers.get(qid) or qid != STORY_QUESTIONS[-1][0]]
     return "\n\n".join([
         f"Subject: {payload['ticker']} ({payload['company']})",
         "Computed data on the page (AUTHORITATIVE LIVE DATA: the site computed these exact "

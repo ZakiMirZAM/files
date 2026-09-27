@@ -14,7 +14,6 @@ import {
   checkedLabel,
   collectStoryAnswers,
   formatStoryValue,
-  storyAnswersReady,
   storyDcfBody,
 } from "../../lib/story";
 import { setStoredStory, useStoredStory } from "../../lib/storyStore";
@@ -45,8 +44,6 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
     saved?.forEach((row) => m.set(row.questionId, row.answer));
     return m;
   }, [saved]);
-  const ready = storyAnswersReady(savedMap);
-
   const stored = useStoredStory(ticker);
   const body = stored ? storyDcfBody(stored.conversion.rows) : null;
   const story = useResource(
@@ -110,8 +107,7 @@ export function StorySection({ ticker, companyName, dataContext }: StorySectionP
           type="button"
           className="btn-gold"
           onClick={convert}
-          disabled={busy || !ready}
-          title={ready ? undefined : "Answer the eight story questions first"}
+          disabled={busy}
         >
           {busy ? "Turning your story into numbers..." : "Turn my story into numbers"}
         </button>

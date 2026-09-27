@@ -43,12 +43,8 @@ export function buildStoryDeck(company: string): RuntimeGroup[] {
   return [{ title: group.title, questions }];
 }
 
-/** True once every one of the eight story answers has text. */
-export function storyAnswersReady(saved: Map<string, string>): boolean {
-  return STORY_ANSWER_IDS.every((id) => (saved.get(id) ?? "").trim().length > 0);
-}
-
-/** The eight answers, trimmed and in order, plus the synthesis when written. */
+/** The eight answers, trimmed and in order (blank ones sent empty so the AI applies
+ *  each input's fallback), plus the synthesis when written. */
 export function collectStoryAnswers(saved: Map<string, string>): Record<string, string> {
   const answers: Record<string, string> = {};
   for (const id of STORY_ANSWER_IDS) answers[id] = (saved.get(id) ?? "").trim();
