@@ -77,8 +77,13 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # sentence "A frame that genuinely has nothing to say for this subject gets one
 # honest sentence saying so, not a paragraph of padding." was removed.
 # EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
+#
+# ASK_SYSTEM re-recorded 2026-09-27: owner-supplied paragraph added verbatim to
+# the qualitative section (peer differences need a qualitative or economic reason,
+# never one financial number explaining another; say so when evidence is silent).
+# EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
 EXPECTED = {
-    "ASK_SYSTEM": "e2ec22a8e1e8a3abd4d0a42ab270ccad613926a73932c480101750e8b5239b90",
+    "ASK_SYSTEM": "08cb44695ac24e1d0f0897c73a8d99005bb28a9cab63c30f0fc974cc941117c2",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
 }

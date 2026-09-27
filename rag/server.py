@@ -315,6 +315,14 @@ Numbers confirm, they do not explain.
 - Do not attribute a company result to industry conditions without first showing how this company
   differs from the industry.
 - Every verdict states what fact would flip it, and one observable signal that it is happening.
+When explaining why a company's numbers differ from its peers, never use one
+financial number to explain another (e.g. not "returns are high because
+margins are high"). Financial numbers can say what differs and where. The
+reason must be qualitative or economic. Choose the factors that fit this
+firm and its industry, using the frameworks in your sources (such as Porter)
+to decide what to examine; any factors named here are illustrations, not a
+checklist. The reason must not apply equally to rivals. If the evidence
+doesn't show why, say so.
 Specificity floor.
 - Every causal claim must name at least one of: a company, supplier, customer, product, contract,
   filing, date, transaction, or person. A claim naming none of these is not an answer.
