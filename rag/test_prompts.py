@@ -79,12 +79,14 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # EXPLAIN_SYSTEM and DEFINE_SYSTEM unchanged.
 #
 # STORY_SYSTEM recorded 2026-09-27: new owner-approved /story-inputs route; the
-# other three prompts unchanged.
+# other three prompts unchanged. Re-recorded the same day so its label names and
+# proof examples follow the story data block's Firm/Peer grammar (commit 48bd93b),
+# with the proof-phrasing rules the Tier 0 grader needs.
 EXPECTED = {
     "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
-    "STORY_SYSTEM": "56f008180914f9c04cc5ece8464a09d492e3fac6a68effc875b25e59089adc5a",
+    "STORY_SYSTEM": "231dcf1bd088e9534bde6dd3aa59eb7280e45b25a1d233c9696d94271d5d111a",
 }
 
 PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM")

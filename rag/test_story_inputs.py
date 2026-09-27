@@ -13,9 +13,56 @@ ANSWERS = {qid: "an answer" for qid, _n, _l in story_inputs.STORY_QUESTIONS[:8]}
 GOOD = {"rows": [{"input": n, "storyQuote": "q", "value": 0.1, "unit": "x", "proof": "p",
                   "sources": ["Narrative and Numbers, chapter 8"]} for n in story_inputs.INPUT_NAMES],
         "riskFlags": ["a"], "weakestLink": "w", "counterStory": "c"}
-BLOCK = ("Latest operating margin: 18.20%\nLatest sales to capital: 1.42x\n"
-         "Industry operating margin median: 4.46%\nIndustry operating margin 90th percentile: 12.30%\n"
-         "WACC: 6.96%")      # Task 3 grammar
+# A full block in the Task 3 grammar (backend/story_dcf.py story_data_block, fix
+# round 1, commit 48bd93b): every one of its 48 labels, in order.
+BLOCK = """Company: Ferrari N.V. (RACE), reporting currency EUR, latest fiscal year 2025
+Firm revenue: $6.7B
+Firm revenue growth: 11.80%
+Firm operating margin: 18.20%
+Firm sales to capital: 1.42x
+Firm ROIC: 24.10%
+Five-year median operating margin: 17.60%
+Marginal sales to capital over five years: 1.38x
+Peer group: Auto Manufacturers, fiscal year 2025
+Peer company count: 42
+Peer total revenue: $2.9T
+Firm share of peer revenue: 0.23%
+Peer median operating margin: 4.46%
+Peer upper quartile operating margin: 8.10%
+Peer top decile operating margin: 12.30%
+Peer median sales to capital: 1.10x
+Peer upper quartile sales to capital: 1.60x
+Peer top decile sales to capital: 2.40x
+Peer median ROIC: 6.20%
+Peer upper quartile ROIC: 9.80%
+Peer top decile ROIC: 14.50%
+Peer median revenue growth: 3.10%
+Peer upper quartile revenue growth: 7.40%
+Peer top decile revenue growth: 11.90%
+Synthetic rating: A3/A-
+Synthetic rating class: single-A
+Interest coverage: 22.40x
+Cash: $1.5B
+Gross debt: $2.9B
+Minority interest: $12M
+Diluted shares: 179M
+Risk-free rate: 4.30%
+WACC: 6.96%
+Model high growth rate: 4.00%
+Model stable growth rate: 0.70%
+Model operating margin today: 18.20%
+Model long-run operating margin: 18.20%
+Model sales to capital: 1.42x
+Model return on capital after growth ends: 9.00%
+Model tax rate: 33.54%
+Model intrinsic value per share: $210.55
+Ten-year default rate for the AAA rating class: 0.70%
+Ten-year default rate for the AA rating class: 0.72%
+Ten-year default rate for the single-A rating class: 1.24%
+Ten-year default rate for the BBB rating class: 3.32%
+Ten-year default rate for the BB rating class: 11.78%
+Ten-year default rate for the B rating class: 23.74%
+Ten-year default rate for the CCC/C rating class: 50.38%"""
 
 def test_parse_accepts_prose_and_fences_and_canonicalises_units():
     out = story_inputs.parse_story_output("Here:\n```json\n" + json.dumps(GOOD) + "\n```")
@@ -70,9 +117,9 @@ def test_row_status():
 def test_the_grader_checks_a_proof_against_the_block(monkeypatch):
     import verify
     monkeypatch.setattr(verify, "MODE", "shadow")
-    good = verify.tier0("The latest operating margin of 18.20% sits above the industry "
-                        "operating margin 90th percentile of 12.30%.", BLOCK, [])
-    bad = verify.tier0("The latest sales to capital of 2.10x is high.", BLOCK, [])
+    good = verify.tier0("Firm operating margin is 18.20%. Peer top decile operating margin "
+                        "is 12.30%.", BLOCK, [])
+    bad = verify.tier0("Firm sales to capital is 2.10x.", BLOCK, [])
     assert story_inputs.row_status(good) == "verified"
     assert story_inputs.row_status(bad) == "flagged"
 
@@ -103,6 +150,37 @@ def test_handler_runs_the_story_prompt_on_vault_search_only(monkeypatch):
     assert rep is None or "flagged" in rep          # this route ships the report unstripped
     assert seen == {"model": server.ASK_MODEL, "system": server.STORY_SYSTEM, "turns": server.STORY_MAX_TURNS,
                     "label": "/story-inputs", "web": False, "budget": server.STORY_BUDGET_USD}
+
+def test_a_proof_written_the_way_the_prompt_asks_is_verified_on_the_route(monkeypatch):
+    """The prompt's own citation examples, and proofs in its "<label> is <value>"
+    form, come back "verified" through the real Tier 0 grader on this route. A wrong
+    block figure comes back "flagged" with its per-claim detail, and a proof that
+    cites no block figure is "unchecked"."""
+    import verify
+    monkeypatch.setattr(verify, "MODE", "shadow")
+    for example in ("Firm operating margin is 18.20%", "Peer top decile operating margin is 12.30%"):
+        assert f'"{example}"' in server.STORY_SYSTEM
+    proofs = {
+        "totalMarket": "Peer total revenue is $2.9T. The reader drew a wider market, so the story keeps it.",
+        "targetMargin": ("Firm operating margin is 18.20%. Peer top decile operating margin is 12.30%. "
+                         "The edge passes steps 3 and 4, so the margin stays at the top of the peer range."),
+        "salesToCapital": "Firm sales to capital is 2.10x.",
+        "failureProbability": ("Synthetic rating class is single-A. Ten-year default rate for the "
+                               "single-A rating class is 1.24%."),
+        "stableRoic": "WACC is 6.96%. No edge survives step 2, so the return after year 10 equals it.",
+        "distressProceeds": "The answer gives no reason to expect proceeds above zero.",
+    }
+    rows = [{**r, "proof": proofs.get(r["input"], r["proof"])} for r in GOOD["rows"]]
+    async def fake(*a, **k): return json.dumps({**GOOD, "rows": rows}), []
+    monkeypatch.setattr(server, "run_agent", fake)
+    status, body = call({"ticker": "RACE", "company": "Ferrari", "answers": ANSWERS, "data": BLOCK})
+    got = {r["input"]: r["verification"] for r in body["rows"]}
+    assert status == 200
+    for name in ("totalMarket", "targetMargin", "failureProbability", "stableRoic"):
+        assert got[name]["status"] == "verified", (name, got[name]["report"])
+    assert got["salesToCapital"]["status"] == "flagged"
+    assert got["salesToCapital"]["report"]["flagged"][0]["via"] == "Firm sales to capital"
+    assert got["distressProceeds"]["status"] == "unchecked"
 
 def test_handler_failures_are_json(monkeypatch):
     assert call(ValueError("not json"))[0] == 400
