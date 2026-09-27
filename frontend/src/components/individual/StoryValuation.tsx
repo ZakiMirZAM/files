@@ -8,7 +8,7 @@ import { STORY_VALUATION_DEFS as D, formatStoryValue, stageShapeLabel } from "..
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
 const pct = (v: number | null | undefined): string => formatStoryValue("fraction", v ?? null);
 
-const COLUMNS: Array<{ label: string; def: number }> = [
+export const PROJECTION_COLUMNS: Array<{ label: string; def: number }> = [
   { label: "Revenue", def: D.revenue },
   { label: "Operating margin", def: D.operatingMargin },
   { label: "After-tax operating profit", def: D.afterTaxOperatingProfit },
@@ -47,7 +47,7 @@ export function StoryValuation({ forecast: f }: { forecast: StoryForecast }) {
                 <th scope="col" className="text-left px-3 py-2 border-b border-gold/15">
                   <span className="label">Year</span>
                 </th>
-                {COLUMNS.map(({ label, def }) => (
+                {PROJECTION_COLUMNS.map(({ label, def }) => (
                   <th key={label} scope="col" className="text-right px-3 py-2 border-b border-gold/15 align-bottom">
                     <span className="label"><MetricTerm metric={label} resolve={() => def} asSpan /></span>
                   </th>
@@ -105,7 +105,7 @@ export function StoryValuation({ forecast: f }: { forecast: StoryForecast }) {
   );
 }
 
-function Line({ label, def, value, sign, strong }: {
+export function Line({ label, def, value, sign, strong }: {
   label: string; def: number; value: ReactNode; sign?: string; strong?: boolean;
 }) {
   return (

@@ -877,6 +877,46 @@ export interface BreakevenDriver {
   firmBasis: "fiveYearMedian" | "latest";
   peerMedian: number | null;
   peerTopDecile: number | null;
+  /** The driver value the valuation below runs at: implied when solved, else the
+   *  end of the range nearest the price. Null when status is null. */
+  valuationAt: number | null;
+  valuation: DcfBreakdown | null;
+}
+
+/** One engine run laid out from the projection to the value per share. Money in the
+ *  reporting currency, per-share in the price's currency, rates as decimals. */
+export interface DcfBreakdown {
+  rows: Array<{
+    year: number;
+    revenue: number;
+    operatingMargin: number;
+    ebitAfterTax: number;
+    reinvestment: number;
+    fcff: number;
+    discountFactor: number;
+    pvFcff: number;
+  }>;
+  stableGrowth: number;
+  stableReturn: number | null;
+  costOfCapital: number;
+  terminal: {
+    ebitAfterTaxNext: number;
+    reinvestmentRate: number | null;
+    fcffNext: number;
+    waccMinusGrowth: number;
+    value: number;
+  };
+  pvTerminal: number;
+  pvExplicit: number;
+  enterpriseValue: number;
+  cash: number;
+  grossDebt: number;
+  minorityInterest: number;
+  equityValue: number;
+  dilutedShares: number;
+  valuePerShare: number;
+  /** valuePerShare - priceUsed; negative is a shortfall. */
+  gapToPrice: number;
 }
 
 export interface BreakevenCell {
@@ -902,6 +942,8 @@ export interface ReverseBreakevenApplicable {
   applicable: true;
   priceUsed: number;
   valueAtModel: number | null;
+  /** The model's own run, for the side-by-side with a driver's run. */
+  modelValuation: DcfBreakdown | null;
   wacc: number | null;
   stableGrowth: number | null;
   drivers: BreakevenDriver[];

@@ -44,6 +44,7 @@ S2C_RANGE = (0.2, 20.0)
 
 Kwargs = dict
 Valuer = Callable[[Kwargs], Optional[float]]
+Runner = Callable[[Kwargs], Optional[dict]]
 
 
 # ── Setting one driver on the engine kwargs (always a new dict) ────────────
@@ -73,11 +74,20 @@ def effective_stable_roic(kw: Kwargs) -> Optional[float]:
     return kw.get("roic_stable") or kw.get("roic_high")
 
 
-def engine_valuer(wacc_of_beta: Callable) -> Valuer:
+def engine_runner(wacc_of_beta: Callable) -> Runner:
+    """The full engine output for a set of kwargs (None when it cannot solve)."""
+    return lambda kw: run_fcff_revenue(wacc_of_beta=wacc_of_beta, **kw)
+
+
+def valuer_of(run: Runner) -> Valuer:
     def value(kw: Kwargs) -> Optional[float]:
-        out = run_fcff_revenue(wacc_of_beta=wacc_of_beta, **kw)
+        out = run(kw)
         return None if out is None else out["intrinsicPerShare"]
     return value
+
+
+def engine_valuer(wacc_of_beta: Callable) -> Valuer:
+    return valuer_of(engine_runner(wacc_of_beta))
 
 
 # ── Solver ───────────────────────────────────────────────────────────────────
@@ -211,6 +221,85 @@ def breakeven_grid(kw: Kwargs, value: Valuer, price: float, rf: float,
             "reachesPrice": any(c["atOrAbovePrice"] for line in cells for c in line)}
 
 
+# ── The valuation behind a number ───────────────────────────────────────────
+
+_ROW_FIELDS = ("year", "revenue", "operatingMargin", "ebitAfterTax", "reinvestment",
+               "fcff", "discountFactor", "pvFcff")
+
+
+def valuation_breakdown(out: Optional[dict], kw: Kwargs, bridge: dict,
+                        price: float) -> Optional[dict]:
+    """The engine run laid out as the reader checks it: the ten projection rows,
+    the terminal value with its inputs, and the bridge from enterprise value to
+    value per share. Presentation only: every figure is the engine's own or a
+    product of two of them. None when the engine did not solve or has no
+    explicit years."""
+    if out is None or not out["rows"]:
+        return None
+    rows = out["rows"]
+    g, wacc = kw["g_stable"], out["waccStable"]
+    ebit11 = rows[-1]["ebitAfterTax"] * (1.0 + g)
+    rr = out["reinvestmentStable"]
+    if rr is None and ebit11:
+        # The engine's no-return convention reinvests via sales to capital instead.
+        rr = 1.0 - out["fcffTerminal"] / ebit11
+    value = out["intrinsicPerShare"]
+    return {
+        "rows": [{k: r[k] for k in _ROW_FIELDS} for r in rows],
+        "stableGrowth": round(g, 4),
+        "stableReturn": effective_stable_roic(kw) or rows[-1]["roic"],
+        "costOfCapital": wacc,
+        "terminal": {
+            "ebitAfterTaxNext": round(ebit11, 2),
+            "reinvestmentRate": None if rr is None else round(rr, 4),
+            "fcffNext": out["fcffTerminal"],
+            "waccMinusGrowth": round(wacc - g, 4),
+            "value": out["terminalValue"],
+        },
+        "pvTerminal": out["pvTerminal"],
+        "pvExplicit": out["pvExplicit"],
+        "enterpriseValue": out["firmValue"],
+        **bridge,
+        "equityValue": out["equityValue"],
+        "dilutedShares": kw["shares"],
+        "valuePerShare": value,
+        "gapToPrice": round(value - price, 2),
+    }
+
+
+def driver_run_value(name: str, kw: Kwargs, value: Valuer, rf: float,
+                     solved: dict) -> Optional[float]:
+    """The driver value the breakdown runs at: the implied one when it solved,
+    else whichever end of the search range comes nearest the price."""
+    if solved["status"] == "solved":
+        return solved["implied"]
+    if solved["status"] is None:
+        return None
+    set_driver, lo, hi, _ = _driver_specs(kw, rf)[name]
+    ends = [(x, value(set_driver(x))) for x in (lo, hi)]
+    ends = [(x, v) for x, v in ends if v is not None]
+    if not ends:
+        return None
+    pick = max if solved["status"] == "above_range" else min
+    return pick(ends, key=lambda e: e[1])[0]
+
+
+def driver_valuations(kw: Kwargs, run: Runner, price: float, rf: float, drivers: dict,
+                      bridge: dict) -> dict:
+    """Driver -> {"at": the driver value used, "valuation": its breakdown}."""
+    value = valuer_of(run)
+    specs = _driver_specs(kw, rf)
+    out = {}
+    for name, solved in drivers.items():
+        x = driver_run_value(name, kw, value, rf, solved)
+        if x is None:
+            out[name] = {"at": None, "valuation": None}
+            continue
+        run_kw = specs[name][0](x)
+        out[name] = {"at": x, "valuation": valuation_breakdown(run(run_kw), run_kw, bridge, price)}
+    return out
+
+
 # ── The block ────────────────────────────────────────────────────────────────
 
 def _five_year_median_growth(history: list) -> Optional[float]:
@@ -264,9 +353,13 @@ def build_reverse_breakeven(forecast: dict | None, latest, ctx: dict | None) -> 
 
     model = model_inputs(forecast)
     kw = resolve_story(model, StoryInputs())["kwargs"]
-    core = reverse_breakeven(kw, engine_valuer(wacc_of_beta_for(forecast, latest)), price, model.rf)
+    run = engine_runner(wacc_of_beta_for(forecast, latest))
+    core = reverse_breakeven(kw, valuer_of(run), price, model.rf)
     if core is None:
         return {"applicable": False, "reason": _UNSOLVABLE}
+    # Same figures model_inputs folds into equity_adjust, so the bridge sums.
+    bridge = {k: forecast.get(k) or 0.0 for k in ("cash", "grossDebt", "minorityInterest")}
+    runs = driver_valuations(kw, run, price, model.rf, core["drivers"], bridge)
 
     ctx = ctx if ctx and ctx.get("applicable") is not False else {}
     history = ctx.get("history") or []
@@ -280,6 +373,8 @@ def build_reverse_breakeven(forecast: dict | None, latest, ctx: dict | None) -> 
         field, basis, range_key = _FIRM[name]
         drivers.append({
             "driver": name, **solved,
+            "valuationAt": runs[name]["at"],
+            "valuation": runs[name]["valuation"],
             "firm": firm_five_year[name] if field is None else latest_h.get(field),
             "firmBasis": basis,
             "peerMedian": _peer(ranges, range_key, "median"),
@@ -294,6 +389,7 @@ def build_reverse_breakeven(forecast: dict | None, latest, ctx: dict | None) -> 
         "applicable": True,
         "priceUsed": price,
         "valueAtModel": core["valueAtModel"],
+        "modelValuation": valuation_breakdown(run(kw), kw, bridge, price),
         "wacc": wacc,
         "stableGrowth": core["stableGrowth"],
         "drivers": drivers,

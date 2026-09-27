@@ -3,10 +3,10 @@
 // plausibility lines. The figures come from GET /api/individual/{t}/reverse-dcf.
 
 import type { StoryUnit } from "./aiApi";
-import { formatCurrency } from "./format";
+import { formatCurrency, formatPerShare } from "./format";
 import { formatStoryValue } from "./story";
 import type {
-  BreakevenCell, BreakevenDriver, BreakevenGrid, BreakevenDriverName, ReverseBreakevenApplicable,
+  BreakevenCell, BreakevenDriver, BreakevenGrid, BreakevenDriverName, DcfBreakdown, ReverseBreakevenApplicable,
 } from "./types";
 
 export const BREAKEVEN_DRIVERS: Record<BreakevenDriverName, { label: string; def: number; unit: StoryUnit }> = {
@@ -76,4 +76,42 @@ export function plausibilityLines(r: ReverseBreakevenApplicable): string[] {
 /** The line under a grid none of whose cells reaches the price; null when one does. */
 export function gridNote(grid: BreakevenGrid): string | null {
   return grid.reachesPrice ? null : "No combination in this grid reaches today's price";
+}
+
+// ── The valuation that justifies today's price ─────────────────────────────
+
+/** The driver the side-by-side opens on: the first that solved, else the first with a run. */
+export function defaultValuationDriver(drivers: BreakevenDriver[]): BreakevenDriverName | null {
+  const withRun = drivers.filter((d) => d.valuation != null);
+  return (withRun.find((d) => d.status === "solved") ?? withRun[0])?.driver ?? null;
+}
+
+export interface AssumptionRow {
+  driver: BreakevenDriverName;
+  model: number | null;
+  atPrice: number | null;
+  changed: boolean;
+}
+
+/** Each driver's number on the model's run and on the price's run; only the selected one moves. */
+export function assumptionRows(drivers: BreakevenDriver[], selected: BreakevenDriverName): AssumptionRow[] {
+  return drivers.map((d) => {
+    const changed = d.driver === selected;
+    return { driver: d.driver, model: d.model, atPrice: changed ? d.valuationAt : d.model, changed };
+  });
+}
+
+/** The terminal value with its numbers substituted:
+ *  "$773.96B × (1 − 102.78%) / 3.24% = -$662.92B". */
+export function terminalFormula(t: DcfBreakdown["terminal"]): string {
+  const rr = t.reinvestmentRate == null ? "n/a" : pct(t.reinvestmentRate);
+  return `${formatCurrency(t.ebitAfterTaxNext)} × (1 − ${rr}) / ${pct(t.waccMinusGrowth)} = ${formatCurrency(t.value)}`;
+}
+
+/** The value per share read against the price: equal when solved, else the gap. */
+export function priceVerdict(v: DcfBreakdown, price: number, solved: boolean): string {
+  const at = `${formatPerShare(v.valuePerShare)} a share against today's price of ${formatPerShare(price)}`;
+  if (solved) return `${at}: the two are equal.`;
+  const gap = formatPerShare(Math.abs(v.gapToPrice));
+  return v.gapToPrice < 0 ? `${at}: ${gap} short.` : `${at}: ${gap} above.`;
 }

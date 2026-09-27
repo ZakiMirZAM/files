@@ -207,3 +207,51 @@ def test_reverse_dcf_route(monkeypatch):
     monkeypatch.setattr(api, "_story_base", lambda tk: (None, []))
     api.invalidate_cache("db")
     assert TestClient(api.app).get("/api/individual/TEST2/reverse-dcf").json()["applicable"] is False
+
+
+# --- the valuation that justifies today's price -----------------------------
+
+def _check_breakdown(v, price=None):
+    """Terminal value equals its formula from the returned inputs; the bridge sums."""
+    t = v["terminal"]
+    assert len(v["rows"]) == 10
+    assert t["value"] == approx(t["ebitAfterTaxNext"] * (1 - t["reinvestmentRate"])
+                                / t["waccMinusGrowth"], rel=2e-3)
+    assert t["waccMinusGrowth"] == approx(v["costOfCapital"] - v["stableGrowth"], abs=1e-4)
+    assert v["pvExplicit"] == approx(sum(r["pvFcff"] for r in v["rows"]), abs=0.1)
+    assert v["enterpriseValue"] == approx(v["pvExplicit"] + v["pvTerminal"], abs=0.05)
+    assert v["equityValue"] == approx(v["enterpriseValue"] + v["cash"] - v["grossDebt"]
+                                      - v["minorityInterest"], abs=0.05)
+    assert v["valuePerShare"] == approx(v["equityValue"] / v["dilutedShares"], abs=0.01)
+    if price is not None:
+        assert v["gapToPrice"] == approx(v["valuePerShare"] - price, abs=0.01)
+
+
+def test_each_solved_driver_carries_the_valuation_that_equals_the_price():
+    rows = _mature_dividend_payer()
+    f = _model(rows)
+    out = rb.build_reverse_breakeven(f, _latest(rows), _CTX)
+    price = out["priceUsed"]
+    model = out["modelValuation"]
+    _check_breakdown(model, price)
+    assert model["valuePerShare"] == approx(out["valueAtModel"])
+    assert model["cash"] == (f["cash"] or 0.0)
+    solved = [d for d in out["drivers"] if d["status"] == "solved"]
+    assert solved
+    for d in solved:
+        assert d["valuationAt"] == d["implied"]
+        _check_breakdown(d["valuation"], price)
+        assert d["valuation"]["valuePerShare"] == approx(price, rel=0.005)
+
+
+def test_an_unsolved_driver_shows_the_run_at_the_end_nearest_the_price():
+    kw = _kw()
+    run = rb.engine_runner(lambda b: WACC)
+    drivers = rb.solve_drivers(kw, VALUE, 1e6, RF)
+    bridge = {"cash": 50.0, "grossDebt": 20.0, "minorityInterest": 5.0}
+    runs = rb.driver_valuations({**kw, "equity_adjust": 25.0}, run, 1e6, RF, drivers, bridge)
+    m = runs["targetMargin"]
+    assert m["at"] == 0.8                          # the top of the margin range
+    _check_breakdown(m["valuation"], 1e6)
+    assert m["valuation"]["gapToPrice"] < 0        # the shortfall
+    assert m["valuation"]["rows"][-1]["operatingMargin"] == 0.8

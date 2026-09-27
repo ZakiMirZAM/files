@@ -8,6 +8,7 @@ import {
   BREAKEVEN_DRIVERS, cellTint, firmFigure, formatDriver, gridNote, plausibilityLines, statusSentence,
 } from "../../lib/reverseBreakeven";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
+import { ReverseDcfValuation } from "./ReverseDcfValuation";
 
 interface ReverseDcfSectionProps {
   /** The ROUTE ticker; the backend folds aliases onto the primary listing. */
@@ -110,6 +111,8 @@ function BreakevenPanel({ data }: { data: ReverseBreakevenApplicable }) {
           </table>
         </div>
       </div>
+
+      <ReverseDcfValuation data={data} />
 
       <GridTable grid={data.grids.growthMargin} />
       <GridTable grid={data.grids.growthRoic} />
