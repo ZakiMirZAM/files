@@ -132,7 +132,13 @@ try:
         DISPLAY_METRICS,
         MARGINAL_TAX_RATE,
     )
-    from story_dcf import build_story_forecast, story_inputs_from_body  # type: ignore
+    from story_dcf import (  # type: ignore
+        build_story_context,
+        build_story_forecast,
+        industry_ranges,
+        market_position,
+        story_inputs_from_body,
+    )
     from comparitivestockanalysis import (  # type: ignore
         build_snapshot as build_comparative_snapshot,
         score_industry,
@@ -6421,6 +6427,39 @@ def story_dcf_endpoint(request: Request, body: StoryDcfBody,
         return {"applicable": False, "reason": _STORY_NO_VALUATION}
     return build_story_forecast(analysis["forecast"], rows[-1],
                                 story_inputs_from_body(body.model_dump()))
+
+
+def _story_industry(industry: str | None) -> tuple[dict, Any]:
+    """The industry's percentile ranges and its peer panel (IndustryPanel or None)."""
+    if not industry:
+        return {}, None
+    from connections.sector_cache import get_industry_panel  # noqa: PLC0415
+    with db_conn() as conn:
+        ranges = industry_ranges(conn, industry)
+        try:
+            panel = get_industry_panel(conn, industry)
+        except Exception as exc:  # noqa: BLE001 - the market position is context, never a blocker
+            log.warning("[api] story industry panel for %s failed: %s", industry, exc)
+            panel = None
+    return ranges, panel
+
+
+@app.get("/api/individual/{ticker}/story-context")
+@limiter.limit("20/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def story_context_endpoint(request: Request,
+                           ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    """The facts the story AI reads (contract C3), with the data block Tier 0
+    checks its proofs against."""
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    tk = _resolve_symbol(ticker)
+    analysis, rows = _story_base(tk)
+    if not analysis or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    ranges, panel = _story_industry(analysis.get("industry"))
+    return build_story_context(ticker=tk, analysis=analysis, rows=rows, ranges=ranges,
+                               market=market_position(panel, tk))
 
 
 # ── Live quote (yfinance) ────────────────────────────────────────────────────

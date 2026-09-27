@@ -6,14 +6,27 @@ already shows, the cost of capital is the site's own (compute_wacc on the same
 latest row, rate inputs and lease debt the model used), and the result has the
 same shape as that forecast so ForecastSection can render either one.
 
+The second half builds the story context: the facts the AI reads before it
+turns the reader's answers into inputs (company history, industry ranges,
+market position, credit, balance sheet, the model's own assumptions), plus
+the same facts as a text data block, one figure per line, which the Tier 0
+grader (rag/eval/graders.report) checks each proof against.
+
 Never mutates the forecast it is given: the payload is cached and shared.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+import logging
+import math
+import statistics
+from typing import Any, Callable, Iterable, Mapping
 
-from individualanalysis import compute_wacc
-from valuation.story import ModelInputs, StoryInputs, story_sensitivity, value_story
+import individualanalysis as ia
+from individualanalysis import MARGINAL_TAX_RATE, compute_wacc
+from valuation.story import (ModelInputs, StoryInputs, TEN_YEAR_DEFAULT_RATE, rating_class,
+                             story_sensitivity, value_story)
+
+log = logging.getLogger("story_dcf")
 
 _NO_VALUATION = "No valuation is available for this company, so the story cannot be priced."
 _UNSOLVABLE = ("The story's numbers do not produce a solvable valuation: the operating "
@@ -51,12 +64,17 @@ def story_inputs_from_body(body: Mapping[str, Any]) -> StoryInputs:
     return StoryInputs(**{field: body.get(key) for key, field in _BODY_FIELDS.items()})
 
 
+def _not_applicable(forecast: dict | None) -> dict:
+    """The forecast's own reason when it has one, else the generic sentence."""
+    forecast = forecast or {}
+    return {"applicable": False,
+            "reason": forecast.get("notApplicableReason") or forecast.get("reason") or _NO_VALUATION}
+
+
 def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) -> dict:
     """The page's forecast re-priced on the story, or {"applicable": False, "reason"}."""
     if not forecast or forecast.get("applicable") is False:
-        forecast = forecast or {}
-        return {"applicable": False,
-                "reason": forecast.get("notApplicableReason") or forecast.get("reason") or _NO_VALUATION}
+        return _not_applicable(forecast)
 
     a = forecast["assumptions"]
     wb = forecast["waccBuild"]
@@ -127,3 +145,308 @@ def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) ->
             "failureAdjustedPerShare": v["failureAdjustedPerShare"],
         },
     }
+
+
+# ── Story context (GET /api/individual/{ticker}/story-context) ──────────────
+
+_HISTORY_YEARS = 10
+
+
+def _by_year(rows: Iterable[Mapping]) -> list:
+    return sorted(rows, key=lambda r: int(r["Calendar Year"]))
+
+
+def _finite(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def percentile_summary(values: Iterable[Any]) -> dict | None:
+    """Median, 75th and 90th percentile of the finite values; None under three."""
+    vals = [float(v) for v in values if _finite(v)]
+    if len(vals) < 3:
+        return None
+    q = statistics.quantiles(vals, n=20, method="inclusive")
+    return {"median": round(statistics.median(vals), 4), "p75": round(q[14], 4),
+            "p90": round(q[17], 4), "count": len(vals)}
+
+
+def company_history(rows: Iterable[Mapping]) -> list[dict]:
+    """The last ten fiscal years, oldest first, with the ratios the story leans on."""
+    window = _by_year(rows)[-(_HISTORY_YEARS + 1):]    # one extra row feeds the first growth
+    out: list[dict] = []
+    prev_year, prev_rev = None, None
+    for row in window:
+        year = int(row["Calendar Year"])
+        rev = ia._row_val(row, "Revenue")
+        # Year over year only: across a missing filing year the change is not a yearly rate.
+        growth = (rev / prev_rev - 1.0
+                  if rev is not None and (prev_rev or 0.0) > 0 and prev_year == year - 1 else None)
+        out.append({
+            "year": year, "revenue": rev, "revenueGrowth": growth,
+            "operatingMargin": ia._safe_div(ia._row_val(row, "Operating Income"), rev),
+            "salesToCapital": ia.sales_to_capital(row),
+            "roic": ia._compute_return_ratios(row).get("Return On Invested Capital"),
+        })
+        prev_year, prev_rev = year, rev
+    return out[-_HISTORY_YEARS:]
+
+
+def _capital(row: Mapping) -> float | None:
+    """Equity + debt - cash: the invested capital ia.sales_to_capital divides by."""
+    equity = ia._row_val(row, "Total Stockholders Equity")
+    if equity is None:
+        equity = ia._row_val(row, "Total Equity")
+    if equity is None:
+        return None
+    return (equity + (ia._row_val(row, "Total Debt") or 0.0)
+            - (ia._row_val(row, "Cash And Cash Equivalents") or 0.0))
+
+
+def marginal_sales_to_capital(rows: Iterable[Mapping], years: int = 5) -> float | None:
+    """Revenue added per unit of capital added over the last `years` years."""
+    rows = _by_year(rows)
+    if len(rows) < years + 1:
+        return None
+    start, end = rows[-(years + 1)], rows[-1]
+    rev0, rev1 = ia._row_val(start, "Revenue"), ia._row_val(end, "Revenue")
+    cap0, cap1 = _capital(start), _capital(end)
+    if None in (rev0, rev1, cap0, cap1) or cap1 - cap0 <= 0:
+        return None
+    return (rev1 - rev0) / (cap1 - cap0)
+
+
+# Latest filing per company, plus the year before it for growth. Same universe as
+# api._industry_sales_to_capital and api._industry_roic, so these medians agree
+# with the anchors the model itself uses.
+_INDUSTRY_SQL = """
+SELECT f."Revenue", f."Operating Income", f."Total Stockholders Equity",
+       f."Total Debt", f."Cash And Cash Equivalents", p."Revenue"
+FROM financials f
+JOIN tickers t ON t.ticker = f.Ticker
+JOIN (SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) AS y
+      FROM financials
+      WHERE "Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
+      GROUP BY Ticker) last
+  ON last.Ticker = f.Ticker
+ AND CAST(f."Calendar Year" AS INTEGER) = last.y
+LEFT JOIN financials p
+  ON p.Ticker = f.Ticker
+ AND CAST(p."Calendar Year" AS INTEGER) = last.y - 1
+WHERE t.industry = ? AND f."Revenue" > 0 AND f."Market Cap" > 0
+"""
+
+
+def industry_ranges(conn, industry: str) -> dict:
+    """Percentile summaries of four ratios across the industry's latest filings.
+
+    Ratios only, so nothing is FX-converted: each is unitless within its own filer.
+    The filters are those of the two api anchors, plus a margin band and a growth band."""
+    try:
+        vals: dict[str, list[float]] = {"operatingMargin": [], "salesToCapital": [],
+                                        "roic": [], "revenueGrowth": []}
+        for rev, op, eq, td, cash, rev_prev in conn.execute(_INDUSTRY_SQL, (industry,)):
+            td, cash = td or 0.0, cash or 0.0
+            if op is not None and abs(op / rev) <= 1.0:
+                vals["operatingMargin"].append(op / rev)
+            if eq is not None:
+                capital = eq + td - cash
+                if capital > 0 and 0.2 <= rev / capital <= 20.0:
+                    vals["salesToCapital"].append(rev / capital)
+                if op is not None and op > 0 and eq + td > 0:
+                    roic = op * (1.0 - MARGINAL_TAX_RATE) / (eq + td)
+                    if 0.0 < roic <= 0.60:
+                        vals["roic"].append(roic)
+            if rev_prev is not None and rev_prev > 0 and -0.9 <= rev / rev_prev - 1.0 <= 3.0:
+                vals["revenueGrowth"].append(rev / rev_prev - 1.0)
+        return {name: percentile_summary(v) for name, v in vals.items()}
+    except Exception as exc:  # noqa: BLE001 - the ranges are context, never a blocker
+        log.warning("[story] industry ranges for %s failed: %s", industry, exc)
+        return {}
+
+
+_NO_MARKET = {"fiscalYear": None, "firmCount": None, "totalRevenue": None, "companyShare": None}
+
+
+def market_position(panel: Any, ticker: str) -> dict:
+    """The company's revenue share of its industry panel's latest year.
+
+    The share is on USD revenue (the panel's rule); the total is the company's own
+    revenue divided by that share, so it stays in the company's reporting currency."""
+    if panel is None:
+        return dict(_NO_MARKET)
+    ps = panel.by_year.get(panel.fiscal_year)
+    if ps is None:
+        return {**_NO_MARKET, "fiscalYear": panel.fiscal_year}
+    share = ps.revenue_shares().get(ticker)
+    peer = next((p for p in ps.peers if p.ticker == ticker), None)
+    return {"fiscalYear": panel.fiscal_year, "firmCount": len(ps.peers),
+            "totalRevenue": peer.revenue_local / share if share and peer else None,
+            "companyShare": share}
+
+
+def _reporting_currency(rows: list) -> str | None:
+    """The latest row that carries a currency: a NULL on the newest row is not a change."""
+    for row in reversed(rows):
+        c = (ia._row_str(row, "Reported Currency") or "").strip()
+        if c:
+            return c
+    return None
+
+
+def build_story_context(*, ticker: str, analysis: dict, rows: list, ranges: dict,
+                        market: dict) -> dict:
+    """Contract C3: the factual bundle plus its data block, or not applicable."""
+    analysis = analysis or {}
+    forecast = analysis.get("forecast")
+    if not forecast or forecast.get("applicable") is False:
+        return _not_applicable(forecast)
+    rows = _by_year(rows)
+    a = forecast["assumptions"]
+    wb = forecast.get("waccBuild") or {}
+    history = company_history(rows)
+    margins = [h["operatingMargin"] for h in history if h["operatingMargin"] is not None][-5:]
+    letter = ((analysis.get("creditAnalysis") or {}).get("rating") or {}).get("letter")
+    cls = rating_class(letter)
+    ctx = {
+        "applicable": True, "ticker": ticker,
+        "companyName": analysis.get("name") or ticker,
+        "currency": _reporting_currency(rows),
+        "latestYear": history[-1]["year"] if history else None,
+        "history": history,
+        # Five years or nothing: a median of two years is not a five-year median.
+        "fiveYearMedianMargin": statistics.median(margins) if len(margins) == 5 else None,
+        "marginalSalesToCapital5y": marginal_sales_to_capital(rows),
+        "industry": {"name": analysis.get("industry"), **market, "ranges": ranges},
+        "credit": {"syntheticRating": letter, "ratingClass": cls,
+                   "tenYearDefaultRate": TEN_YEAR_DEFAULT_RATE.get(cls),
+                   "interestCoverage": wb.get("interestCoverage")},
+        "balance": {"cash": forecast.get("cash"), "grossDebt": forecast.get("grossDebt"),
+                    "minorityInterest": forecast.get("minorityInterest"),
+                    "dilutedShares": a.get("dilutedShares")},
+        "riskFreeRate": wb.get("riskFreeRate"),
+        "wacc": a.get("wacc"),
+        "model": {
+            "baseRevenue": a.get("baseRevenue"),
+            "revenueGrowthInitial": a.get("revenueGrowthInitial"),
+            "revenueGrowthTerminal": a.get("revenueGrowthTerminal"),
+            "operatingMarginCurrent": a.get("operatingMarginCurrent"),
+            "operatingMarginTarget": a.get("operatingMarginTarget"),
+            "salesToCapital": (forecast.get("growthReconciliation") or {}).get("salesToCapitalUsed"),
+            "stableRoic": (forecast.get("valuationSelection") or {}).get("roicStable"),
+            "taxRate": a.get("taxRate"),
+            "intrinsicPerShare": forecast.get("intrinsicPerShare"),
+        },
+        "defaultRates": dict(TEN_YEAR_DEFAULT_RATE),
+    }
+    ctx["dataBlock"] = story_data_block(ctx)
+    return ctx
+
+
+# ── Data block ───────────────────────────────────────────────────────────────
+# Formats mirror frontend/src/lib/aiDataContext.ts fmtVal, the formats the grader
+# parses. Labels carry no digits except ordinals and a leading year: the grader
+# drops years from labels, so "Operating margin in 2025" would never bind.
+
+_LADDER = ((1e12, 2, "T"), (1e9, 1, "B"), (1e6, 0, "M"), (1e3, 0, "K"))
+
+
+def _money(v: float, mark: str = "$") -> str:
+    a, sign = abs(v), "-" if v < 0 else ""
+    for at, digits, suffix in _LADDER:
+        if a >= at:
+            return f"{sign}{mark}{a / at:.{digits}f}{suffix}"
+    return f"{sign}{mark}{a:.0f}"
+
+
+def _count(v: float) -> str:
+    return _money(v, mark="")
+
+
+def _pct(v: float) -> str:
+    return f"{v * 100:.2f}%"
+
+
+def _ratio(v: float) -> str:
+    return f"{v:.2f}x"
+
+
+def _per_share(v: float) -> str:
+    return f"{'-' if v < 0 else ''}${abs(v):.2f}"
+
+
+_HISTORY_FIELDS = (("revenue", "revenue", _money), ("revenueGrowth", "revenue growth", _pct),
+                   ("operatingMargin", "operating margin", _pct),
+                   ("salesToCapital", "sales to capital", _ratio), ("roic", "ROIC", _pct))
+_RANGE_FIELDS = (("operatingMargin", "operating margin", _pct),
+                 ("salesToCapital", "sales to capital", _ratio),
+                 ("roic", "ROIC", _pct), ("revenueGrowth", "revenue growth", _pct))
+_RANGE_STATS = (("median", "median"), ("p75", "75th percentile"), ("p90", "90th percentile"))
+_MODEL_FIELDS = (("revenueGrowthInitial", "Model high growth rate", _pct),
+                 ("revenueGrowthTerminal", "Model stable growth rate", _pct),
+                 ("operatingMarginCurrent", "Model operating margin today", _pct),
+                 ("operatingMarginTarget", "Model target operating margin", _pct),
+                 ("salesToCapital", "Model sales to capital", _ratio),
+                 ("stableRoic", "Model return on capital after growth ends", _pct),
+                 ("taxRate", "Model tax rate", _pct),
+                 ("intrinsicPerShare", "Model intrinsic value per share", _per_share))
+
+
+def story_data_block(ctx: dict) -> str:
+    """The context as "<label>: <value>" lines; a missing figure drops its line."""
+    lines: list[str] = []
+
+    def put(label: str, value: Any, fmt: Callable[[float], str]) -> None:
+        if _finite(value):
+            lines.append(f"{label}: {fmt(value)}")
+
+    head = f"Company: {ctx['companyName']} ({ctx['ticker']})"
+    if ctx.get("currency"):
+        head += f", reporting currency {ctx['currency']}"
+    if ctx.get("latestYear") is not None:
+        head += f", latest fiscal year {ctx['latestYear']}"
+    lines.append(head)
+
+    history = ctx.get("history") or []
+    latest = history[-1] if history else {}
+    for key, name, fmt in _HISTORY_FIELDS:
+        put(f"Latest {name}", latest.get(key), fmt)
+    put("Five-year median operating margin", ctx.get("fiveYearMedianMargin"), _pct)
+    put("Marginal sales to capital over five years", ctx.get("marginalSalesToCapital5y"), _ratio)
+    for h in history:
+        for key, name, fmt in _HISTORY_FIELDS:
+            put(f"{h['year']} {name}", h.get(key), fmt)
+
+    ind = ctx.get("industry") or {}
+    if ind.get("name") and ind.get("firmCount") is not None and ind.get("fiscalYear") is not None:
+        lines.append(f"Industry: {ind['name']}, {ind['firmCount']} companies, "
+                     f"fiscal year {ind['fiscalYear']}")
+    put("Industry total revenue", ind.get("totalRevenue"), _money)
+    put("Company share of industry revenue", ind.get("companyShare"), _pct)
+    ranges = ind.get("ranges") or {}
+    for key, name, fmt in _RANGE_FIELDS:
+        summary = ranges.get(key) or {}
+        for stat, stat_name in _RANGE_STATS:
+            put(f"Industry {name} {stat_name}", summary.get(stat), fmt)
+
+    credit = ctx.get("credit") or {}
+    if credit.get("syntheticRating"):
+        lines.append(f"Synthetic rating: {credit['syntheticRating']}")
+    if credit.get("ratingClass"):
+        lines.append(f"Synthetic rating class: {credit['ratingClass']}")
+    put("Interest coverage", credit.get("interestCoverage"), _ratio)
+
+    balance = ctx.get("balance") or {}
+    put("Cash", balance.get("cash"), _money)
+    put("Gross debt", balance.get("grossDebt"), _money)
+    put("Minority interest", balance.get("minorityInterest"), _money)
+    put("Diluted shares", balance.get("dilutedShares"), _count)
+    put("Risk-free rate", ctx.get("riskFreeRate"), _pct)
+    put("WACC", ctx.get("wacc"), _pct)
+
+    model = ctx.get("model") or {}
+    for key, label, fmt in _MODEL_FIELDS:
+        put(label, model.get(key), fmt)
+
+    for cls, rate in (ctx.get("defaultRates") or {}).items():
+        put(f"Ten-year default rate for the {cls} rating class", rate, _pct)
+    return "\n".join(lines)

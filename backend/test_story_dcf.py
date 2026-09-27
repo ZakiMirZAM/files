@@ -4,7 +4,8 @@ Prices a reader's story inputs on the page's own forecast: the same engine, the
 same cost of capital, a new dict every time (the cached payload is never
 mutated). An all-null story must equal the model's 3-stage variant.
 
-Network-free and DB-free: the route tests stub _story_base.
+Network-free and DB-free: the route tests stub _story_base (and _story_industry);
+the industry-range test runs on an in-memory fixture database.
 
 Run:  cd backend && python -m pytest test_story_dcf.py -q
 """
@@ -15,10 +16,14 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
 
 import copy  # noqa: E402
+import sqlite3  # noqa: E402
+import fixture_db  # noqa: E402
 from pytest import approx  # noqa: E402
 import individualanalysis as ia  # noqa: E402
 import story_dcf as sd  # noqa: E402
 from valuation.story import StoryInputs  # noqa: E402
+from industry_structure.panel import IndustryPanel  # noqa: E402
+from industry_structure.peers import Peer, PeerSet  # noqa: E402
 from test_damodaran_models import _mature_dividend_payer, _profitable_fast_grower, _NORMS  # noqa: E402
 # Imported here, not lazily: financial_db's global warning filter is only in force
 # during collection, and api.py's pre-existing on_event deprecations would
@@ -147,3 +152,128 @@ def test_story_dcf_without_a_forecast_is_not_applicable(monkeypatch):
     monkeypatch.setattr(api, "_story_base", lambda tk: (None, []))
     r = TestClient(api.app).post("/api/individual/TEST/story-dcf", json={}).json()
     assert r["applicable"] is False and r["reason"]
+
+
+# --- story context (GET /api/individual/{ticker}/story-context) -----------
+def test_percentile_summary():
+    s = sd.percentile_summary([float(x) for x in range(1, 12)] + [None, float("nan")])
+    assert s == {"median": 6.0, "p75": 8.5, "p90": 10.0, "count": 11}
+    assert sd.percentile_summary([1.0, 2.0]) is None
+
+def test_company_history_and_marginal_sales_to_capital():
+    rows = []
+    for i, y in enumerate(range(2019, 2025)):
+        rev = 100.0 + 20.0 * i
+        rows.append({"Calendar Year": y, "Revenue": rev, "Operating Income": rev * 0.1,
+                     "Total Stockholders Equity": 50.0 + 10.0 * i, "Total Debt": 0.0,
+                     "Cash And Cash Equivalents": 0.0})
+    h = sd.company_history(rows)
+    assert [r["year"] for r in h] == list(range(2019, 2025))
+    assert h[0]["revenueGrowth"] is None and h[1]["revenueGrowth"] == approx(0.2)
+    assert h[-1]["operatingMargin"] == approx(0.1)
+    assert sd.marginal_sales_to_capital(rows) == approx(100.0 / 50.0)
+    assert sd.marginal_sales_to_capital(rows[:5]) is None
+
+def test_industry_ranges_on_a_fixture_database():
+    conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
+    fixture_db.create_schema(conn)
+    for tk, rev, prev, m in (("A", 1000.0, 800.0, 0.10), ("B", 2000.0, 2000.0, 0.20),
+                             ("C", 3000.0, 2500.0, 0.05), ("D", 4000.0, 5000.0, 0.15)):
+        fixture_db.add_ticker(conn, tk, tk, "Tech", "Widgets")
+        fixture_db.insert_row(conn, tk, 2025, rev=rev, op=rev * m)
+        fixture_db.insert_row(conn, tk, 2024, rev=prev, op=prev * m)
+    fixture_db.add_ticker(conn, "Z", "Z", "Tech", "Other")
+    fixture_db.insert_row(conn, "Z", 2025, rev=9000.0, op=9000.0 * 0.9)
+    r = sd.industry_ranges(conn, "Widgets")
+    assert r["operatingMargin"]["median"] == approx(0.125) and r["operatingMargin"]["count"] == 4
+    assert r["revenueGrowth"]["median"] == approx(0.1)
+    assert r["salesToCapital"]["median"] == approx(1 / 1.1, rel=1e-4)
+    assert r["roic"]["median"] == approx((0.10 + 0.15) / 2 * 0.79 / 1.2, rel=1e-3)   # stored to 4 dp
+
+def _peer(tk, usd, local, ccy="USD"):
+    return Peer(ticker=tk, name=tk, revenue_usd=usd, revenue_local=local,
+                reported_currency=ccy, calendar_year=2025)
+
+def test_market_position_from_the_panel():
+    ps = PeerSet(peers=[_peer("A", 100.0, 100.0), _peer("B", 300.0, 300.0 / 1.1, "EUR"),
+                        _peer("C", 600.0, 600.0)], fiscal_year=2025, group_name="Widgets")
+    panel = IndustryPanel(by_year={2025: ps}, fiscal_year=2025, industry="Widgets", ticker_spans={})
+    m = sd.market_position(panel, "B")
+    assert m["companyShare"] == approx(0.3) and m["totalRevenue"] == approx(300.0 / 1.1 / 0.3)
+    assert m["fiscalYear"] == 2025 and m["firmCount"] == 3
+    assert sd.market_position(panel, "ZZZ")["companyShare"] is None
+    assert sd.market_position(None, "B") == {"fiscalYear": None, "firmCount": None,
+                                              "totalRevenue": None, "companyShare": None}
+
+def _ctx():
+    rows = _mature_dividend_payer()
+    analysis = {"name": "Test Co", "industry": "Widgets", "forecast": _model(rows),
+                "creditAnalysis": {"rating": {"letter": "A3/A-"}}}
+    ranges = {"operatingMargin": {"median": 0.0446, "p75": 0.081, "p90": 0.123, "count": 40},
+              "salesToCapital": None, "roic": None, "revenueGrowth": None}
+    market = {"fiscalYear": 2025, "firmCount": 42, "totalRevenue": 45.6e9, "companyShare": 0.0606}
+    return sd.build_story_context(ticker="TEST", analysis=analysis, rows=rows, ranges=ranges, market=market)
+
+def test_story_context_carries_the_contract_keys():
+    c = _ctx()
+    f = _model(_mature_dividend_payer())
+    assert c["applicable"] is True and c["companyName"] == "Test Co" and c["ticker"] == "TEST"
+    for key in ("currency", "latestYear", "history", "fiveYearMedianMargin", "marginalSalesToCapital5y",
+                "industry", "credit", "balance", "riskFreeRate", "wacc", "model", "defaultRates", "dataBlock"):
+        assert key in c
+    assert c["credit"]["syntheticRating"] == "A3/A-"
+    assert c["credit"]["ratingClass"] == "A" and c["credit"]["tenYearDefaultRate"] == 0.0124
+    assert c["model"]["revenueGrowthInitial"] == f["assumptions"]["revenueGrowthInitial"]
+    assert c["industry"]["companyShare"] == 0.0606 and c["industry"]["name"] == "Widgets"
+
+def test_data_block_lines_follow_the_grader_grammar():
+    lines = _ctx()["dataBlock"].splitlines()
+    for expected in ("Industry operating margin median: 4.46%",
+                     "Industry operating margin 90th percentile: 12.30%",
+                     "Industry total revenue: $45.6B",
+                     "Company share of industry revenue: 6.06%",
+                     "Synthetic rating class: A",
+                     "Ten-year default rate for the A rating class: 1.24%",
+                     "Ten-year default rate for the CCC/C rating class: 50.38%"):
+        assert expected in lines
+    assert any(l.startswith("Latest operating margin: ") and l.endswith("%") for l in lines)
+    assert any(l.startswith("Model high growth rate: ") and l.endswith("%") for l in lines)
+    assert not any("None" in l or "n/a" in l for l in lines)
+    assert not any(l.startswith("Industry sales to capital") for l in lines)   # missing range omitted
+    assert not any(l.startswith("Model sales to capital") for l in lines)      # earnings track: no ratio
+
+def test_story_industry_reads_ranges_and_the_panel_share(monkeypatch):
+    # The real panel loader on a fixture DB: its peer tickers must be the ones
+    # market_position looks up, or every company silently loses its share line.
+    import contextlib
+    import api
+    from connections.sector_cache import clear_sector_cache
+    conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
+    fixture_db.create_schema(conn)
+    for tk, rev in (("SA", 1000.0), ("SB", 3000.0), ("SC", 6000.0)):
+        fixture_db.add_ticker(conn, tk, tk, "Tech", "StoryWidgets")
+        fixture_db.insert_row(conn, tk, 2025, rev=rev)
+        fixture_db.insert_row(conn, tk, 2024, rev=rev)
+    monkeypatch.setattr(api, "db_conn", lambda: contextlib.nullcontext(conn))
+    assert api._story_industry(None) == ({}, None)
+    try:
+        ranges, panel = api._story_industry("StoryWidgets")
+        m = sd.market_position(panel, "SB")
+    finally:
+        clear_sector_cache()
+    assert ranges["operatingMargin"]["count"] == 3
+    assert m["companyShare"] == approx(0.3) and m["totalRevenue"] == approx(10000.0)
+    assert m["firmCount"] == 3 and m["fiscalYear"] == 2025
+
+def test_story_context_route(monkeypatch):
+    import api
+    from fastapi.testclient import TestClient
+    api.invalidate_cache("db")
+    rows = _mature_dividend_payer()
+    monkeypatch.setattr(api, "_story_base", lambda tk: ({"name": "T", "industry": "W", "forecast": _model(rows)}, rows))
+    monkeypatch.setattr(api, "_story_industry", lambda industry: ({}, None))
+    body = TestClient(api.app).get("/api/individual/TEST/story-context").json()
+    assert body["applicable"] is True and body["dataBlock"]
+    monkeypatch.setattr(api, "_story_base", lambda tk: (None, []))
+    api.invalidate_cache("db")
+    assert TestClient(api.app).get("/api/individual/TEST2/story-context").json()["applicable"] is False
