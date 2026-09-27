@@ -62,7 +62,11 @@ export type IndividualSectionKey =
   // The multi-stage intrinsic-valuation engine (model selection, stage counts,
   // per-track fundamental growth, stable-phase discipline, H model). Follows
   // the other post-599 bands into the 800s.
-  | "intrinsicModels"; // 870-889 -> ForecastSection / StageToggle / EquityModelsSection
+  | "intrinsicModels" // 870-889 -> ForecastSection / StageToggle / EquityModelsSection
+  // Story-to-value definitions (story section overview, total market, target
+  // margin, stable growth, chance the story ends). Follows the other post-599
+  // bands into the 800s; 889 was the only free slot in the 870s.
+  | "storyValuation"; // 890-899 -> StorySection + ForecastSection story mode
 
 /** Inclusive number ranges per section, the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
@@ -115,6 +119,8 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   ["capitalAllocation", 800, 849],
   ["leverageRoe", 850, 869],
   ["intrinsicModels", 870, 889],
+  // Story-to-value definitions (see the note on IndividualSectionKey above).
+  ["storyValuation", 890, 899],
 ];
 
 /** Per-number exceptions; takes precedence over SECTION_RANGES. */
@@ -307,6 +313,10 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["Goodwill & Stock Comp", 536], ["Goodwill / assets", 536],
   ["SBC / operating cash flow", 535],
   ["Securities held aside", 112],
+  // Story valuation table + FCFF tiles. Labels whose normalized form misses
+  // the covering definition's filename stem.
+  ["Tax rate (effective)", 852], ["Cost of capital", 183],
+  ["Return on capital after growth ends", 880],
 ];
 
 const LABEL_TO_NUMBER: Map<string, number> = (() => {
