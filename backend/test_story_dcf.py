@@ -374,3 +374,21 @@ def test_story_context_route(monkeypatch):
     monkeypatch.setattr(api, "_story_base", lambda tk: (None, []))
     api.invalidate_cache("db")
     assert TestClient(api.app).get("/api/individual/TEST2/story-context").json()["applicable"] is False
+
+
+def test_story_dcf_body_takes_a_stage_count(monkeypatch):
+    c = _client(monkeypatch)
+    for n in (1, 2, 3):
+        r = c.post("/api/individual/TEST/story-dcf", json={"stages": n}).json()
+        assert r["storyChecks"]["stages"] == {"story": n, "used": n}
+        assert len(r["rows"]) == {1: 0, 2: 5, 3: 10}[n] and r["assumptions"]["horizonYears"] == len(r["rows"])
+    assert c.post("/api/individual/TEST/story-dcf", json={"stages": None}).json()["storyChecks"]["stages"] == \
+        {"story": None, "used": 3}
+    for bad in (0, 4, 2.5, "2", True):
+        assert c.post("/api/individual/TEST/story-dcf", json={"stages": bad}).status_code == 422, bad
+
+
+def test_all_null_story_with_no_stage_count_is_the_three_stage_variant():
+    rows = _mature_dividend_payer(); f = _model(rows)
+    sf = sd.build_story_forecast(f, _latest(rows), sd.story_inputs_from_body({"stages": None}))
+    assert sf["intrinsicPerShare"] == approx(f["valuationSelection"]["stageVariants"]["3"]["intrinsicPerShare"], rel=1e-3)

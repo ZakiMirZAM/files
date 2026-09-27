@@ -11,13 +11,17 @@ Method (citations stay in code, never in user-facing copy):
     market, the share of it the company wins, the target operating margin and
     the sales-to-capital ratio that prices the growth.
   * Narrative and Numbers Ch.8 and Ch.9: the ten-year path (five high-growth
-    years, five linear transition years) and the failure adjustment
+    years, five linear transition years, the 3-stage default) and the failure adjustment
     value = value if the story works x (1 - p) + distress proceeds x p
     (Uber, Table 9.2). test_story_valuation.py replicates Ferrari's
     alternative stories (Tables 9.4 and 9.5) through the engine, and 9.4
     through value_story as well.
   * Investment Valuation Ch.12: stable growth never exceeds the risk-free rate,
-    and a stable firm must earn more than it grows to fund that growth.
+    and a stable firm must earn more than it grows to fund that growth. The
+    story picks the stage count ("Length of the High-Growth Period"; Narrative
+    and Numbers Ch.14 life cycle): 1 stage is a mature firm already near the
+    economy's growth, 2 stages a high-growth period that ends abruptly, 3 stages
+    high growth that fades gradually.
   * Investment Valuation Ch.22: cumulative default rates by rating class
     (Table 22.8, 10-year column) as a starting point for the failure probability.
 
@@ -36,6 +40,7 @@ __all__ = [
     "INPUT_NAMES", "STORY_SHAPE", "TEN_YEAR_DEFAULT_RATE",
     "RULE_MISSING", "RULE_REVENUE_INCOMPLETE", "RULE_SHARE_ABOVE_100",
     "RULE_GROWTH_UNSOLVABLE", "RULE_MARGIN_AT_100", "RULE_ROIC_NOT_ABOVE_GROWTH",
+    "RULE_ONE_STAGE",
     "ModelInputs", "StoryInputs",
     "rating_class", "year10_revenue", "stable_growth", "solve_high_growth",
     "iron_triangle", "failure_adjusted", "resolve_story", "value_story",
@@ -44,8 +49,8 @@ __all__ = [
 
 INPUT_NAMES = ("totalMarket", "marketGrowth10y", "shareYear10", "targetMargin",
                "salesToCapital", "failureProbability", "distressProceeds", "stableRoic")
-STORY_SHAPE = STAGE_SHAPES[3]            # (5, 5): five high-growth years, five transition years
-_YEARS = sum(STORY_SHAPE)
+STORY_SHAPE = STAGE_SHAPES[3]            # (5, 5): the default when the story names no stage count
+_YEARS = 10                              # the story's market and share are always year-10 figures
 
 # Investment Valuation Table 22.8, cumulative default rate over 10 years.
 TEN_YEAR_DEFAULT_RATE = {"AAA": 0.0070, "AA": 0.0072, "A": 0.0124, "BBB": 0.0332,
@@ -57,6 +62,7 @@ RULE_SHARE_ABOVE_100 = "shareAbove100"
 RULE_GROWTH_UNSOLVABLE = "growthUnsolvable"
 RULE_MARGIN_AT_100 = "marginAtOrAbove100"
 RULE_ROIC_NOT_ABOVE_GROWTH = "stableRoicNotAboveStableGrowth"
+RULE_ONE_STAGE = "oneStageNoHighGrowth"
 
 _PLAIN_CLASSES = {"AAA", "AA", "A", "BBB", "BB", "B"}
 _DISTRESSED_CLASSES = {"CCC", "CC", "C", "D"}
@@ -91,6 +97,7 @@ class StoryInputs:
     failure_probability: float | None = None
     distress_proceeds: float | None = None
     stable_roic: float | None = None
+    stages: int | None = None           # 1, 2 or 3; anything else runs 3
 
 
 def rating_class(letter: str | None) -> str | None:
@@ -115,29 +122,37 @@ def stable_growth(g_high: float, rf: float) -> float:
     return min(rf, max(0.0, g_high))
 
 
-def _revenue_after_path(base_revenue: float, g: float, rf: float) -> float:
-    """Year-10 revenue on exactly the growth path build_schedule applies for STORY_SHAPE."""
-    n_high, n_transition = STORY_SHAPE
+def _stage_count(stages: int | None) -> int:
+    return stages if stages in STAGE_SHAPES else 3
+
+
+def _revenue_after_path(base_revenue: float, g: float, rf: float, stages: int = 3) -> float:
+    """Year-10 revenue on the growth path build_schedule applies for the stage
+    count, carried at stable growth past the explicit years (a 2-stage path has
+    five; a 1-stage path has none and grows at stable growth throughout)."""
+    n_high, n_transition = STAGE_SHAPES[stages]
+    g_stable = stable_growth(g, rf)
+    path = [g] * n_high + fade_path(g, g_stable, n_transition)
     revenue = base_revenue
-    for x in [g] * n_high + fade_path(g, stable_growth(g, rf), n_transition):
+    for x in path + [g_stable] * (_YEARS - len(path)):
         revenue *= 1.0 + x
     return revenue
 
 
 def solve_high_growth(base_revenue: float, target_revenue: float, rf: float,
-                      lo: float = -0.5, hi: float = 1.0) -> float | None:
+                      lo: float = -0.5, hi: float = 1.0, stages: int = 3) -> float | None:
     """The high-phase growth rate that lands year-10 revenue on the target.
 
     Year-10 revenue rises with g, so bisection on [lo, hi] converges; a target
     outside the bracket's reach returns None rather than an invented rate."""
     if base_revenue is None or base_revenue <= 0 or target_revenue <= 0:
         return None
-    if not (_revenue_after_path(base_revenue, lo, rf) <= target_revenue
-            <= _revenue_after_path(base_revenue, hi, rf)):
+    if not (_revenue_after_path(base_revenue, lo, rf, stages) <= target_revenue
+            <= _revenue_after_path(base_revenue, hi, rf, stages)):
         return None
     for _ in range(200):
         mid = (lo + hi) / 2.0
-        if _revenue_after_path(base_revenue, mid, rf) < target_revenue:
+        if _revenue_after_path(base_revenue, mid, rf, stages) < target_revenue:
             lo = mid
         else:
             hi = mid
@@ -173,13 +188,19 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
     and build the engine kwargs. The order matters: stable growth depends on the
     revenue growth, and the stable-return test depends on stable growth."""
     rules: dict[str, str | None] = {}
+    stages = _stage_count(story.stages)
+    n_high, n_transition = STAGE_SHAPES[stages]
 
-    # 1. Revenue: market, market growth and share only work as a set.
+    # 1. Revenue: market, market growth and share only work as a set. A 1-stage
+    #    story has no high-growth phase, so they cannot move revenue at all.
     revenue_inputs = {"totalMarket": story.total_market,
                       "marketGrowth10y": story.market_growth,
                       "shareYear10": story.share_year10}
     g_story = None
-    if any(v is None for v in revenue_inputs.values()):
+    if stages == 1:
+        for name, value in revenue_inputs.items():
+            rules[name] = RULE_MISSING if value is None else RULE_ONE_STAGE
+    elif any(v is None for v in revenue_inputs.values()):
         for name, value in revenue_inputs.items():
             rules[name] = RULE_MISSING if value is None else RULE_REVENUE_INCOMPLETE
     else:
@@ -189,7 +210,7 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
             g_story = solve_high_growth(
                 model.base_revenue,
                 year10_revenue(story.total_market, story.market_growth, story.share_year10),
-                model.rf)
+                model.rf, stages=stages)
             rule = RULE_GROWTH_UNSOLVABLE if g_story is None else None
         rules.update(dict.fromkeys(revenue_inputs, rule))
     g_high = model.g_high if g_story is None else g_story
@@ -205,6 +226,9 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
     rules["targetMargin"] = (RULE_MISSING if margin is None
                              else RULE_MARGIN_AT_100 if margin >= 1 else None)
     margin_tgt = model.margin_tgt if rules["targetMargin"] else margin
+    # The engine's 1-stage perpetuity runs on today's margin, so a story margin
+    # there is reached immediately.
+    margin_cur = margin if stages == 1 and not rules["targetMargin"] else model.margin_cur
 
     # 4. Sales to capital switches the reinvestment method.
     if story.sales_to_capital is None:
@@ -235,10 +259,10 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
     distress = story.distress_proceeds if story.distress_proceeds is not None else 0.0
 
     kwargs = {
-        "base_revenue": model.base_revenue, "margin_cur": model.margin_cur,
+        "base_revenue": model.base_revenue, "margin_cur": margin_cur,
         "margin_tgt": margin_tgt, "tax": model.tax,
         "g_high": g_high, "g_stable": g_stable,
-        "n_high": STORY_SHAPE[0], "n_transition": STORY_SHAPE[1],
+        "n_high": n_high, "n_transition": n_transition,
         "beta_high": model.beta,
         "roic_high": model.roic if (model.roic or 0) > 0 else None,
         "roic_stable": roic_stable,
@@ -251,6 +275,8 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
         "revenueGrowth": {"story": _round4(g_story), "model": _round4(model.g_high),
                           "used": _round4(g_high)},
         "marketYear10": market_year10,
+        "stages": {"story": story.stages if story.stages in STAGE_SHAPES else None,
+                   "used": stages},
         "failureProbability": probability,
         "distressProceeds": distress,
     }
@@ -266,7 +292,8 @@ def value_story(model: ModelInputs, story: StoryInputs,
     if engine is None:
         return None
     rows = engine["rows"]
-    revenue_year10 = rows[-1]["revenue"]
+    revenue_year10 = _revenue_after_path(kw["base_revenue"], kw["g_high"], model.rf,
+                                         resolved["stages"]["used"])
     market_year10 = resolved["marketYear10"]
     base_ebit_after_tax = kw["base_revenue"] * kw["margin_cur"] * (1.0 - kw["tax"])
     value = engine["intrinsicPerShare"]

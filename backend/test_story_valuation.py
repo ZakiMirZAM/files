@@ -219,3 +219,49 @@ def test_story_sensitivity_axes_and_failure_adjustment():
     assert plain["matrix"][2][2] == approx(centre["intrinsicPerShare"])
     adj = st.story_sensitivity(r["kwargs"], wacc=0.09, rf=0.04, probability=0.1, distress_per_share=0.0)
     assert adj["matrix"][2][2] == approx(plain["matrix"][2][2] * 0.9, abs=0.01)
+
+
+# --- the story's stage count (Investment Valuation Ch.12, length of the high-growth period)
+def test_each_stage_count_values_the_story_on_its_own_shape():
+    values = {}
+    for n, shape in ((1, (0, 0)), (2, (5, 0)), (3, (5, 5))):
+        v = st.value_story(MODEL, st.StoryInputs(target_margin=0.15, stages=n), _wacc)
+        assert (v["kwargs"]["n_high"], v["kwargs"]["n_transition"]) == shape
+        assert len(v["engine"]["rows"]) == sum(shape)
+        assert v["stages"] == {"story": n, "used": n}
+        values[n] = v["failureAdjustedPerShare"]
+    assert len(set(values.values())) == 3
+
+
+def test_two_stage_revenue_lands_on_the_target():
+    story = st.StoryInputs(total_market=20000.0, market_growth=0.05, share_year10=0.12, stages=2)
+    v = st.value_story(MODEL, story, _wacc)
+    target = 20000 * 1.05 ** 10 * 0.12
+    assert v["checks"]["shareYear10"]["status"] == "applied"
+    g, gs = v["kwargs"]["g_high"], v["kwargs"]["g_stable"]
+    assert v["revenueYear10"] == approx(target, rel=1e-6)
+    # Five years at the solved growth, then five at stable growth.
+    assert v["engine"]["rows"][-1]["revenue"] * (1 + gs) ** 5 == approx(target, rel=1e-6)
+    assert v["engine"]["rows"][-1]["revenue"] == approx(1000 * (1 + g) ** 5, rel=1e-6)
+
+
+def test_one_stage_keeps_the_revenue_trio_and_reaches_the_margin_at_once():
+    story = st.StoryInputs(total_market=20000.0, market_growth=0.05, share_year10=0.12,
+                           target_margin=0.15, stages=1)
+    v = st.value_story(MODEL, story, _wacc)
+    for name in ("totalMarket", "marketGrowth10y", "shareYear10"):
+        assert v["checks"][name] == {"status": "kept", "rule": "oneStageNoHighGrowth"}
+    assert v["checks"]["targetMargin"]["status"] == "applied"
+    assert v["kwargs"]["margin_cur"] == 0.15 and v["engine"]["rows"] == []
+    ref = run_fcff_revenue(**{**v["kwargs"], "wacc_of_beta": _wacc})
+    assert v["engine"]["intrinsicPerShare"] == ref["intrinsicPerShare"]
+    assert v["revenueYear10"] == approx(1000 * 1.04 ** 10)
+    missing = st.value_story(MODEL, st.StoryInputs(total_market=20000.0, stages=1), _wacc)
+    assert missing["checks"]["shareYear10"]["rule"] == "missingInput"
+
+
+def test_a_stage_count_outside_one_to_three_runs_three():
+    for bad in (None, 0, 4):
+        v = st.value_story(MODEL, st.StoryInputs(stages=bad), _wacc)
+        assert v["stages"] == {"story": None, "used": 3}
+        assert len(v["engine"]["rows"]) == 10

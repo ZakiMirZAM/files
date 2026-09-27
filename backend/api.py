@@ -6413,6 +6413,8 @@ class StoryDcfBody(BaseModel):
     failureProbability: Optional[float] = Field(None, ge=0, le=1)
     distressProceeds: Optional[float] = Field(None, ge=0, lt=1e16)
     stableRoic: Optional[float] = Field(None, gt=0, le=2)
+    # The story's stage count; null runs the 3-stage default.
+    stages: Optional[int] = Field(None, ge=1, le=3)
 
 
 @app.post("/api/individual/{ticker}/story-dcf")

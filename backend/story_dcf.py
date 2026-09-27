@@ -39,6 +39,7 @@ _BODY_FIELDS = {
     "shareYear10": "share_year10", "targetMargin": "target_margin",
     "salesToCapital": "sales_to_capital", "failureProbability": "failure_probability",
     "distressProceeds": "distress_proceeds", "stableRoic": "stable_roic",
+    "stages": "stages",
 }
 
 
@@ -103,7 +104,8 @@ def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) ->
         **forecast,
         "assumptions": {
             **a, "horizonYears": horizon,
-            "revenueGrowthInitial": v["revenueGrowth"]["used"],
+            # A 1-stage story has no high-growth years: it grows at stable growth from today.
+            "revenueGrowthInitial": v["revenueGrowth"]["used"] if horizon else v["stableGrowth"],
             "revenueGrowthTerminal": v["stableGrowth"],
             "operatingMarginTarget": kw["margin_tgt"],
             # A story sales-to-capital switches the bridge; say which one ran.
@@ -132,6 +134,7 @@ def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) ->
         "storyChecks": {
             "inputs": v["checks"],
             "revenueGrowth": v["revenueGrowth"],
+            "stages": v["stages"],
             "marketYear10": v["marketYear10"],
             "revenueYear10": v["revenueYear10"],
             "impliedShareYear10": v["impliedShareYear10"],
