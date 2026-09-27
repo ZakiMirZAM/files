@@ -265,3 +265,14 @@ def test_a_stage_count_outside_one_to_three_runs_three():
         v = st.value_story(MODEL, st.StoryInputs(stages=bad), _wacc)
         assert v["stages"] == {"story": None, "used": 3}
         assert len(v["engine"]["rows"]) == 10
+
+
+def test_one_stage_keeps_the_story_sales_to_capital():
+    # The 1-stage perpetuity reinvests g/ROIC, so a story sales to capital cannot move it.
+    base = st.StoryInputs(target_margin=0.15, stages=1)
+    with_s2c = st.StoryInputs(target_margin=0.15, sales_to_capital=2.5, stages=1)
+    v0, v1 = st.value_story(MODEL, base, _wacc), st.value_story(MODEL, with_s2c, _wacc)
+    assert v1["checks"]["salesToCapital"] == {"status": "kept", "rule": "oneStageNoHighGrowth"}
+    assert v0["checks"]["salesToCapital"] == {"status": "kept", "rule": "missingInput"}
+    assert v1["kwargs"]["reinvest_method"] == MODEL.reinvest_method
+    assert v1["failureAdjustedPerShare"] == v0["failureAdjustedPerShare"]

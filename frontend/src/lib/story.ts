@@ -222,7 +222,7 @@ const RULE_LABELS = new Map<string, string>([
   ["growthUnsolvable", "Not supported: no growth rate reaches that revenue"],
   ["marginAtOrAbove100", "Not supported: the margin is 100 percent or more"],
   ["stableRoicNotAboveStableGrowth", "Not supported: the return must be above the stable growth rate"],
-  ["oneStageNoHighGrowth", "Not supported: a 1-stage story has no high growth for the market to drive"],
+  ["oneStageNoHighGrowth", "Not supported: a 1-stage story has no high-growth years for this input to change"],
 ]);
 
 /** The Checked column: "Verified", or the one reason the row keeps the model's number. */

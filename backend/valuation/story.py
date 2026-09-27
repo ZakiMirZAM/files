@@ -230,9 +230,10 @@ def resolve_story(model: ModelInputs, story: StoryInputs) -> dict:
     # there is reached immediately.
     margin_cur = margin if stages == 1 and not rules["targetMargin"] else model.margin_cur
 
-    # 4. Sales to capital switches the reinvestment method.
-    if story.sales_to_capital is None:
-        rules["salesToCapital"] = RULE_MISSING
+    # 4. Sales to capital switches the reinvestment method. The 1-stage perpetuity
+    #    reinvests g/ROIC and never reads it, so there it is kept, not "applied".
+    if story.sales_to_capital is None or stages == 1:
+        rules["salesToCapital"] = RULE_MISSING if story.sales_to_capital is None else RULE_ONE_STAGE
         reinvest_method, sales_to_capital = model.reinvest_method, model.sales_to_capital
     else:
         rules["salesToCapital"] = None

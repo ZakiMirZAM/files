@@ -207,7 +207,7 @@ describe("checkedLabel", () => {
     expect(checkedLabel(row("stages", 2, "flagged"))).toBe("Not supported: a figure in the proof does not match the data");
     expect(checkedLabel(row("stages", null))).toBe("Not supported: the story gives no number here");
     expect(checkedLabel(row("shareYear10", 0.2), { status: "kept", rule: "oneStageNoHighGrowth" }))
-      .toBe("Not supported: a 1-stage story has no high growth for the market to drive");
+      .toBe("Not supported: a 1-stage story has no high-growth years for this input to change");
   });
   it("carries no em dash in any label", () => {
     const rules = ["revenueNeedsAllThree", "shareAbove100", "growthUnsolvable", "marginAtOrAbove100", "stableRoicNotAboveStableGrowth", "oneStageNoHighGrowth", "missingInput"];
