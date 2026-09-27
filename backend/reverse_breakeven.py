@@ -41,9 +41,6 @@ MARGIN_RANGE = (0.0, 0.80)
 ROIC_HIGH = 1.00
 S2C_RANGE = (0.2, 20.0)
 
-_GROWTH_STEPS = (-0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06)
-_MARGIN_STEPS = (-0.075, -0.05, -0.025, 0.0, 0.025, 0.05, 0.075)
-_ROIC_STEPS = (-0.09, -0.06, -0.03, 0.0, 0.03, 0.06, 0.09)
 
 Kwargs = dict
 Valuer = Callable[[Kwargs], Optional[float]]
@@ -127,19 +124,22 @@ def solve_breakeven(value_at: Callable[[float], Optional[float]], price: float,
     return {**base, "status": "above_range" if all(f < 0 for _, f in points) else "below_range"}
 
 
-def solve_drivers(kw: Kwargs, value: Valuer, price: float, rf: float) -> dict:
-    """Implied value of each of the four drivers, the others at the model's numbers."""
-    roic_lo = kw["g_stable"] + 0.001
-    specs = {
+def _driver_specs(kw: Kwargs, rf: float) -> dict:
+    """Driver -> (set it on the kwargs, search low, search high, model's number)."""
+    return {
         "revenueGrowth": (lambda x: with_growth(kw, x, rf), *GROWTH_RANGE, kw["g_high"]),
         "targetMargin": (lambda x: with_margin(kw, x), *MARGIN_RANGE, kw["margin_tgt"]),
-        "stableRoic": (lambda x: with_stable_roic(kw, x), roic_lo, ROIC_HIGH,
+        "stableRoic": (lambda x: with_stable_roic(kw, x), kw["g_stable"] + 0.001, ROIC_HIGH,
                        effective_stable_roic(kw)),
         "salesToCapital": (lambda x: with_sales_to_capital(kw, x), *S2C_RANGE,
                            kw.get("sales_to_capital")),
     }
+
+
+def solve_drivers(kw: Kwargs, value: Valuer, price: float, rf: float) -> dict:
+    """Implied value of each of the four drivers, the others at the model's numbers."""
     out = {}
-    for name, (set_driver, lo, hi, model) in specs.items():
+    for name, (set_driver, lo, hi, model) in _driver_specs(kw, rf).items():
         out[name] = {"model": model,
                      **solve_breakeven(lambda x, _s=set_driver: value(_s(x)), price, lo, hi, model)}
     return out
@@ -147,33 +147,68 @@ def solve_drivers(kw: Kwargs, value: Valuer, price: float, rf: float) -> dict:
 
 # ── Grids ────────────────────────────────────────────────────────────────────
 
-def _axis(centre: float, steps: tuple) -> list[float]:
-    return [round(centre + d, 4) for d in steps]
+_GRID_POINTS = 7
+_PAST_IMPLIED = 0.25     # the axis runs this share of its span beyond the implied number
+_MIN_SPAN = 0.02         # so a model already at its breakeven still gets a readable axis
+
+
+def grid_axis(name: str, kw: Kwargs, value: Valuer, rf: float, solved: dict,
+              probe: Optional[Valuer] = None) -> tuple[list, int]:
+    """Seven ascending points from the model's number towards the price: past the
+    implied number when the driver solves, else out to the search limit on the
+    side where value moves towards the price. `probe` values each limit (default:
+    the other drivers at the model's numbers; a grid probes with its other axis
+    at its far end, since growth only pays where returns are high enough).
+    Returns (axis, index of the model's number)."""
+    probe = probe or value
+    set_driver, lo, hi, model = _driver_specs(kw, rf)[name]
+    start = model if model is not None else lo
+    if solved["status"] == "solved":
+        end = solved["implied"]
+        end += (end - start) * _PAST_IMPLIED if end != start else _MIN_SPAN
+        end = min(max(end, lo), hi)
+    else:
+        v_lo, v_hi = probe(set_driver(lo)), probe(set_driver(hi))
+        if v_lo is None or v_hi is None:
+            end = hi if v_lo is None else lo
+        elif solved["status"] == "below_range":
+            end = lo if v_lo < v_hi else hi       # the price needs less value
+        else:
+            end = hi if v_hi >= v_lo else lo      # the price needs more value
+    if abs(end - start) < _MIN_SPAN:
+        end = start + (_MIN_SPAN if end >= start else -_MIN_SPAN)
+    step = (end - start) / (_GRID_POINTS - 1)
+    axis = [start + step * i for i in range(_GRID_POINTS)]
+    # The model's own number stays exact, so its cell equals the model's value.
+    return (axis, 0) if step > 0 else (axis[::-1], _GRID_POINTS - 1)
 
 
 def breakeven_grid(kw: Kwargs, value: Valuer, price: float, rf: float,
-                   col_driver: str) -> dict:
+                   col_driver: str, drivers: dict) -> dict:
     """Value per share across revenue growth (rows) and one other driver (cols),
-    centred on the model's numbers; each cell flagged against the price."""
-    if col_driver == "targetMargin":
-        cols = _axis(kw["margin_tgt"], _MARGIN_STEPS)
-        set_col = with_margin
-    else:
-        cols = _axis(effective_stable_roic(kw) or 0.0, _ROIC_STEPS)
-        set_col = with_stable_roic
-    rows = _axis(kw["g_high"], _GROWTH_STEPS)
+    each axis running from the model's number towards the price; each cell
+    flagged against the price."""
+    set_col = with_margin if col_driver == "targetMargin" else with_stable_roic
+    cols, col_model = grid_axis(col_driver, kw, value, rf, drivers[col_driver])
+    col_far = cols[-1] if col_model == 0 else cols[0]
+    rows, row_model = grid_axis("revenueGrowth", kw, value, rf, drivers["revenueGrowth"],
+                                probe=lambda k: value(set_col(k, col_far)))
     cells = []
     for g in rows:
         row_kw = with_growth(kw, g, rf)
         line = []
-        for c in cols:
-            # A stable return must beat stable growth (Investment Valuation Ch.12).
-            ok = not (col_driver == "stableRoic" and c <= row_kw["g_stable"])
+        for j, c in enumerate(cols):
+            # A stable return must beat stable growth (Investment Valuation Ch.12),
+            # except the model's own return: its column shows what the model values.
+            ok = not (col_driver == "stableRoic" and c <= row_kw["g_stable"] and j != col_model)
             v = value(set_col(row_kw, c)) if ok else None
             line.append({"value": v, "atOrAbovePrice": v is not None and v >= price})
         cells.append(line)
     return {"rowDriver": "revenueGrowth", "colDriver": col_driver,
-            "rowAxis": rows, "colAxis": cols, "cells": cells}
+            "rowAxis": rows, "colAxis": cols,
+            "rowModelIndex": row_model, "colModelIndex": col_model,
+            "cells": cells,
+            "reachesPrice": any(c["atOrAbovePrice"] for line in cells for c in line)}
 
 
 # ── The block ────────────────────────────────────────────────────────────────
@@ -199,8 +234,8 @@ def reverse_breakeven(kw: Kwargs, value: Valuer, price: float, rf: float) -> Opt
         "valueAtModel": base,
         "stableGrowth": round(kw["g_stable"], 4),
         "drivers": drivers,
-        "grids": {"growthMargin": breakeven_grid(kw, value, price, rf, "targetMargin"),
-                  "growthRoic": breakeven_grid(kw, value, price, rf, "stableRoic")},
+        "grids": {"growthMargin": breakeven_grid(kw, value, price, rf, "targetMargin", drivers),
+                  "growthRoic": breakeven_grid(kw, value, price, rf, "stableRoic", drivers)},
         # The revenue path is the one the engine runs (3 stages: 5 high + 5 fading).
         "impliedRevenueYear10": (_revenue_after_path(kw["base_revenue"], g["implied"], rf, 3)
                                  if g["status"] == "solved" else None),

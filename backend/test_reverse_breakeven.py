@@ -71,27 +71,47 @@ def test_search_ranges_are_the_contract():
     assert out["targetMargin"]["model"] == 0.20 and out["stableRoic"]["model"] == 0.12
 
 
-def test_grids_are_seven_by_seven_centred_on_the_model_and_flagged():
+def _grid(kw, price, col):
+    return rb.breakeven_grid(kw, VALUE, price, RF, col, rb.solve_drivers(kw, VALUE, price, RF))
+
+
+@pytest.mark.parametrize("col", ["targetMargin", "stableRoic"])
+def test_grids_run_from_the_model_past_the_implied_number_and_flag_each_cell(col):
     kw = _kw()
-    price = VALUE(kw)
-    for col in ("targetMargin", "stableRoic"):
-        g = rb.breakeven_grid(kw, VALUE, price, RF, col)
-        assert len(g["rowAxis"]) == len(g["colAxis"]) == 7
-        assert len(g["cells"]) == 7 and all(len(r) == 7 for r in g["cells"])
-        assert g["rowAxis"][3] == 0.08 and g["colAxis"][3] == (0.20 if col == "targetMargin" else 0.12)
-        centre = g["cells"][3][3]
-        assert centre["value"] == approx(price) and centre["atOrAbovePrice"] is True
-        for row in g["cells"]:
-            for c in row:
-                assert c["atOrAbovePrice"] == (c["value"] is not None and c["value"] >= price)
-        # More margin or a higher stable return is worth more, so the top-right clears the price.
-        assert g["cells"][3][6]["atOrAbovePrice"] and not g["cells"][3][0]["atOrAbovePrice"]
+    price = VALUE(kw) * 1.3                     # above the model's value: both drivers must rise
+    g = _grid(kw, price, col)
+    drivers = rb.solve_drivers(kw, VALUE, price, RF)
+    assert len(g["rowAxis"]) == len(g["colAxis"]) == 7
+    assert len(g["cells"]) == 7 and all(len(r) == 7 for r in g["cells"])
+    for axis in (g["rowAxis"], g["colAxis"]):
+        assert axis == sorted(axis)
+    # The model's own pair is an exact grid point and values at the model's value.
+    assert g["rowAxis"][g["rowModelIndex"]] == kw["g_high"]
+    assert g["colAxis"][g["colModelIndex"]] == (0.20 if col == "targetMargin" else 0.12)
+    assert g["cells"][g["rowModelIndex"]][g["colModelIndex"]]["value"] == approx(VALUE(kw))
+    # The column axis passes the implied number, so the price is crossed on the model's row.
+    assert max(g["colAxis"]) > drivers[col]["implied"]
+    assert g["reachesPrice"] is True
+    assert any(c["atOrAbovePrice"] for c in g["cells"][g["rowModelIndex"]])
+    for row in g["cells"]:
+        for c in row:
+            assert c["atOrAbovePrice"] == (c["value"] is not None and c["value"] >= price)
 
 
-def test_stable_return_not_above_stable_growth_is_blank_in_the_grid():
-    g = rb.breakeven_grid(_kw(roic_stable=0.05), VALUE, 1.0, RF, "stableRoic")
-    # colAxis[0..1] = -0.04, -0.01: at or below stable growth (0.04) for every row.
-    assert all(row[0]["value"] is None and row[1]["value"] is None for row in g["cells"])
+def test_a_price_no_combination_reaches_says_so():
+    g = _grid(_kw(), 1e6, "targetMargin")
+    assert g["reachesPrice"] is False
+    # Unsolved: the margin axis runs from the model out to the search limit.
+    assert g["colAxis"][0] == 0.20 and g["colAxis"][-1] == approx(0.80)
+
+
+def test_the_models_own_return_is_valued_even_below_stable_growth():
+    kw = _kw(roic_stable=0.035)                 # below stable growth (0.04), like AAPL
+    g = _grid(kw, VALUE(kw) * 2, "stableRoic")
+    j = g["colModelIndex"]
+    assert g["colAxis"][j] == 0.035
+    assert g["cells"][g["rowModelIndex"]][j]["value"] == approx(VALUE(kw))
+    assert all(row[j]["value"] is not None for row in g["cells"])
 
 
 def test_aapl_shape_growth_unsolvable_but_stable_return_solves():
@@ -109,6 +129,10 @@ def test_aapl_shape_growth_unsolvable_but_stable_return_solves():
     assert solved == approx(price, rel=0.005)
     assert d["stableRoic"]["implied"] > 0.0824
     assert core["impliedRevenueYear10"] is None
+    grid = core["grids"]["growthRoic"]
+    assert grid["reachesPrice"] is True
+    assert any(c["atOrAbovePrice"] for row in grid["cells"] for c in row)
+    assert max(grid["colAxis"]) > d["stableRoic"]["implied"]
 
 
 def test_implied_revenue_year10_follows_the_implied_growth():
