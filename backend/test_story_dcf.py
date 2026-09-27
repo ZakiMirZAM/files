@@ -5,7 +5,8 @@ same cost of capital, a new dict every time (the cached payload is never
 mutated). An all-null story must equal the model's 3-stage variant.
 
 Network-free and DB-free: the route tests stub _story_base (and _story_industry);
-the industry-range test runs on an in-memory fixture database.
+the industry-range test runs on an in-memory fixture database. The data-block
+tests run every line through the real Tier 0 grader (rag/eval/graders.py).
 
 Run:  cd backend && python -m pytest test_story_dcf.py -q
 """
@@ -205,12 +206,17 @@ def test_market_position_from_the_panel():
     assert sd.market_position(None, "B") == {"fiscalYear": None, "firmCount": None,
                                               "totalRevenue": None, "companyShare": None}
 
-def _ctx():
+_FULL_RANGES = {"operatingMargin": {"median": 0.0446, "p75": 0.081, "p90": 0.123, "count": 40},
+                "salesToCapital": {"median": 1.1, "p75": 1.6, "p90": 2.4, "count": 40},
+                "roic": {"median": 0.071, "p75": 0.102, "p90": 0.155, "count": 40},
+                "revenueGrowth": {"median": 0.031, "p75": 0.064, "p90": 0.118, "count": 40}}
+
+def _ctx(ranges=None):
     rows = _mature_dividend_payer()
     analysis = {"name": "Test Co", "industry": "Widgets", "forecast": _model(rows),
                 "creditAnalysis": {"rating": {"letter": "A3/A-"}}}
-    ranges = {"operatingMargin": {"median": 0.0446, "p75": 0.081, "p90": 0.123, "count": 40},
-              "salesToCapital": None, "roic": None, "revenueGrowth": None}
+    ranges = ranges or {"operatingMargin": {"median": 0.0446, "p75": 0.081, "p90": 0.123, "count": 40},
+                        "salesToCapital": None, "roic": None, "revenueGrowth": None}
     market = {"fiscalYear": 2025, "firmCount": 42, "totalRevenue": 45.6e9, "companyShare": 0.0606}
     return sd.build_story_context(ticker="TEST", analysis=analysis, rows=rows, ranges=ranges, market=market)
 
@@ -225,22 +231,105 @@ def test_story_context_carries_the_contract_keys():
     assert c["credit"]["ratingClass"] == "A" and c["credit"]["tenYearDefaultRate"] == 0.0124
     assert c["model"]["revenueGrowthInitial"] == f["assumptions"]["revenueGrowthInitial"]
     assert c["industry"]["companyShare"] == 0.0606 and c["industry"]["name"] == "Widgets"
+    assert len(c["history"]) == 9 and c["history"][-1]["year"] == c["latestYear"]   # JSON keeps it
 
 def test_data_block_lines_follow_the_grader_grammar():
     lines = _ctx()["dataBlock"].splitlines()
-    for expected in ("Industry operating margin median: 4.46%",
-                     "Industry operating margin 90th percentile: 12.30%",
-                     "Industry total revenue: $45.6B",
-                     "Company share of industry revenue: 6.06%",
-                     "Synthetic rating class: A",
-                     "Ten-year default rate for the A rating class: 1.24%",
+    for expected in ("Peer group: Widgets, fiscal year 2025",
+                     "Peer company count: 42",
+                     "Peer median operating margin: 4.46%",
+                     "Peer top decile operating margin: 12.30%",
+                     "Peer total revenue: $45.6B",
+                     "Firm share of peer revenue: 6.06%",
+                     "Synthetic rating class: single-A",
+                     "Ten-year default rate for the single-A rating class: 1.24%",
                      "Ten-year default rate for the CCC/C rating class: 50.38%"):
         assert expected in lines
-    assert any(l.startswith("Latest operating margin: ") and l.endswith("%") for l in lines)
-    assert any(l.startswith("Model high growth rate: ") and l.endswith("%") for l in lines)
+    assert any(l.startswith("Firm operating margin: ") and l.endswith("%") for l in lines)
+    assert any(l.startswith("Model long-run operating margin: ") and l.endswith("%") for l in lines)
     assert not any("None" in l or "n/a" in l for l in lines)
-    assert not any(l.startswith("Industry sales to capital") for l in lines)   # missing range omitted
-    assert not any(l.startswith("Model sales to capital") for l in lines)      # earnings track: no ratio
+    assert not any(l[0].isdigit() for l in lines)                          # no per-year lines
+    assert not any(l.startswith("Peer median sales to capital") for l in lines)  # missing range omitted
+    assert not any(l.startswith("Model sales to capital") for l in lines)  # earnings track: no ratio
+
+# --- the data block under the real Tier 0 grader ----------------------------
+# The exact line grammar, in order, with every figure present. Task 4's prompt
+# is written against this list; change both together.
+_BLOCK_LABELS = [
+    "Company",
+    "Firm revenue", "Firm revenue growth", "Firm operating margin", "Firm sales to capital", "Firm ROIC",
+    "Five-year median operating margin", "Marginal sales to capital over five years",
+    "Peer group", "Peer company count", "Peer total revenue", "Firm share of peer revenue",
+    *(f"Peer {stat} {metric}"
+      for metric in ("operating margin", "sales to capital", "ROIC", "revenue growth")
+      for stat in ("median", "upper quartile", "top decile")),
+    "Synthetic rating", "Synthetic rating class", "Interest coverage",
+    "Cash", "Gross debt", "Minority interest", "Diluted shares", "Risk-free rate", "WACC",
+    "Model high growth rate", "Model stable growth rate", "Model operating margin today",
+    "Model long-run operating margin", "Model sales to capital",
+    "Model return on capital after growth ends", "Model tax rate", "Model intrinsic value per share",
+    *(f"Ten-year default rate for the {cls} rating class"
+      for cls in ("AAA", "AA", "single-A", "BBB", "BB", "B", "CCC/C")),
+]
+_TEXT_ONLY = {"Company", "Peer group", "Synthetic rating class"}   # no figure to grade
+
+def _grader():
+    # The production grader exactly as rag/verify.py imports it (rag appended,
+    # so no rag module can shadow a backend one), with its acronym map loaded.
+    rag = os.path.join(os.path.dirname(__file__), "..", "rag")
+    if rag not in sys.path:
+        sys.path.append(rag)
+    from eval import graders
+    assert graders.EXPANSIONS, "the grader loaded without its production acronym map"
+    return graders
+
+def _full_block():
+    c = _ctx(_FULL_RANGES)
+    # This fixture leaves three figures empty; fill them so every grammar line prints.
+    return sd.story_data_block({**c, "marginalSalesToCapital5y": 1.38,
+                                "credit": {**c["credit"], "interestCoverage": 22.4},
+                                "balance": {**c["balance"], "minorityInterest": 12.0},
+                                "model": {**c["model"], "salesToCapital": 1.42}})
+
+def _figure_lines(block):
+    for line in block.splitlines():
+        label, value = line.split(": ", 1)
+        if label not in _TEXT_ONLY:
+            yield line, label, value
+
+def test_full_data_block_has_the_exact_grammar():
+    assert [line.split(": ", 1)[0] for line in _full_block().splitlines()] == _BLOCK_LABELS
+
+def test_every_data_block_figure_binds_to_its_own_line_in_the_real_grader():
+    g = _grader()
+    block = _full_block()
+    context = g.parse_context(block)
+    for line, label, value in _figure_lines(block):
+        proof = f"{label} is {value}."
+        rep = g.report(proof, block)
+        assert rep["matched"] >= 1 and rep["mismatched"] == 0 and rep["flagged"] == [], proof
+        (claim,) = [c for c in g.grade_claims(proof, block) if c.token.gradable]
+        own = g.parse_context(line)[0].label
+        assert claim.expected_label == own, proof
+        # Unique: no other line of a comparable unit ties with the claim's label.
+        ties = [c.label for c in context if g._units_line_up(claim.token.unit, c.unit)
+                and g.label_score(claim.token.label, c.label) >= 1.0]
+        assert ties == [own], (proof, ties)
+
+def test_a_wrong_figure_against_any_data_block_line_is_flagged():
+    import re
+    g = _grader()
+    block = _full_block()
+
+    def wrong(m):     # same written precision, clearly a different number
+        digits = len(m.group(0).split(".")[1]) if "." in m.group(0) else 0
+        return f"{float(m.group(0)) * 2 + 7:.{digits}f}"
+
+    for line, label, value in _figure_lines(block):
+        proof = f"{label} is {re.sub(r'[0-9]+(?:[.][0-9]+)?', wrong, value, count=1)}."
+        rep = g.report(proof, block)
+        assert rep["mismatched"] == 1 and rep["matched"] == 0, proof
+        assert rep["flagged"][0].expected_label == g.parse_context(line)[0].label, proof
 
 def test_story_industry_reads_ranges_and_the_panel_share(monkeypatch):
     # The real panel loader on a fixture DB: its peer tickers must be the ones

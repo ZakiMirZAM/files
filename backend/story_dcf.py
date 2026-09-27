@@ -344,8 +344,21 @@ def build_story_context(*, ticker: str, analysis: dict, rows: list, ranges: dict
 
 # ── Data block ───────────────────────────────────────────────────────────────
 # Formats mirror frontend/src/lib/aiDataContext.ts fmtVal, the formats the grader
-# parses. Labels carry no digits except ordinals and a leading year: the grader
-# drops years from labels, so "Operating margin in 2025" would never bind.
+# parses. The labels are shaped by rag/eval/graders.py, which must not change
+# (it also verifies every /ask, /explain and /define answer). A proof's figure
+# binds to the context line whose label shares its content words, and a label
+# whose words are a subset of another's ties with it. Ties keep line order, and
+# only the first four candidates are compared, so a tie can bind a correct
+# figure to the wrong line. Hence:
+#   * no two lines of one unit family differ only by a grader stopword
+#     ("latest", "industry", "company", "a", ...): the firm's figures say "Firm",
+#     peer figures say "Peer";
+#   * no digits in a label: years are dropped (so no per-year lines) and ordinals
+#     are read as numbers (so "upper quartile" and "top decile", not 75th/90th);
+#   * no threshold words ("target", "minimum", "benchmark", ...), which make a
+#     figure ungradable, and no "spread"/"premium"-style words, which mark it derived;
+#   * rating class A prints as "single-A", since the bare "A" is a stopword.
+# test_story_dcf pins the exact grammar and runs every line through the real grader.
 
 _LADDER = ((1e12, 2, "T"), (1e9, 1, "B"), (1e6, 0, "M"), (1e3, 0, "K"))
 
@@ -374,17 +387,27 @@ def _per_share(v: float) -> str:
     return f"{'-' if v < 0 else ''}${abs(v):.2f}"
 
 
-_HISTORY_FIELDS = (("revenue", "revenue", _money), ("revenueGrowth", "revenue growth", _pct),
-                   ("operatingMargin", "operating margin", _pct),
-                   ("salesToCapital", "sales to capital", _ratio), ("roic", "ROIC", _pct))
+def _whole(v: float) -> str:
+    return str(int(v))
+
+
+def _class_name(cls: str) -> str:
+    return "single-A" if cls == "A" else cls
+
+
+_FIRM_FIELDS = (("revenue", "Firm revenue", _money),
+                ("revenueGrowth", "Firm revenue growth", _pct),
+                ("operatingMargin", "Firm operating margin", _pct),
+                ("salesToCapital", "Firm sales to capital", _ratio),
+                ("roic", "Firm ROIC", _pct))
 _RANGE_FIELDS = (("operatingMargin", "operating margin", _pct),
                  ("salesToCapital", "sales to capital", _ratio),
                  ("roic", "ROIC", _pct), ("revenueGrowth", "revenue growth", _pct))
-_RANGE_STATS = (("median", "median"), ("p75", "75th percentile"), ("p90", "90th percentile"))
+_RANGE_STATS = (("median", "median"), ("p75", "upper quartile"), ("p90", "top decile"))
 _MODEL_FIELDS = (("revenueGrowthInitial", "Model high growth rate", _pct),
                  ("revenueGrowthTerminal", "Model stable growth rate", _pct),
                  ("operatingMarginCurrent", "Model operating margin today", _pct),
-                 ("operatingMarginTarget", "Model target operating margin", _pct),
+                 ("operatingMarginTarget", "Model long-run operating margin", _pct),
                  ("salesToCapital", "Model sales to capital", _ratio),
                  ("stableRoic", "Model return on capital after growth ends", _pct),
                  ("taxRate", "Model tax rate", _pct),
@@ -392,7 +415,9 @@ _MODEL_FIELDS = (("revenueGrowthInitial", "Model high growth rate", _pct),
 
 
 def story_data_block(ctx: dict) -> str:
-    """The context as "<label>: <value>" lines; a missing figure drops its line."""
+    """The context as "<label>: <value>" lines; a missing figure drops its line.
+
+    Summary figures only: the per-year history stays in the JSON for the page."""
     lines: list[str] = []
 
     def put(label: str, value: Any, fmt: Callable[[float], str]) -> None:
@@ -408,31 +433,31 @@ def story_data_block(ctx: dict) -> str:
 
     history = ctx.get("history") or []
     latest = history[-1] if history else {}
-    for key, name, fmt in _HISTORY_FIELDS:
-        put(f"Latest {name}", latest.get(key), fmt)
+    for key, label, fmt in _FIRM_FIELDS:
+        put(label, latest.get(key), fmt)
     put("Five-year median operating margin", ctx.get("fiveYearMedianMargin"), _pct)
     put("Marginal sales to capital over five years", ctx.get("marginalSalesToCapital5y"), _ratio)
-    for h in history:
-        for key, name, fmt in _HISTORY_FIELDS:
-            put(f"{h['year']} {name}", h.get(key), fmt)
 
-    ind = ctx.get("industry") or {}
-    if ind.get("name") and ind.get("firmCount") is not None and ind.get("fiscalYear") is not None:
-        lines.append(f"Industry: {ind['name']}, {ind['firmCount']} companies, "
-                     f"fiscal year {ind['fiscalYear']}")
-    put("Industry total revenue", ind.get("totalRevenue"), _money)
-    put("Company share of industry revenue", ind.get("companyShare"), _pct)
-    ranges = ind.get("ranges") or {}
+    peers = ctx.get("industry") or {}
+    if peers.get("name"):
+        group = f"Peer group: {peers['name']}"
+        if peers.get("fiscalYear") is not None:
+            group += f", fiscal year {peers['fiscalYear']}"
+        lines.append(group)
+    put("Peer company count", peers.get("firmCount"), _whole)
+    put("Peer total revenue", peers.get("totalRevenue"), _money)
+    put("Firm share of peer revenue", peers.get("companyShare"), _pct)
+    ranges = peers.get("ranges") or {}
     for key, name, fmt in _RANGE_FIELDS:
         summary = ranges.get(key) or {}
         for stat, stat_name in _RANGE_STATS:
-            put(f"Industry {name} {stat_name}", summary.get(stat), fmt)
+            put(f"Peer {stat_name} {name}", summary.get(stat), fmt)
 
     credit = ctx.get("credit") or {}
     if credit.get("syntheticRating"):
         lines.append(f"Synthetic rating: {credit['syntheticRating']}")
     if credit.get("ratingClass"):
-        lines.append(f"Synthetic rating class: {credit['ratingClass']}")
+        lines.append(f"Synthetic rating class: {_class_name(credit['ratingClass'])}")
     put("Interest coverage", credit.get("interestCoverage"), _ratio)
 
     balance = ctx.get("balance") or {}
@@ -448,5 +473,5 @@ def story_data_block(ctx: dict) -> str:
         put(label, model.get(key), fmt)
 
     for cls, rate in (ctx.get("defaultRates") or {}).items():
-        put(f"Ten-year default rate for the {cls} rating class", rate, _pct)
+        put(f"Ten-year default rate for the {_class_name(cls)} rating class", rate, _pct)
     return "\n".join(lines)
