@@ -125,3 +125,9 @@ describe("formatStoryValue", () => {
     expect(formatStoryValue("fraction", null)).toBe("n/a");
   });
 });
+
+describe("the FCFF story switch", () => {
+  it("the forecast reads the story under the route ticker", () => {
+    expect(PAGE).toMatch(/<ForecastSection[^>]*storyKey=\{ticker\}/);
+  });
+});

@@ -309,7 +309,7 @@ export function IndividualPage() {
         )}
 
         {data?.analysis?.forecast && (
-          <ForecastSection forecast={data.analysis.forecast} ticker={data.analysis.ticker} />
+          <ForecastSection forecast={data.analysis.forecast} ticker={data.analysis.ticker} storyKey={ticker} />
         )}
 
         {/* Where the growth in the model above actually comes from. */}
