@@ -72,6 +72,21 @@ def _not_applicable(forecast: dict | None) -> dict:
             "reason": forecast.get("notApplicableReason") or forecast.get("reason") or _NO_VALUATION}
 
 
+def wacc_of_beta_for(forecast: dict, latest: Mapping) -> Callable[[float | None], float | None]:
+    """The site's own cost of capital as a function of beta: the same function and
+    inputs the model used, memoised per beta as compute_forecast does, since the
+    engine and the grids re-ask the same betas."""
+    a, wb = forecast["assumptions"], forecast["waccBuild"]
+    memo: dict[float | None, float | None] = {}
+
+    def wacc_of_beta(b: float | None) -> float | None:
+        if b not in memo:
+            memo[b] = compute_wacc(latest, b, wb["riskFreeRate"], wb["equityRiskPremium"],
+                                   a["taxRate"], lease_debt=wb.get("leaseDebt") or 0.0)[0]
+        return memo[b]
+    return wacc_of_beta
+
+
 def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) -> dict:
     """The page's forecast re-priced on the story, or {"applicable": False, "reason"}."""
     if not forecast or forecast.get("applicable") is False:
@@ -79,17 +94,7 @@ def build_story_forecast(forecast: dict, latest: Mapping, story: StoryInputs) ->
 
     a = forecast["assumptions"]
     wb = forecast["waccBuild"]
-    memo: dict[float | None, float | None] = {}
-
-    def wacc_of_beta(b: float | None) -> float | None:
-        # The same function and inputs the model used; memoised per beta as
-        # compute_forecast does, since the sensitivity grid re-asks the same betas.
-        if b not in memo:
-            memo[b] = compute_wacc(latest, b, wb["riskFreeRate"], wb["equityRiskPremium"],
-                                   a["taxRate"], lease_debt=wb.get("leaseDebt") or 0.0)[0]
-        return memo[b]
-
-    v = value_story(model_inputs(forecast), story, wacc_of_beta)
+    v = value_story(model_inputs(forecast), story, wacc_of_beta_for(forecast, latest))
     if v is None:
         return {"applicable": False, "reason": _UNSOLVABLE}
 

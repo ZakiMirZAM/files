@@ -139,6 +139,7 @@ try:
         market_position,
         story_inputs_from_body,
     )
+    from reverse_breakeven import build_reverse_breakeven  # type: ignore
     from comparitivestockanalysis import (  # type: ignore
         build_snapshot as build_comparative_snapshot,
         score_industry,
@@ -6462,6 +6463,25 @@ def story_context_endpoint(request: Request,
     ranges, panel = _story_industry(analysis.get("industry"))
     return build_story_context(ticker=tk, analysis=analysis, rows=rows, ranges=ranges,
                                market=market_position(panel, tk))
+
+
+@app.get("/api/individual/{ticker}/reverse-dcf")
+@limiter.limit("20/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def reverse_dcf_endpoint(request: Request,
+                         ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    """What each driver must be for the value to equal today's price, two breakeven
+    grids, and the firm's and its peers' figures to judge them by."""
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    tk = _resolve_symbol(ticker)
+    analysis, rows = _story_base(tk)
+    if not analysis or not analysis.get("forecast") or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    ranges, panel = _story_industry(analysis.get("industry"))
+    ctx = build_story_context(ticker=tk, analysis=analysis, rows=rows, ranges=ranges,
+                              market=market_position(panel, tk))
+    return build_reverse_breakeven(analysis["forecast"], rows[-1], ctx)
 
 
 # ── Live quote (yfinance) ────────────────────────────────────────────────────
