@@ -37,6 +37,7 @@ A reference library of 51 economic and macro metrics for finding the best sector
 - [25 - Labor Force Participation Rate](25-Labor-Force-Participation-Rate.md)
 - [26 - Retail Sales YoY](26-Retail-Sales-YoY.md)
 - [27 - Personal Savings Rate](27-Personal-Savings-Rate.md)
+- [50 - Unemployment Rate](50-Unemployment-Rate.md)
 
 ## Industrial Activity
 
@@ -86,6 +87,13 @@ A reference library of 51 economic and macro metrics for finding the best sector
 - [38 - BofA Global Fund Manager Survey (Cash Allocation)](38-BofA-Global-Fund-Manager-Survey-Cash-Allocation.md)
 - [68 - S&P 500 Expected Return (Building Blocks)](68-Expected-Return-Building-Blocks.md)
 - [69 - AAII Asset Allocation Survey](69-AAII-Asset-Allocation-Survey.md)
+- [51 - Shiller CAPE](51-Shiller-CAPE.md)
+
+## Policy and Geopolitical Risk
+
+- [52 - Global Economic Policy Uncertainty](52-Global-EPU.md)
+- [53 - US Economic Policy Uncertainty](53-US-EPU.md)
+- [54 - Geopolitical Risk Index](54-Geopolitical-Risk-Index.md)
 
 ## Structural
 

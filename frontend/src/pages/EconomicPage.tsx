@@ -19,7 +19,7 @@ import { FedModelSection } from "../components/FedModelSection";
 import { Sp500ValuationPanel } from "../components/Sp500ValuationPanel";
 import { PanelSkeleton } from "../components/Skeletons";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
-import { ECONOMIC_METRIC_DEFS, ECON_PANEL_ONLY, ECON_PANEL_OFFSET } from "../lib/economicDefinitions";
+import { ECONOMIC_METRIC_DEFS, ECON_METRIC_GROUPS, ECON_PANEL_ONLY, ECON_PANEL_OFFSET } from "../lib/economicDefinitions";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { DefinitionLink } from "../components/individual/DefinitionsBlock";
 
@@ -72,9 +72,7 @@ export function EconomicPage() {
   const metricDefs = ECONOMIC_METRIC_DEFS.filter(
     (d) => d.number !== 13 && !ECON_PANEL_ONLY.has(d.number),
   );
-  const withCharts = metricDefs.filter(
-    (d) => d.chartMetricName && metricByName.has(d.chartMetricName),
-  ).length;
+  const defByNumber = new Map(metricDefs.map((d) => [d.number, d]));
 
   return (
     <div className="flex gap-0 lg:gap-6">
@@ -141,23 +139,38 @@ export function EconomicPage() {
             <span className="flex-1 h-px bg-gold/15" />
           </h2>
 
-          <div className="space-y-4">
-            <div data-tour="econ-treasury">
-              <TreasuryYieldsSection
-                treasuryYields={data?.treasuryYields}
-                recessionBands={data?.recessionBands ?? []}
-                dataContext={dataContext}
-              />
-            </div>
-            {metricDefs.map((def) => (
-              <MetricDropdown
-                key={def.number}
-                def={def}
-                metric={def.chartMetricName ? metricByName.get(def.chartMetricName) : undefined}
-                recessionBands={data?.recessionBands ?? []}
-                loading={!data}
-                dataContext={dataContext}
-              />
+          <div className="space-y-8">
+            {ECON_METRIC_GROUPS.map((group) => (
+              <div key={group.title}>
+                <h3 className="font-display text-base font-semibold text-white mb-3">{group.title}</h3>
+                <div className="space-y-4">
+                  {group.numbers.map((n) => {
+                    if (n === 13) {
+                      return (
+                        <div key={n} data-tour="econ-treasury">
+                          <TreasuryYieldsSection
+                            treasuryYields={data?.treasuryYields}
+                            recessionBands={data?.recessionBands ?? []}
+                            dataContext={dataContext}
+                          />
+                        </div>
+                      );
+                    }
+                    const def = defByNumber.get(n);
+                    if (!def) return null;
+                    return (
+                      <MetricDropdown
+                        key={n}
+                        def={def}
+                        metric={def.chartMetricName ? metricByName.get(def.chartMetricName) : undefined}
+                        recessionBands={data?.recessionBands ?? []}
+                        loading={!data}
+                        dataContext={dataContext}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         </div>

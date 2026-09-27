@@ -161,6 +161,21 @@ export const ECON_PANEL_OFFSET = 600;
 // overview behind the Understand the Economy First section: sidebar-only, no chart.
 export const ECON_PANEL_ONLY = new Set([57, 58, 59, 60, 61, 62, 63, 64, 65, 70]);
 
+/** Metrics-section grouping. Membership/order mirror content/economic/00-INDEX.md;
+ *  titles are worded for analysis (what the group tells you). */
+export const ECON_METRIC_GROUPS: { title: string; numbers: number[] }[] = [
+  { title: "Growth and Inflation: Where the Cycle Stands", numbers: [1, 2, 3, 4, 5, 21, 22] },
+  { title: "Rates and Liquidity: How Tight Money Is", numbers: [6, 13, 33, 34, 35, 66, 67] },
+  { title: "Jobs and Households: Strength of Consumer Spending", numbers: [11, 12, 24, 25, 26, 27, 50] },
+  { title: "Industry and Housing: Real-Economy Build or Cutback", numbers: [14, 15, 19, 20, 10, 45] },
+  { title: "Credit and Banking: Whether Lending Is Flowing", numbers: [28, 29, 56, 44, 43, 32] },
+  { title: "Trade and the Dollar: Global Pressure on US Earnings", numbers: [7, 8, 9, 18, 30, 31, 40] },
+  { title: "Commodities: Global Demand and Input-Cost Signals", numbers: [16, 17, 39, 41, 46, 47, 48] },
+  { title: "Market Valuation and Sentiment: Is the Economy Already Priced In", numbers: [23, 55, 42, 36, 37, 38, 68, 69, 51] },
+  { title: "Policy and Geopolitical Risk: Uncertainty Over the Outlook", numbers: [52, 53, 54] },
+  { title: "Long-Run Structure: The Economy's Growth Ceiling", numbers: [49] },
+];
+
 const ECON_BY_NUMBER = new Map(ECONOMIC_METRIC_DEFS.map((d) => [d.number, d]));
 
 interface PanelDef {
