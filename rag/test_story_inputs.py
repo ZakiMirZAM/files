@@ -85,7 +85,23 @@ def test_parse_rejects_duplicates_and_non_finite_values_and_drops_unknown_keys()
     extra = {**GOOD, "rows": [{**GOOD["rows"][0], "verification": {"status": "verified"}},
                               {"input": "somethingElse"}] + GOOD["rows"][1:]}
     out = story_inputs.parse_story_output(json.dumps(extra))
-    assert len(out["rows"]) == 8 and "verification" not in out["rows"][0]
+    assert len(out["rows"]) == 9 and "verification" not in out["rows"][0]
+
+def test_stage_count_row_takes_only_one_two_or_three():
+    def stages(value):
+        rows = [{**r, "value": value} if r["input"] == "stages" else r for r in GOOD["rows"]]
+        out = story_inputs.parse_story_output(json.dumps({**GOOD, "rows": rows}))
+        return out and out["rows"][-1]
+    assert stages(2)["value"] == 2 and stages(2)["unit"] == "count" and stages(2)["input"] == "stages"
+    assert stages(3.0)["value"] == 3 and isinstance(stages(3.0)["value"], int)
+    for off in (0, 4, 2.5, -1, None):
+        assert stages(off)["value"] is None, off         # the row stays, with no count
+    assert stages("2") is None                           # still a malformed value
+    assert "stages is \"count\"" in server_prompt() and "exactly 1, 2 or 3" in server_prompt()
+
+def server_prompt():
+    server = pytest.importorskip("server", reason="claude_agent_sdk not installed")
+    return server.STORY_SYSTEM
 
 def test_parse_truncates_long_text():
     long = {**GOOD, "rows": [{**GOOD["rows"][0], "proof": "x" * 5000}] + GOOD["rows"][1:]}
@@ -152,7 +168,7 @@ def test_handler_runs_the_story_prompt_on_vault_search_only(monkeypatch):
         return json.dumps(GOOD), []
     monkeypatch.setattr(server, "run_agent", fake)
     status, body = call({"ticker": "RACE", "company": "Ferrari", "answers": ANSWERS, "data": BLOCK})
-    assert status == 200 and len(body["rows"]) == 8
+    assert status == 200 and len(body["rows"]) == 9
     assert all(r["verification"]["status"] in {"verified", "flagged", "unchecked", "unavailable"} for r in body["rows"])
     rep = body["rows"][0]["verification"]["report"]
     assert rep is None or "flagged" in rep          # this route ships the report unstripped

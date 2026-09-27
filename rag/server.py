@@ -11,7 +11,7 @@ in this process. Run `claude login` (Max) once before starting.
   POST /story-inputs  {ticker, company, answers, data}
                                        -> {rows, riskFlags, weakestLink, counterStory}
   POST /story-answer  {ticker, company, questionId, question, userAnswer, data, otherAnswers?}
-                                       -> {adequate, answer, sources}
+                                       -> {answer, sources, builtOnReader}
 
 Start:  python server.py        (listens on http://localhost:3001)
 Needs:  ollama serve + `ollama pull nomic-embed-text`, and `claude login`.
@@ -71,15 +71,17 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault.db")
 PORT = 3001
 # Overridable so a benchmark or an experiment can run a different model without a
 # code round-trip; the SHIPPED default is what matters and the tests pin it.
-ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-4-6")  # owner decision 2026-09-05: all three routes on Opus 4.6
+ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5-5")  # owner decision 2026-09-27: all routes on Opus 5.5, effort medium
 # Both short routes moved off Haiku 4.5 on 2026-08-07 (owner decision): Haiku was
 # ignoring the prompt's hard style rules (em dashes throughout) and under-using
 # the page-data block, answering "the page does not show X" for figures the
 # dataContext carried. All three routes were unified onto Opus 4.6 on 2026-09-05
-# (owner decision) — /define no longer stays on Sonnet.
-EXPLAIN_MODEL = "claude-opus-4-6"    # follows house style + page data; explains highlights
-DEFINE_MODEL = "claude-opus-4-6"     # cached term tooltips
-# Reasoning effort per route: "medium" everywhere as of 2026-09-05 (owner decision).
+# (owner decision) — /define no longer stays on Sonnet. All routes moved to Opus 5.5
+# at effort "medium" on 2026-09-27 (owner decision); the story routes reuse ASK_MODEL.
+EXPLAIN_MODEL = "claude-opus-5-5"    # follows house style + page data; explains highlights
+DEFINE_MODEL = "claude-opus-5-5"     # cached term tooltips
+# Reasoning effort per route: "medium" everywhere as of 2026-09-05 (owner decision),
+# kept at "medium" on the move to Opus 5.5 (2026-09-27, owner decision).
 # It was "low" everywhere from 2026-08-14 to 2026-09-05, and "high" from 2026-08-07
 # to 2026-08-14.
 #
@@ -88,7 +90,7 @@ DEFINE_MODEL = "claude-opus-4-6"     # cached term tooltips
 # threw away work the server had finished. "max" is the top tier and it is spent on
 # EVERY turn, which is the whole compounding problem.
 # Note "xhigh" exists but is Opus-4.7-only and silently degrades to "high"
-# elsewhere, so it is deliberately not used. Opus 4.6 supports low/medium/high/max only.
+# elsewhere, so it is deliberately not used.
 ASK_EFFORT: EffortLevel = os.environ.get("RAG_ASK_EFFORT", "medium")  # type: ignore[assignment]
 EXPLAIN_EFFORT: EffortLevel = "medium"
 DEFINE_EFFORT: EffortLevel = "medium"
@@ -481,9 +483,9 @@ The user message has two blocks. "Computed data on the page" is AUTHORITATIVE: t
 WHAT YOU RETURN
 Return one JSON object and nothing else: no text before or after it and no code fence. The object has exactly four keys:
 {"rows": [...], "riskFlags": [...], "weakestLink": "...", "counterStory": "..."}
-"rows" holds exactly eight objects, one per input, in this order: totalMarket, marketGrowth10y, shareYear10, targetMargin, salesToCapital, failureProbability, distressProceeds, stableRoic. Each object is:
+"rows" holds exactly nine objects, one per input, in this order: totalMarket, marketGrowth10y, shareYear10, targetMargin, salesToCapital, failureProbability, distressProceeds, stableRoic, stages. Each object is:
 {"input": "<name>", "storyQuote": "<the reader's words>", "value": <number or null>, "unit": "<unit>", "proof": "<why this number>", "sources": ["<book title, chapter number>"]}
-Units: totalMarket and distressProceeds are "currency", a full amount in the company's reporting currency, never in thousands or millions. marketGrowth10y is "rate", a yearly decimal (0.05 means 5 percent a year). shareYear10, targetMargin, failureProbability and stableRoic are "fraction", a decimal (0.2 means 20 percent). salesToCapital is "ratio" (1.42 means 1.42 of new sales for each 1 of capital invested).
+Units: totalMarket and distressProceeds are "currency", a full amount in the company's reporting currency, never in thousands or millions. marketGrowth10y is "rate", a yearly decimal (0.05 means 5 percent a year). shareYear10, targetMargin, failureProbability and stableRoic are "fraction", a decimal (0.2 means 20 percent). salesToCapital is "ratio" (1.42 means 1.42 of new sales for each 1 of capital invested). stages is "count", the whole number 1, 2 or 3.
 
 THE CONVERSION RULES
 Each input comes from one answer. Apply its rule.
@@ -494,8 +496,9 @@ targetMargin, from question 4: the pre-tax operating margin in year 10. Anchor o
 salesToCapital, from question 5: start from the Marginal sales to capital over five years, the Firm sales to capital and the Peer median sales to capital. Move higher when the answer says spending per new dollar of sales will fall, and lower when it says that spending will rise.
 failureProbability and distressProceeds, from question 7: anchor the chance that the story ends within ten years on the ten-year default rate for the company's synthetic rating class in the data block. Adjust it for what the answer says about cash, debt falling due, and access to banks, bond buyers and new shareholders. A figure near zero is right for a large, profitable, investment-grade company with little debt. distressProceeds is what shareholders would receive in a forced sale after lenders are repaid, and it is 0 unless the answer gives a reason to expect more.
 stableRoic, from question 8: the return on capital after year 10 is exactly one of three values. It is the WACC in the data block when no edge survives. It is the Peer median ROIC when the edge is one the whole industry shares. It is above the Peer median ROIC only when a named edge survives steps 2 and 3 of question 8.
+stages, from questions 3, 4 and 8: the number of stages in the valuation, exactly 1, 2 or 3. It is 1 when the story is a mature company already growing near the risk-free rate, with no returns above the cost of capital left to fade. It is 2 when a period of high growth ends abruptly, for example when a patent or a license expires or a single product cycle ends, or when the company is already large. It is 3 when high growth and returns above the cost of capital fade gradually as the advantage wears down, the usual case for a growing company with a lasting edge. The proof says which answers point to the count and cites the data block figures that support it, such as the Firm revenue growth, the Model high growth rate, the Firm ROIC and the WACC.
 Question 6 sets no input. The site builds the cost of capital itself, and you never change it. Use question 6 only for riskFlags. Each flag names one risk the reader raised that the cost of capital does not capture, or a year of profit earned at an unusually high or low level of an outside force. Return an empty list when there are none.
-Question 9, when present, is the reader's whole story. Check the eight numbers against it and against each other. When two answers pull in different directions, follow the one with more evidence and say so in the proof.
+Question 9, when present, is the reader's whole story. Check the nine numbers against it and against each other. When two answers pull in different directions, follow the one with more evidence and say so in the proof.
 
 PROOF
 Every proof cites at least one figure from the data block. Cite each figure with its exact block label, then "is", then its value exactly as the block writes it, for example "Firm operating margin is 18.20%" or "Peer top decile operating margin is 12.30%". Cite only figures that appear in the data block, and do not restate the input's own number, which is already in value. A site checker matches every figure in a proof to the block line whose label it shares, so any other figure can be read as a wrong block figure. The checker also cannot confirm a figure in a sentence that uses the words if, versus, compared with, would be, for example, typical, typically, historically or estimates, or a figure introduced as "a ... of" its value, so keep those words out of every sentence that cites a figure. Say where the number sits against the company's own history and against the industry range, and name the rule it follows. Name the book title and chapter behind the rule, and search the vault library with search_vault when you need the passage. Write two to four sentences. Never give a number without proof. When the answers and the data cannot support a number, set value to null and say why in the proof.
@@ -510,30 +513,31 @@ Use plain words a beginner can follow, and define a term the first time it appea
 # --- Prompt E: answer one story question (POST /story-answer) ---
 # Owner-approved 2026-09-27, its own hash in rag/test_prompts.py. When the reader
 # clicks "Turn my story into numbers", the page calls this once per question: the
-# agent keeps an answer that follows the question's steps, and researches and
-# writes one otherwise (vault + web + the research tools /ask gets).
+# agent always writes the answer, building on whatever the reader wrote (vault +
+# web + the research tools /ask gets), in the 5W1H shape of ASK_SYSTEM's frame 1.
 STORY_ANSWER_MAX_TURNS = 16
 STORY_ANSWER_BUDGET_USD = 1.5
-STORY_ANSWER_SYSTEM = """You answer one question of a reader's story about one company, and you first decide whether the reader's own answer already does the job.
+STORY_ANSWER_SYSTEM = """You answer one question of a reader's story about one company. You always write the answer. When the reader wrote something, keep the reader's points and build on them. When the reader wrote nothing, write the whole answer.
 
 WHAT YOU RECEIVE
 "Computed data on the page" is AUTHORITATIVE: the site computed these exact figures from its own data, so use them over any other figure for this company. "The question" is the question with its numbered steps and its closing sentence. "The reader's answer" is what the reader wrote, and it may be empty. For the whole-story question and the two checks, "The story being tested" holds the story answers the page will use, one per question.
 
-STEP 1: JUDGE THE READER'S ANSWER
-Judge the reader's answer strictly against the question's own steps. The answer is adequate only when it works through every step and gives specific reasons: named customers, products, rivals, contracts, figures or events that belong to this company. An empty answer, a restatement of the question, an answer that skips a step, or an answer whose reasons would read the same for any other company is not adequate. When the question has no numbered steps, the answer is adequate only when it answers every part of the question with specific reasons.
+RESEARCH
+Search the vault library with search_vault first, once for each step that needs a different idea, and read the full passages a step rests on. Then use the web for the facts about this company and its industry: the company's annual report, filings and investor relations pages, and industry sources. Use the data block's figures for this company over any figure found elsewhere. Never invent a figure, a source or an event. When a fact cannot be found, say so and reason without it.
 
-STEP 2: WHEN THE ANSWER IS NOT ADEQUATE, RESEARCH AND WRITE ONE
-Work through the question's steps in order. Search the vault library with search_vault first, once for each step that needs a different idea, and read the full passages a step rests on. Then use the web for the facts about this company and its industry: the company's annual report, filings and investor relations pages, and industry sources. Use the data block's figures for this company over any figure found elsewhere. Keep anything useful the reader wrote and build on it. Where a step asks for a choice, make the choice and give the reason. For the whole-story question and the two checks, test the story being tested, not a story of your own, and say where its answers support or contradict each other. Never invent a figure, a source or an event. When a fact cannot be found, say so and reason without it.
-Write the answer as plain prose that follows the steps in order, 150 to 400 words.
+BUILDING ON THE READER
+Keep every point the reader made that the evidence supports, in the reader's own terms. Add the steps the reader skipped and the evidence the reader left out. Where the evidence contradicts the reader, correct the point and say what the evidence shows. For the whole-story question and the two checks, test the story being tested, not a story of your own, and say where its answers support or contradict each other.
+
+THE SHAPE OF EVERY ANSWER
+First work through the question's own steps in order. Where a step asks for a choice, make the choice and give the reason. Then cover, in depth and in this order, Who, What, Where, When, Why, How, Significance and Assumptions, each as its own short paragraph that begins with its label and a colon, for example "Who: ...". Who names the customers, rivals, suppliers and managers the answer turns on. What names the products, contracts and events. Where names the markets and the countries, with their politics. When names the timing and how long it lasts. Why gives the causes. How gives the mechanism. Significance says what the answer means for the company's value. Assumptions names what must stay true for the answer to hold. Justify every paragraph with qualitative analysis and research, not only financial numbers. No bullet lists. Write 250 to 550 words.
 
 WHAT YOU RETURN
 Return one JSON object and nothing else: no text before or after it and no code fence.
-When the reader's answer is adequate: {"adequate": true, "answer": "", "sources": []}
-When it is not: {"adequate": false, "answer": "<your answer>", "sources": ["<book title, chapter>", "<full URL>"]}
-List every source the answer rests on: each book as its title and chapter, each web page as its full URL.
+{"answer": "<your answer>", "sources": ["<book title, chapter>", "<full URL>"], "builtOnReader": <true or false>}
+builtOnReader is true when the reader's answer was not empty and you built on it, and false when it was empty. List every source the answer rests on: each book as its title and chapter, each web page as its full URL.
 
 STYLE
-Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No headings and no bullet lists. Never name an author, and never name a book in the answer text: book titles go only in the sources list."""
+Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No headings. Never name an author, and never name a book in the answer text: book titles go only in the sources list."""
 
 # --- local retrieval (no Claude) ---
 _db_lock = threading.Lock()
@@ -922,7 +926,7 @@ async def handle_define(request: web.Request) -> web.Response:
 
 
 async def handle_story_inputs(request: web.Request) -> web.Response:
-    """Eight story answers in, eight DCF inputs out, each row's proof Tier 0 checked."""
+    """Eight story answers in, nine DCF inputs out, each row's proof Tier 0 checked."""
     try:
         data = await request.json()
     except Exception:                          # noqa: BLE001 - a bad body is a 400
@@ -956,7 +960,7 @@ async def handle_story_inputs(request: web.Request) -> web.Response:
 
 
 async def handle_story_answer(request: web.Request) -> web.Response:
-    """One story question in: the reader's answer kept, or a researched one written."""
+    """One story question in: a researched answer out, built on the reader's when there is one."""
     try:
         data = await request.json()
     except Exception:                          # noqa: BLE001 - a bad body is a 400

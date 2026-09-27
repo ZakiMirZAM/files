@@ -2,9 +2,9 @@
 parsing and the per-row verification status. No I/O, no SDK, so the whole contract
 is testable without a model (rag/test_story_inputs.py).
 
-The route turns a reader's eight story answers into the eight inputs of the story
-DCF (backend/valuation/story.py). The AI's JSON is never trusted as-is: every row is
-rebuilt from known keys, the unit is overwritten with the canonical one, and a value
+The route turns a reader's eight story answers into the nine inputs of the story
+DCF (backend/valuation/story.py): eight numbers and the stage count. The AI's JSON
+is never trusted as-is: every row is rebuilt from known keys, the unit is overwritten with the canonical one, and a value
 that is not a finite number rejects the whole output rather than reaching the page.
 """
 from __future__ import annotations
@@ -12,9 +12,12 @@ from __future__ import annotations
 import json
 import math
 
-# Same names and order as backend/valuation/story.py INPUT_NAMES (contract C1).
+# Same names and order as backend/valuation/story.py INPUT_NAMES (contract C1),
+# then the stage count (the story-dcf body's `stages`).
 INPUT_NAMES = ("totalMarket", "marketGrowth10y", "shareYear10", "targetMargin",
-               "salesToCapital", "failureProbability", "distressProceeds", "stableRoic")
+               "salesToCapital", "failureProbability", "distressProceeds", "stableRoic",
+               "stages")
+STAGE_COUNTS = (1, 2, 3)
 
 UNITS = {
     "totalMarket": "currency", "distressProceeds": "currency",
@@ -22,11 +25,12 @@ UNITS = {
     "shareYear10": "fraction", "targetMargin": "fraction",
     "failureProbability": "fraction", "stableRoic": "fraction",
     "salesToCapital": "ratio",
+    "stages": "count",
 }
 
-# (answer id, question number, label the prompt uses). The page researches every
-# blank or thin answer through /story-answer first, so a blank one arrives only when
-# that research failed; it reaches the model as NO_ANSWER and the prompt's
+# (answer id, question number, label the prompt uses). The page has /story-answer
+# write every answer first, so a blank one arrives only when that call failed on a
+# blank reader answer; it reaches the model as NO_ANSWER and the prompt's
 # null-with-reason rule covers it.
 NO_ANSWER = "(No answer given.)"
 STORY_QUESTIONS = [
@@ -145,6 +149,11 @@ def _number(value):
     return value
 
 
+def _stage_count(value):
+    """1, 2 or 3 as an int; any other number is no stage count (null), not a malformed output."""
+    return int(value) if value in STAGE_COUNTS else None
+
+
 def parse_story_output(text: str) -> dict | None:
     """The model's JSON object, rebuilt to the C4 shape, or None when it is unusable."""
     if not isinstance(text, str):
@@ -169,7 +178,8 @@ def parse_story_output(text: str) -> dict | None:
             by_name[name] = {
                 "input": name,
                 "storyQuote": _text(row.get("storyQuote"), MAX_QUOTE),
-                "value": _number(row.get("value")),
+                "value": _stage_count(_number(row.get("value"))) if name == "stages"
+                         else _number(row.get("value")),
                 "unit": UNITS[name],
                 "proof": _text(row.get("proof"), MAX_PROOF),
                 "sources": _texts(row.get("sources"), MAX_SOURCE, MAX_SOURCES),

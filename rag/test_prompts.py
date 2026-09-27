@@ -88,12 +88,19 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # /story-answer route researched), so STORY_SYSTEM drops its "too thin, use the
 # fallback" sentence and every "Fallback:" clause, keeping each input's rule and
 # the null-with-reason rule. ASK, EXPLAIN and DEFINE unchanged.
+#
+# STORY_SYSTEM and STORY_ANSWER_SYSTEM re-recorded 2026-09-27 (owner approval,
+# Task 10): STORY_SYSTEM gains a ninth row, "stages" (1, 2 or 3, the story's
+# stage count). STORY_ANSWER_SYSTEM drops the adequacy verdict: it always writes
+# the answer, building on the reader's, in the 5W1H shape of ASK_SYSTEM's frame 1
+# (Who, What, Where, When, Why, How, Significance, Assumptions). ASK, EXPLAIN and
+# DEFINE unchanged; every route's model moved to Opus 5.5 the same day.
 EXPECTED = {
     "ASK_SYSTEM": "4a07ca798a9adde9022d87e9a139cf898f4a55d0d0af53ec236347cd0113c4eb",
     "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
     "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
-    "STORY_SYSTEM": "bfff71405e1ed1d375c8ec187c8b6daa321a1508f25107fa2a7f2059520f53f3",
-    "STORY_ANSWER_SYSTEM": "6ca21a98ab76c4284d717af8bdcdf8dbfabbea22e9a807adff56331328d9be7a",
+    "STORY_SYSTEM": "ac3a68ab0f2a400ea37659ab2660801c03c3d57f91dc90afeb9bef2ae0d377db",
+    "STORY_ANSWER_SYSTEM": "c39948d6e78d633c901286015e5f73f10e7cdb96582e379769f4e3ece6be82a2",
 }
 
 PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM", "STORY_ANSWER_SYSTEM")
@@ -134,7 +141,7 @@ def test_options_never_alter_the_system_prompt(verify_mode, calc_mode, monkeypat
 
     for name in PROMPTS:
         literal = getattr(server, name)
-        opts = server.options_for(model="claude-haiku-4-5", system_prompt=literal,
+        opts = server.options_for(model="claude-opus-5-5", system_prompt=literal,
                                   max_turns=4)
         assert opts.system_prompt == literal, (
             f"options_for mutated {name} with RAG_VERIFY={verify_mode} "
@@ -145,7 +152,7 @@ def test_options_never_alter_the_system_prompt(verify_mode, calc_mode, monkeypat
 def test_options_for_does_not_concatenate_anything_to_a_prompt():
     """A direct guard on the mechanism: pass a sentinel and require it back whole."""
     sentinel = "SENTINEL-PROMPT-DO-NOT-MODIFY"
-    opts = server.options_for(model="claude-haiku-4-5", system_prompt=sentinel, max_turns=2)
+    opts = server.options_for(model="claude-opus-5-5", system_prompt=sentinel, max_turns=2)
     assert opts.system_prompt == sentinel
 
 
@@ -325,7 +332,7 @@ def test_the_calculator_is_advertised_by_default():
     anything."""
     if calc_tools.MODE != "on":            # a shell with RAG_CALC=off set
         pytest.skip("RAG_CALC is not 'on' in this environment")
-    opts = server.options_for(model="claude-haiku-4-5",
+    opts = server.options_for(model="claude-opus-5-5",
                               system_prompt=server.ASK_SYSTEM, max_turns=4)
     assert "mcp__calc__evaluate" in (opts.allowed_tools or [])
 
@@ -334,13 +341,13 @@ def test_the_calculator_is_advertised_by_default():
 def test_options_for_defaults_to_no_explicit_effort():
     """A caller that does not pass effort must get the SDK's own default (None
     here means "let the SDK decide", documented as "high")."""
-    opts = server.options_for(model="claude-haiku-4-5",
+    opts = server.options_for(model="claude-opus-5-5",
                               system_prompt=server.DEFINE_SYSTEM, max_turns=4)
     assert opts.effort is None
 
 
 def test_options_for_passes_through_an_explicit_effort():
-    opts = server.options_for(model="claude-haiku-4-5", system_prompt=server.DEFINE_SYSTEM,
+    opts = server.options_for(model="claude-opus-5-5", system_prompt=server.DEFINE_SYSTEM,
                               max_turns=4, effort="low")
     assert opts.effort == "low"
 
@@ -368,12 +375,16 @@ def test_every_route_runs_medium_effort():
     assert server.EXPLAIN_EFFORT == server.DEFINE_EFFORT == "medium"
 
 
-def test_route_models_are_the_owner_pinned_set():
-    """All three routes were unified onto Opus 4.6 on 2026-09-05 (owner
-    decision). /define no longer stays on Sonnet."""
-    assert server.ASK_MODEL == "claude-opus-4-6"
-    assert server.EXPLAIN_MODEL == "claude-opus-4-6"
-    assert server.DEFINE_MODEL == "claude-opus-4-6"
+def test_route_models_are_the_owner_pinned_set(monkeypatch):
+    """Every route runs Opus 5.5 at effort "medium" as of 2026-09-27 (owner
+    decision); the story routes reuse ASK_MODEL. Checked on the shipped default,
+    so a shell with RAG_ASK_MODEL set cannot mask a changed default."""
+    import re
+    src = open(server.__file__, encoding="utf-8").read()
+    assert re.search(r'ASK_MODEL = os\.environ\.get\("RAG_ASK_MODEL", "claude-opus-5-5"\)', src)
+    assert re.search(r'ASK_EFFORT: EffortLevel = os\.environ\.get\("RAG_ASK_EFFORT", "medium"\)', src)
+    assert server.EXPLAIN_MODEL == "claude-opus-5-5"
+    assert server.DEFINE_MODEL == "claude-opus-5-5"
 
 
 def test_run_agent_looks_up_effort_by_label_internally():
@@ -396,3 +407,15 @@ def test_health_reports_ask_effort():
         server.handle_health(_Req()))
     body = json.loads(resp.body.decode())
     assert body["ask_effort"] == server.ASK_EFFORT
+
+
+def test_story_answer_prompt_names_the_eight_labels_in_order():
+    """Every story answer has the site's 5W1H shape (ASK_SYSTEM frame 1)."""
+    text = server.STORY_ANSWER_SYSTEM
+    labels = ["Who", "What", "Where", "When", "Why", "How", "Significance", "Assumptions"]
+    order = text[text.index("Then cover, in depth and in this order,"):]
+    positions = [order.index(label) for label in labels]
+    assert positions == sorted(positions)
+    assert "begins with its label and a colon" in text and "250 to 550 words" in text
+    assert '"builtOnReader"' in text and '"adequate"' not in text
+    assert "STEP 1" not in text

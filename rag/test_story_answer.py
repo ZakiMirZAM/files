@@ -64,27 +64,28 @@ def test_prompt_marks_a_blank_answer_and_lists_the_story_being_tested():
     assert text.index("Question 1,") < text.index("Question 8,")
 
 
-def test_parse_adequate_and_inadequate_shapes():
+def test_parse_the_answer_shape():
     parse = story_answer.parse_answer_output
-    assert parse('{"adequate": true, "answer": "ignored", "sources": ["x"]}') == \
-        {"adequate": True, "answer": "", "sources": []}
-    out = parse('Here:\n```json\n{"adequate": false, "answer": "Line one.\nLine two.", '
+    out = parse('Here:\n```json\n{"answer": "Line one.\nLine two.", "builtOnReader": true, '
                 '"sources": ["Competitive Strategy, chapter 1", " ", "https://x.com/10k"]}\n```')
-    assert out == {"adequate": False, "answer": "Line one.\nLine two.",
+    assert out == {"answer": "Line one.\nLine two.", "builtOnReader": True,
                    "sources": ["Competitive Strategy, chapter 1", "https://x.com/10k"]}
-    assert parse('{"adequate": false, "answer": "a"}')["sources"] == []
+    assert parse('{"answer": "a", "builtOnReader": false}') == \
+        {"answer": "a", "sources": [], "builtOnReader": False}
 
 
 def test_parse_rejects_malformed_output():
-    for bad in ("no json", "[]", '{"answer": "a"}', '{"adequate": "no", "answer": "a"}',
-                '{"adequate": false, "answer": ""}', '{"adequate": false, "answer": 3}',
-                '{"adequate": false, "answer": "a", "sources": "x"}',
-                '{"adequate": false, "answer": "a", "sources": [1]}'):
+    # The old verdict shape is refused too: every reply must carry a written answer.
+    for bad in ("no json", "[]", '{"answer": "a"}', '{"answer": "a", "builtOnReader": "no"}',
+                '{"adequate": true, "answer": "", "sources": []}',
+                '{"answer": "", "builtOnReader": false}', '{"answer": 3, "builtOnReader": false}',
+                '{"answer": "a", "builtOnReader": true, "sources": "x"}',
+                '{"answer": "a", "builtOnReader": true, "sources": [1]}'):
         assert story_answer.parse_answer_output(bad) is None, bad
 
 
 def test_parse_caps_the_answer_and_the_sources():
-    raw = json.dumps({"adequate": False, "answer": "x" * 9000, "sources": ["s" * 500] * 20})
+    raw = json.dumps({"builtOnReader": False, "answer": "x" * 9000, "sources": ["s" * 500] * 20})
     out = story_answer.parse_answer_output(raw)
     assert len(out["answer"]) == story_answer.MAX_OUT_ANSWER
     assert len(out["sources"]) == story_answer.MAX_SOURCES and len(out["sources"][0]) == story_answer.MAX_SOURCE
@@ -111,12 +112,12 @@ def test_handler_runs_the_answer_prompt_with_web_and_research(monkeypatch):
     async def fake(prompt, model, system_prompt, max_turns, label, allow_web=True, budget_usd=None):
         seen.update(prompt=prompt, model=model, system=system_prompt, turns=max_turns, label=label,
                     web=allow_web, budget=budget_usd)
-        return '{"adequate": false, "answer": "A researched answer.", "sources": ["Book, chapter 2"]}', []
+        return '{"answer": "A researched answer.", "sources": ["Book, chapter 2"], "builtOnReader": true}', []
     monkeypatch.setattr(server, "run_agent", fake)
     monkeypatch.setattr(server.research_tools, "MODE", "on")
     status, body = call(OK)
     assert status == 200
-    assert body == {"adequate": False, "answer": "A researched answer.", "sources": ["Book, chapter 2"]}
+    assert body == {"answer": "A researched answer.", "sources": ["Book, chapter 2"], "builtOnReader": True}
     assert seen["model"] == server.ASK_MODEL and seen["system"] == server.STORY_ANSWER_SYSTEM
     assert seen["turns"] == server.STORY_ANSWER_MAX_TURNS == 16
     assert seen["budget"] == server.STORY_ANSWER_BUDGET_USD == 1.5

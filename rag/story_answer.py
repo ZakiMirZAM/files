@@ -2,11 +2,10 @@
 parsing. No I/O, no SDK, so the contract is testable without a model
 (rag/test_story_answer.py).
 
-The route answers one question of the reader's story. It first judges whether the
-reader's own answer follows the question's steps; when it does, the reader's answer
-stands. When it does not, the agent researches (vault first, then the web) and
-writes an answer that follows the steps. The page then converts the effective
-answers through /story-inputs.
+The route answers one question of the reader's story. It never judges the reader's
+answer: the agent always researches (vault first, then the web) and writes the
+answer, keeping and building on the reader's points when the reader wrote any. The
+page then converts the AI's answers through /story-inputs.
 """
 from __future__ import annotations
 
@@ -104,7 +103,7 @@ def build_prompt(payload: dict, guidance: str = "") -> str:
 
 
 def parse_answer_output(text: str) -> dict | None:
-    """{adequate, answer, sources}, or None when the output is unusable."""
+    """{answer, sources, builtOnReader}, or None when the output is unusable."""
     if not isinstance(text, str):
         return None
     start, end = text.find("{"), text.rfind("}")
@@ -115,14 +114,13 @@ def parse_answer_output(text: str) -> dict | None:
         obj = json.loads(text[start:end + 1], strict=False)
     except ValueError:
         return None
-    if not isinstance(obj, dict) or not isinstance(obj.get("adequate"), bool):
+    if not isinstance(obj, dict) or not isinstance(obj.get("builtOnReader"), bool):
         return None
-    if obj["adequate"]:
-        return {"adequate": True, "answer": "", "sources": []}
     answer, sources = obj.get("answer"), obj.get("sources", [])
     if not isinstance(answer, str) or not answer.strip():
         return None
     if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
         return None
-    return {"adequate": False, "answer": answer.strip()[:MAX_OUT_ANSWER],
-            "sources": [s.strip()[:MAX_SOURCE] for s in sources if s.strip()][:MAX_SOURCES]}
+    return {"answer": answer.strip()[:MAX_OUT_ANSWER],
+            "sources": [s.strip()[:MAX_SOURCE] for s in sources if s.strip()][:MAX_SOURCES],
+            "builtOnReader": obj["builtOnReader"]}
