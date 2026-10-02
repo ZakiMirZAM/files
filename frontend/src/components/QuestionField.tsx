@@ -1,17 +1,14 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useConvex } from "convex/react";
+import { useEffect, useState } from "react";
 import { Check, CircleDashed, Sparkles } from "lucide-react";
-import { api } from "../../convex/_generated/api";
 import type { IntegritySeverity, SectionKey } from "../lib/types";
-import { openAi } from "../lib/aiPanelStore";
+import type { PageAiContext } from "../lib/aiContextStore";
 import { useDebouncedSave } from "../lib/useDebouncedSave";
-import { askPrompt, askDataContext } from "../lib/questionPrompt";
 import { CONNECT_AI } from "../lib/connectQuestions";
-import { budgetWaitMessage, secondsUntilAllowed, subscribeAskBudget } from "../lib/askBudget";
-import { getPageAiContext } from "../lib/aiContextStore";
-import { pageGatherFor } from "../lib/pageStageContext";
-import type { SavedAnswer } from "../lib/stageContextLoader";
+import { budgetWaitMessage } from "../lib/askBudget";
+import { useAskAi } from "../lib/useAskAi";
 import { cn } from "../lib/cn";
+
+export { EXTRA_CONTEXT_TIMEOUT_MS } from "../lib/useAskAi";
 
 export interface QuestionFieldProps {
   /** Unique id for the textarea + AI-answer cache (namespaced per scope). */
@@ -29,49 +26,17 @@ export interface QuestionFieldProps {
   /** Hidden tutor guidance. NEVER rendered: it is sent ahead of the question
    *  text in the AI request and nowhere else. */
   guidance?: string;
+  /** Gather this page context's block instead of the page in view. */
+  gatherContext?: PageAiContext;
 }
 
 /** How long the textarea waits after the last keystroke before it saves. */
 const SAVE_DELAY_MS = 650;
 
-/**
- * How long the extra figures may take before the answer goes without them.
- *
- * It must not be shorter than the per-request wait in
- * `lib/stageContext/sources.ts` (REQUEST_TIMEOUT_MS, ninety seconds), which is
- * what the slowest cold call is allowed. At sixty the gather always lost that
- * race: the reader was told the figures had not loaded while a dozen requests
- * carried on running, and every one of them still finished and filled the
- * cache thirty seconds after nobody was waiting. A warm sector gather measures
- * about twenty one seconds, so this ceiling is only ever reached from a cold
- * backend, which is exactly when the ninety second requests need it.
- */
-export const EXTRA_CONTEXT_TIMEOUT_MS = 90_000;
-
 const SEVERITY_DOT: Record<string, string> = {
   high: "bg-loss",
   medium: "bg-gold",
 };
-
-/** Reject after `ms` rather than keeping the reader waiting on one slow call. */
-function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      onTimeout();
-      reject(new Error("timed out"));
-    }, ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (err: unknown) => {
-        window.clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
 
 /**
  * One qualitative question: a textarea that autosaves on a debounce, with a
@@ -90,32 +55,11 @@ export function QuestionField({
   onSave,
   severity,
   guidance,
+  gatherContext,
 }: QuestionFieldProps) {
   const [value, setValue] = useState(initialAnswer);
-  const [gatherFailed, setGatherFailed] = useState(false);
   const { status, lastSaved } = useDebouncedSave(value, onSave, SAVE_DELAY_MS);
-  const convex = useConvex();
-
-  // True while this field is on screen. The gather it starts runs in the AI
-  // panel, which is mounted once in the app shell and never unmounts, so this
-  // ref is the only thing that knows the reader has left the page the question
-  // was about.
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  // The server allows three questions a minute. Reading the budget here rather
-  // than inside askQuestion means the button is already disabled when the next
-  // one would be refused, instead of the reader waiting out a whole gather to
-  // be told so. The store owns the countdown and the one timer that drives it,
-  // so the snapshot is a plain number of seconds and this field holds no timer
-  // of its own.
-  const seconds = useSyncExternalStore(subscribeAskBudget, () => secondsUntilAllowed());
-  const allowed = seconds === 0;
+  const { ask: askAi, allowed, seconds, gatherFailed } = useAskAi();
 
   useEffect(() => {
     // Sync initial value when the query resolves after first render.
@@ -125,86 +69,17 @@ export function QuestionField({
     }
   }, [initialAnswer]);
 
-  /**
-   * The reader's own saved answers for the scopes this block covers.
-   *
-   * The Convex client lives in the React tree, which is why this is here and
-   * not in the loader. Signed out, offline, or any failure at all costs the
-   * block its notes and nothing else.
-   */
-  const readAnswers = async (
-    scopes: { section: string; scopeKey: string }[],
-  ): Promise<SavedAnswer[]> => {
-    const rows = await Promise.all(
-      scopes.map(async (scope) => {
-        try {
-          return (await convex.query(
-            api.qualitative.getAnswersForScope,
-            scope as { section: SectionKey; scopeKey: string },
-          )) as SavedAnswer[];
-        } catch {
-          return [] as SavedAnswer[];
-        }
-      }),
-    );
-    return rows.flat();
-  };
-
-  const ask = () => {
-    if (!allowed) return;
-    // The cross-stage figures for whichever page is in view, or undefined when
-    // that page has no earlier stage to gather (the economic page, the final
-    // review). Resolved on the click, not at render time, so a field that
-    // mounted before its page published its subject still gathers the right
-    // block.
-    const gather = pageGatherFor(getPageAiContext(), {
-      readAnswers,
-      excludeQuestionId: questionId,
-    });
-    const gatherData = gather
-      ? async (panelSignal: AbortSignal): Promise<string | null> => {
-          setGatherFailed(false);
-          // One controller for this gather: the panel's signal and the wait
-          // below both abort it, and it is what the requests carry. Giving up
-          // therefore stops them, instead of leaving a dozen running after the
-          // reader has been told they failed.
-          const stop = new AbortController();
-          const relay = () => stop.abort();
-          panelSignal.addEventListener("abort", relay);
-          let extra = "";
-          try {
-            extra = await withTimeout(gather(stop.signal), EXTRA_CONTEXT_TIMEOUT_MS, () =>
-              stop.abort(),
-            );
-          } catch {
-            if (mounted.current) setGatherFailed(true);
-          } finally {
-            panelSignal.removeEventListener("abort", relay);
-          }
-          // The reader left the page the question is about. Asking anyway
-          // would answer it against another page and spend a model call.
-          if (!mounted.current) {
-            stop.abort();
-            return null;
-          }
-          return askDataContext(dataContext, extra) ?? "";
-        }
-      : undefined;
-    openAi({
-      mode: "answer",
-      title: question.length > 80 ? `${question.slice(0, 80)}…` : question,
-      // The guidance travels in the question slot and is never rendered.
-      question: askPrompt(question, guidance),
+  const ask = () =>
+    askAi({
+      question,
+      guidance,
       questionId,
       section,
-      context: scopeKey,
-      // What the question carries when the figures are not gathered at all, or
-      // when gathering them fails.
-      dataContext: askDataContext(dataContext, ""),
-      gatherData,
+      scopeKey,
+      dataContext,
+      gatherContext,
       onCopy: (text) => setValue(text),
     });
-  };
 
   return (
     <div className="panel-soft p-5 transition-colors hover:border-gold/25">

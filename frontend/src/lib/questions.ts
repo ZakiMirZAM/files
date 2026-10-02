@@ -1,4 +1,4 @@
-import type { QualitativeGroup, SectionKey } from "./types";
+import type { QualitativeGroup, RuntimeGroup, SectionKey } from "./types";
 
 /** Title of the economic synthesis deck, rendered as its own block above the
  *  full question bank on the Economic page (and excluded from the bank). */
@@ -836,7 +836,6 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "indiv.anchoring", text: "Am I anchoring on the purchase price, a 52-week high, or a prior valuation instead of on intrinsic value?" },
         { id: "indiv.biases", text: "Where might confirmation bias, overconfidence, or recency bias be distorting my read of this company?" },
         { id: "indiv.lollapalooza", text: "Is there a lollapalooza of reinforcing advantages (scale, captivity, brand, switching costs), or of reinforcing risks? (Munger)" },
-        { id: "indiv.sell_discipline", text: "What is my predefined sell discipline and time horizon, and can I hold through multi-year underperformance? (Tilson & Heins)" },
         { id: "indiv.bubble_overvalued", text: "Explain why this equity is overvalued based on investor behavior and statement trends (price and valuation climbing faster than revenue, earnings, and cash flow). Which of the bubble patterns below are at work?" },
         { id: "indiv.bubble_narrative", text: "Is a 'new era' story driving the price: a belief in permanent prosperity, recovery euphoria after war or past recessions, and a few highly visible winners taken as proof the boom will last?" },
         { id: "indiv.bubble_psychology", text: "Are buyers acting on overconfidence, herd mentality, and fear of missing out (FOMO) so the price is set by the crowd rather than by fundamentals like earnings and cash flow?" },
@@ -962,3 +961,50 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
     },
   ],
 };
+
+/** Selling With a Motive (Final Review, plan item 12). Rendered per company
+ *  after the synthesis review and saved under section "final_review" with the
+ *  ticker as scope, so no Convex change is needed. Question text is the
+ *  owner's, verbatim, with the owner-approved additions. `{company}` is filled
+ *  by `withCompany`. The guidance is hidden tutor instruction, never rendered.
+ *  Sources (code comment only): The Little Book That Builds Wealth Ch.14 (four
+ *  reasons to sell, none about the price); One Up on Wall Street Part III (when
+ *  to sell each kind of stock); The Intelligent Investor, commentary on Ch.8
+ *  (selling for a tax loss, the 31-day wait). */
+export const sellWithMotive: RuntimeGroup[] = [
+  {
+    title: "Selling With a Motive",
+    questions: [
+      {
+        id: "final.sell.motive",
+        text: "Name the main reason you would sell {company}, and say whether you would sell all of it or part: the price has reached your estimate of value, the business has changed for the worse and the change looks permanent, the business was never what you thought when you bought it, you have found a clearly better use for the money, or the position has grown too large a part of your portfolio. Each of these reasons is about the value of the business or the shape of your portfolio, not about where the price has moved.",
+        guidance: "Use the intrinsic value and market price in the data block to test the first reason, and the reader's earlier answer on permanent decline to test the second. Say which reason the evidence supports and whether a partial sale fits better than a full one.",
+      },
+      {
+        id: "final.sell.value_vs_price",
+        text: "If the price has fallen since you bought, has your estimate of value fallen with it, and by how much? If the price has risen, has the value risen in step? Selling because the price dropped makes sense only when the value dropped too. If you held cash today instead, would you buy {company} at this price?",
+        guidance: "Compare the price with the intrinsic value in the data block. A cut of more than 15 percent to the earnings or value estimate is a common threshold for treating the thesis as broken. The reader's purchase price is irrelevant to whether to own the stock today.",
+      },
+      {
+        id: "final.sell.kind",
+        text: "Decide what kind of company {company} is today: a fast grower, a stalwart, a slow grower, a cyclical, a turnaround, or an asset play. Each kind has its own time to sell: a stalwart or slow grower after a 30 to 50% gain, or when its P/E climbs above its usual range or its dividend is cut; a cyclical near its peak earnings, when its P/E looks lowest; a turnaround once the recovery is finished and everyone knows it; an asset play once a buyer pays for the assets or management starts spending them away; a fast grower when growth slows or its P/E runs far ahead of any growth it can deliver. Has {company} moved from one kind to another since you bought it?",
+        guidance: "Start from the lifecycle stage in the data block (emerging or growth points toward a fast grower, mature toward a stalwart or slow grower, declining toward a turnaround or asset play) and its confidence. The stage cannot detect a cyclical; judge that from how revenue and margins moved through past downturns.",
+      },
+      {
+        id: "final.sell.switch",
+        text: "Compare {company} with the best alternative you have valued. Work out how far each one could rise to your value (value divided by price, minus one), then take off the cost of switching: trading costs, the tax on any gain (which you would mostly pay later anyway, but at a higher rate if you have held {company} for less than a year), and how wrong your value for the alternative could be, since you know it less well. Is the switch still worth making? If {company} trades below your purchase price, selling turns the decline into a tax loss. You can buy a comparable company straight away, but under US rules, buying {company} back within 30 days before or after the sale cancels the loss for now. Selling a modestly undervalued holding to buy a deeply undervalued one is a trade in your favor; a small gap eaten by tax is not.",
+        guidance: "Upside = value / price - 1, not the discount. Compare 1 + upside of the holding with (1 - switching cost) x (1 + upside of the alternative), and show the arithmetic. Example: holding worth 100 at 90 has 11.1% upside; an alternative worth 50 at 30 has 66.7%; with a 3% cost, 0.97 x 1.667 = 1.62 beats 1.11. In a close case, cut the alternative's value by 10% to show how an error there reverses the answer. The wash-sale rule is US law (a loss is disallowed if the same or a substantially identical security is bought within 30 days before or after the sale, and the loss is added to the new shares' cost); a different company is not substantially identical. Read the tax notes in the Investment Policy line.",
+      },
+      {
+        id: "final.sell.size",
+        text: "Read your Investment Policy Statement's position limit and {company}'s current weight in your portfolio. If a rising price has pushed the position past that limit, how much would you trim to get back to your target weight? If your policy names no limit, write one now. Trimming for size is a risk decision, separate from whether the company is still cheap.",
+        guidance: "Read the constraints in the Investment Policy line for a position limit. If none is written, say so; many investors cap a single stock near 5 to 10 percent, and above 15 to 20 percent is widely treated as too concentrated. The app does not compute the weight; use the one the reader gives or the simulator position with the price in the data block.",
+      },
+      {
+        id: "final.sell.note",
+        text: "Write the sell note you would want to read in two years. Start from the sell sentence in your synthesis above and the fact you named that would make {company} a value trap. Include the motive that would make you sell {company}, the figure and level that would trigger it, how long you will give the thesis, what you would do with the money, and what you would refuse to sell on. No length limit; pull together everything from the questions above.",
+        guidance: "Build on the reader's earlier answers in the data block (their full account of the company and the value-trap fact) rather than re-deriving them. Each trigger should name a figure from the data block and the level at which it fires. Keep the time given to the thesis within the horizon in the Investment Policy line.",
+      },
+    ],
+  },
+];

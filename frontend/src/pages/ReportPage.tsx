@@ -9,6 +9,8 @@ import { setPageAiContext, clearPageAiContext } from "../lib/aiContextStore";
 import { searchTickers, type TickerHit } from "../lib/api";
 import { StageGoalPanel } from "../components/StageGoalPanel";
 import { REPORT_PICKER } from "../lib/connectionsCopy";
+import { sellWithMotive } from "../lib/questions";
+import { sellDeckContext, sellDeckFor } from "../lib/sellMotive";
 import { PageTourButton } from "../components/onboarding/PageTourButton";
 import { Search, ScrollText } from "lucide-react";
 
@@ -102,6 +104,23 @@ export function ReportPage() {
       active = false;
     };
   }, [reviewTicker]);
+
+  // Selling With a Motive: the deck's tutor gathers the reviewed company's
+  // stage block (value, price, lifecycle stage) and gets the account's own
+  // figures here (policy, simulator position, earlier company answers).
+  const positions = useQuery(api.simulator.getPositions);
+  const companyAnswers = useQuery(
+    api.qualitative.getAnswersForScope,
+    reviewTicker ? { section: "individual", scopeKey: reviewTicker } : "skip",
+  );
+  const sellDeck = sellDeckFor(sellWithMotive, reviewTicker);
+  const sellGather = { section: "individual" as const, subjectKey: reviewTicker };
+  // Held back until all three queries return: a loading `undefined` would
+  // otherwise read as "no policy on file" and be cached with the answer.
+  const sellContext =
+    reviewTicker && policy !== undefined && positions !== undefined && companyAnswers !== undefined
+      ? sellDeckContext({ ticker: reviewTicker, policy, positions, answers: companyAnswers })
+      : undefined;
 
   useEffect(() => {
     setPageAiContext({
@@ -238,6 +257,29 @@ export function ReportPage() {
           industry={place?.industry ?? ""}
           ticker={reviewTicker}
         />
+      )}
+
+      {reviewTicker && (
+        <div className="mt-6 mb-8 space-y-3">
+          <p className="text-sm text-white/55 max-w-3xl">
+            If you don't own {reviewTicker} yet, answer as the rules you will set on the day
+            you buy. The rules behind these
+            questions are in the simulator lesson{" "}
+            <Link to="/app/simulator" className="text-gold hover:underline">
+              When to buy and when to sell
+            </Link>
+            .
+          </p>
+          <QualitativeBlock
+            section="final_review"
+            scopeKey={reviewTicker}
+            groups={sellDeck}
+            storageSuffix="sell"
+            dataContext={sellContext}
+            gatherContext={sellGather}
+            hideHeader
+          />
+        </div>
       )}
 
       <QualitativeBlock section="final_review" scopeKey="global" hideHeader />

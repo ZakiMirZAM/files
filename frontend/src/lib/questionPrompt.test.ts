@@ -17,6 +17,9 @@ import { pageGatherFor } from "./pageStageContext";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIELD = join(HERE, "..", "components", "QuestionField.tsx");
+// The click itself (budget, gather, prompt, abort-on-leave) lives in the shared
+// hook QuestionField calls, so the request-side checks read that file.
+const HOOK = join(HERE, "useAskAi.ts");
 
 describe("askPrompt", () => {
   it("puts the guidance first, then a blank line, then the question", () => {
@@ -108,21 +111,23 @@ describe("the gatherer a question field builds on the click", () => {
 
 describe("QuestionField renders the question and not the guidance", () => {
   const source = readFileSync(FIELD, "utf8");
+  const hook = readFileSync(HOOK, "utf8");
 
   it("passes the question text into the label and nothing else", () => {
     expect(source).toContain("<span>{question}</span>");
   });
 
   it("sends the composed prompt in the AI request", () => {
-    expect(source).toContain("question: askPrompt(question, guidance)");
+    expect(source).toMatch(/askAi\(\{\s+question,\s+guidance,/);
+    expect(hook).toContain("question: askPrompt(req.question, req.guidance)");
   });
 
   it("sends the page figures ahead of the gathered block", () => {
     // The gather now runs inside the AI panel's fetch path, so the request
     // carries a thunk and a fallback rather than a finished string.
-    expect(source).toContain("return askDataContext(dataContext, extra)");
-    expect(source).toContain('dataContext: askDataContext(dataContext, "")');
-    expect(source).toContain("gatherData,");
+    expect(hook).toContain("return askDataContext(req.dataContext, extra)");
+    expect(hook).toContain('dataContext: askDataContext(req.dataContext, "")');
+    expect(hook).toContain("gatherData,");
   });
 
   it("does not render guidance anywhere in its markup", () => {
@@ -143,13 +148,13 @@ describe("QuestionField renders the question and not the guidance", () => {
   it("checks the per-minute budget before it gathers anything", () => {
     // The gather is a dozen calls and tens of seconds. A reader who has spent
     // the budget used to wait all of it and then be refused.
-    const ask = source.slice(source.indexOf("const ask = () => {"));
+    const ask = hook.slice(hook.indexOf("const ask = (req: AskRequest) => {"));
     expect(ask.slice(0, 120)).toContain("if (!allowed) return;");
-    expect(source).toContain("useSyncExternalStore(subscribeAskBudget");
+    expect(hook).toContain("useSyncExternalStore(subscribeAskBudget");
   });
 
   it("does not ask at all when the reader left the page mid-gather", () => {
-    expect(source).toContain("if (!mounted.current) {");
-    expect(source).toContain("return null;");
+    expect(hook).toContain("if (!mounted.current) {");
+    expect(hook).toContain("return null;");
   });
 });

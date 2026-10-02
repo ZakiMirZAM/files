@@ -20,6 +20,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Rank matrix by a single metric | 572e1b1; lib/sectorMetrics.ts `sortMatrixData` |
 | RARR verification wired into live AI answers | rag/server.py verify tier0 on /ask /explain /define; RAG_VERIFY=on |
 | Landing page scroll animations | LandingPage.tsx fade-up + parallax (Scroll World not needed) |
+| Sell-with-a-motive deck (shipped 2026-10-02; indiv.sell_discipline retired into it) | lib/questions.ts `sellWithMotive`; ReportPage.tsx per-ticker block; lib/sellMotive.ts (+ test); `gatherContext` on QualitativeBlock, AI click logic in lib/useAskAi.ts |
 | Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
 
 ## Small (S): quick wins, existing data
@@ -36,7 +37,6 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Capex split + R&D capitalization view | owner earnings split; `_rnd_capitalization` computed | Render both as tables with existing maint_capex questions |
 | China imports/exports y/y | FRED pipeline | Two FRED series on Economic page (OECD source, lags) |
 | 200-month SMA | none | Overlay on price and P/E charts |
-| Sell-with-a-motive deck | indiv.sell_discipline, Graham Ch.20 | Dedicated short deck on the final report |
 | Discretionary + food spending charts | RSAFS retail sales | Split series from FRED |
 | "Does growth justify P/E" + ROIC-WACC vs P/E | FedModelSection (market level), roicWaccSpread | Company-level earnings yield vs 10y + question; ratio only, no new score |
 | Inflation weight in group scorecard | rotation page handles it; group_scoring.py does not | Lower or remove inflation weight there |

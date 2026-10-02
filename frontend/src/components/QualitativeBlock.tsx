@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { QUALITATIVE_QUESTIONS } from "../lib/questions";
 import type { RuntimeGroup, SectionKey } from "../lib/types";
+import type { PageAiContext } from "../lib/aiContextStore";
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/cn";
 import { QuestionField } from "./QuestionField";
@@ -30,13 +31,16 @@ interface QualitativeBlockProps {
   /** Expand every group the first time this deck is seen. A reader who has
    *  collapsed it since keeps their own state: the stored set wins. */
   defaultOpen?: boolean;
+  /** Gather this page context's block for the AI answer instead of the page in
+   *  view (the Final Review's sell deck gathers the reviewed company). */
+  gatherContext?: PageAiContext;
 }
 
 function groupSlug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups, defaultOpen = false }: QualitativeBlockProps) {
+export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups, defaultOpen = false, gatherContext }: QualitativeBlockProps) {
   const groups: RuntimeGroup[] = runtimeGroups
     ? runtimeGroups
     : QUALITATIVE_QUESTIONS[section].filter((g) =>
@@ -203,6 +207,7 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
                       dataContext={q.dataContext ?? dataContext}
                       severity={q.severity}
                       guidance={q.guidance}
+                      gatherContext={gatherContext}
                       initialAnswer={savedMap.get(q.id) ?? ""}
                       onSave={async (value) =>
                         await saveAnswer({
