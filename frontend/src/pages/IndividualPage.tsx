@@ -410,6 +410,7 @@ export function IndividualPage() {
             ticker={ticker}
             companyName={companyName}
             sector={data.analysis.sector}
+            industry={data.analysis.industry}
           />
         )}
 

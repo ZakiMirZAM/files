@@ -21,6 +21,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | RARR verification wired into live AI answers | rag/server.py verify tier0 on /ask /explain /define; RAG_VERIFY=on |
 | Landing page scroll animations | LandingPage.tsx fade-up + parallax (Scroll World not needed) |
 | Sell-with-a-motive deck (shipped 2026-10-02; indiv.sell_discipline retired into it) | lib/questions.ts `sellWithMotive`; ReportPage.tsx per-ticker block; lib/sellMotive.ts (+ test); `gatherContext` on QualitativeBlock, AI click logic in lib/useAskAi.ts |
+| ESG: what drives the company's ESG risk (shipped 2026-10-02; SASB map dropped for licensing, replaced by a valuation-input test in hidden AI guidance) | lib/esgRatingDeck.ts (+ test); EsgSection.tsx: dead score tiles removed, MSCI + Sustainalytics public links, 9-question runtime deck "What Drives {company}'s ESG Risk" |
 | Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
 
 ## Small (S): quick wins, existing data
@@ -31,7 +32,6 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Price / EVA per share, MV / EVA | EVA + MVA in individualanalysis.py | Two ratios added to EVAValuationSection |
 | Two-company head-to-head | rivals endpoint, PeerRankingTable | Pick 2 tickers → side-by-side table + one "why does this differ" deck |
 | Show company vs industry spread + supplier questions | /api/individual/{t}/spreads (only feeds AI today) | Render the spread table; add supplier questions to connect deck |
-| ESG through SASB | EsgSection.tsx, ind.esg questions | Static SASB material-topics map per industry + "what drives the rating" questions (Yahoo ESG feed is dead) |
 | Earnings-call transcript links | EventsSection "Latest Filings" | Add transcript link rows to the documents list |
 | Matrix: EV/EBITDA, SG&A/Sales, metric picker | peRatio in matrices; EV/EBITDA only in some sector lenses | Add both columns everywhere + a column picker |
 | Capex split + R&D capitalization view | owner earnings split; `_rnd_capitalization` computed | Render both as tables with existing maint_capex questions |
