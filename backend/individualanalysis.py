@@ -639,6 +639,11 @@ class IndividualSnapshot:
     # and count, no percentile or grid placement. JSON-safe.
     generic_strategy: Optional[dict] = None
 
+    # Moat direction and growth sustainability (feature plan item 11): spread
+    # direction with the ROIC/WACC split, share and margins then and now, and
+    # four-factor sustainable growth by year. Figures only. JSON-safe.
+    moat_direction: Optional[dict] = None
+
     # Verdict
     strengths: list[str] = field(default_factory=list)
     weaknesses: list[str] = field(default_factory=list)
@@ -3639,6 +3644,7 @@ def build_growth_viability(
     shenanigans: Optional[dict],
     company: str,
     gdp_growth: Optional[float] = None,
+    roic_hist: Optional[dict[int, Optional[float]]] = None,
 ) -> dict:
     """The standing growth-viability deck: every question, always, with the
     company's own figures deciding which ones carry a flag. ``gdp_growth`` is
@@ -3799,20 +3805,30 @@ def build_growth_viability(
             "investing beyond simple maintenance.")
 
     # ── Tier 3: what could lower the growth? ──────────────────────────────────
-    roics = [_compute_return_ratios(r).get("Return On Invested Capital") for r in rows[-4:]]
-    roics = [r for r in roics if r is not None]
-    if len(roics) < 3:
+    # The same ROIC series and fade as the Moat Direction strip, so the page
+    # states one fade rate; the per-row ratios stand in when no history exists.
+    if roic_hist is None:
+        roic_hist = {int(r["Calendar Year"]): _compute_return_ratios(r).get("Return On Invested Capital")
+                     for r in rows}
+    fade = _roic_fade(roic_hist)
+    if fade is None:
         add("moat_roic_decay", "na", None, _GV_ROIC_DECAY,
             "Not enough years of return on capital to see whether the advantage is wearing through.")
     else:
-        decay = (roics[0] - roics[-1]) / max(1, len(roics) - 1)
+        decay = fade["fade"]
+        span = f"FY{fade['fromYear']} to FY{fade['toYear']}"
         if decay > _GV_ROIC_DECAY:
             add("moat_roic_decay", "medium", decay, _GV_ROIC_DECAY,
-                f"The return on invested capital has given up about {pct(decay)} a year, falling "
-                f"from {pct(roics[0])} to {pct(roics[-1])}. Returns fade fast where there is no moat.")
+                f"On the trend line through every year from {span}, the return on invested capital "
+                f"has given up about {pct(decay)} a year; it stands at {pct(fade['last'])} now. "
+                "Returns fade fast where there is no moat.")
+        elif decay < -_GV_ROIC_DECAY:
+            add("moat_roic_decay", "ok", decay, _GV_ROIC_DECAY,
+                f"On the trend line through every year from {span}, the return on invested capital "
+                f"has risen about {pct(-decay)} a year; it stands at {pct(fade['last'])} now.")
         else:
             add("moat_roic_decay", "ok", decay, _GV_ROIC_DECAY,
-                f"The return on invested capital is holding near {pct(roics[-1])}, which is what "
+                f"The return on invested capital is holding near {pct(fade['last'])}, which is what "
                 "a durable advantage looks like.")
 
     life = ((forecast or {}).get("lifecycle") or {}) if isinstance(forecast, dict) else {}
@@ -5932,7 +5948,8 @@ def build_individual_snapshot(
     try:
         _co_name = (latest["t_name"] if "t_name" in latest.keys() else None) or ticker.upper()
         growth_viability = build_growth_viability(rows, forecast, shenanigans, _co_name,
-                                                  gdp_growth=gdp_growth)
+                                                  gdp_growth=gdp_growth,
+                                                  roic_hist=metric_hist.get("roic") or None)
     except Exception as exc:  # noqa: BLE001
         log.warning("growth viability failed for %s: %s", ticker.upper(), exc)
         growth_viability = None
@@ -6085,6 +6102,7 @@ def build_individual_snapshot(
     business_profile = None
     cost_structure = None
     generic_strategy = None
+    growth_split = None
     _snap_sector = latest["t_sector"] if "t_sector" in latest.keys() else None
     _snap_industry = latest["t_industry"] if "t_industry" in latest.keys() else None
     if db is not None and _snap_industry:
@@ -6132,7 +6150,30 @@ def build_individual_snapshot(
                 except Exception as exc:  # noqa: BLE001
                     log.warning("generic strategy failed for %s: %s", ticker.upper(), exc)
                     generic_strategy = None
+                try:
+                    # Share now and five years back: the connections growth
+                    # split, on the one cached industry panel.
+                    from connections.sector_cache import get_industry_panel
+                    from connections.splits import build_growth_split
+                    _panel = get_industry_panel(_cp_conn, _snap_industry)
+                    if _panel:
+                        _now = _panel.by_year.get(_panel.fiscal_year)
+                        _then = _panel.by_year.get(_panel.fiscal_year - 5)
+                        if _now and _then:
+                            growth_split = build_growth_split(
+                                _cp_conn, ticker.upper(), _snap_industry, _now, _then)
+                            if growth_split is not None:
+                                growth_split["fiscalYear"] = _panel.fiscal_year
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("growth split failed for %s: %s", ticker.upper(), exc)
+                    growth_split = None
             _cp_conn.close()
+
+    try:
+        moat_direction = _moat_direction(rows, metric_hist, growth_split)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("moat direction failed for %s: %s", ticker.upper(), exc)
+        moat_direction = None
 
     net_income_growth_latest = horizontal_income["Net Income"].get(years[-1])
     strengths, weaknesses, quality_score, verdict = _build_verdict({
@@ -6195,11 +6236,221 @@ def build_individual_snapshot(
         business_profile=business_profile,
         cost_structure=cost_structure,
         generic_strategy=generic_strategy,
+        moat_direction=moat_direction,
         strengths=strengths,
         weaknesses=weaknesses,
         verdict=verdict,
         quality_score=quality_score,
     )
+
+
+# ── Moat direction and growth sustainability (feature plan item 11) ──────────
+# Figures only, no verdict: the spread today and five years back, its average
+# change per year (OLS slope over the window, not two endpoints), the exact
+# split of that change into ROIC and WACC, the four-factor sustainable growth
+# per year beside revenue growth, and share and margins now against then.
+
+MOAT_WINDOW_YEARS = 5
+# Data-sufficiency guard, not a label: below 5% capital growth over the
+# window the return on new capital is withheld as noise.
+_INCREMENTAL_ROIC_MIN_GROWTH = 0.05
+
+
+def _r(v: Optional[float], d: int = 6) -> Optional[float]:
+    return round(v, d) if v is not None else None
+
+
+def _roic_fade(roic_by_year: dict[int, Optional[float]]) -> Optional[dict]:
+    """ROIC fade over the moat window: minus the OLS slope of ROIC on the year,
+    so a positive figure is ROIC given up per year. One function for the moat
+    strip and the Growth Viability flag, so the page states one fade rate.
+    None with fewer than three years in the window."""
+    pts = sorted((int(y), v) for y, v in roic_by_year.items() if v is not None)
+    if not pts:
+        return None
+    y1 = pts[-1][0]
+    pts = [(y, v) for y, v in pts if y >= y1 - MOAT_WINDOW_YEARS]
+    if len(pts) < 3:
+        return None
+    slope = _ols_slope([float(y) for y, _ in pts], [v for _, v in pts])
+    if slope is None:
+        return None
+    return {"fade": -slope, "first": pts[0][1], "last": pts[-1][1],
+            "fromYear": pts[0][0], "toYear": y1}
+
+
+def _spread_direction(metric_hist: Optional[dict], equity_basis: bool = False) -> Optional[dict]:
+    """ROIC − WACC today, five years back, the OLS slope across the window,
+    and the exact split of the five-year change: Δspread = ΔROIC − ΔWACC.
+    Reads the same per-year ROIC and WACC as the spread history table (each
+    year's WACC carries that year's rates), so a spread that fell because
+    rates rose shows up in the WACC term, not the ROIC term.
+
+    ``equity_basis`` (banks, insurers, REITs, where debt is raw material and
+    ROIC − WACC means nothing) runs the same arithmetic on ROE − cost of
+    equity, the other line of the spread history table."""
+    mh = metric_hist or {}
+    rkey, ckey = ("roe", "cost_of_equity") if equity_basis else ("roic", "wacc")
+    roic, wacc = mh.get(rkey) or {}, mh.get(ckey) or {}
+    years = sorted(int(y) for y in roic if roic.get(y) is not None and wacc.get(y) is not None)
+    if not years:
+        return None
+    y1 = years[-1]
+    y0 = y1 - MOAT_WINDOW_YEARS
+    window = [y for y in years if y >= y0]
+    spread = {y: roic[y] - wacc[y] for y in window}
+    slope = (_ols_slope([float(y) for y in window], [spread[y] for y in window])
+             if len(window) >= 3 else None)
+    has_then = y0 in spread
+    # Rounded to the displayed precision (a percent to 3 decimals) so the
+    # printed parts add to the printed total.
+    d_roic = _r(roic[y1] - roic[y0], 5) if has_then else None
+    d_wacc = _r(wacc[y1] - wacc[y0], 5) if has_then else None
+    fade = _roic_fade({y: roic[y] for y in window})
+    now = spread[y1]
+    return {
+        # "capital": ROIC − WACC; "equity": ROE − cost of equity.
+        "basis": "equity" if equity_basis else "capital",
+        "year": y1,
+        "yearThen": y0 if has_then else None,
+        "spreadNow": _r(now),
+        "spreadThen": _r(spread[y0]) if has_then else None,
+        "slopePerYear": _r(slope),
+        "yearsInSlope": len(window),
+        "returnNow": _r(roic[y1]),
+        "costNow": _r(wacc[y1]),
+        "returnChange": d_roic,
+        "costChange": d_wacc,
+        # Exact: the printed total is rebuilt from the printed parts.
+        "spreadChange": _r(d_roic - d_wacc, 5) if has_then else None,
+        "returnFadePerYear": _r(fade["fade"]) if fade else None,
+        # Arithmetic only, shown only while the spread is positive and falling.
+        "yearsToZeroAtThisPace": _r(now / -slope, 2)
+            if (slope is not None and slope < 0 and now > 0) else None,
+    }
+
+
+def _sustainable_growth_history(rows: list[sqlite3.Row]) -> Optional[dict]:
+    """Porter's four factors per year over the moat window (net margin × asset
+    turnover × assets/equity × retention), beside revenue growth over the same
+    years. Retention counts buybacks as cash returned, the augmented payout of
+    valuation/inputs.py (Damodaran Ch.13.3): 1 − (dividends + buybacks) / net
+    income. It can go below zero when a company returns more than it earns;
+    that is shown as computed, never clamped."""
+    from company_profile.rivals import sustainable_growth  # noqa: PLC0415
+
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+    out_rows: list[dict] = []
+    saw_buybacks = False
+    for y in range(y0 + 1, y1 + 1):
+        r = by_year.get(y)
+        if r is None:
+            continue
+        div = _row_val(r, "Dividends Paid")
+        bb = _row_val(r, "Common Stock Repurchased")
+        saw_buybacks = saw_buybacks or bb is not None
+        # Both columns NULL is missing data, not zero payout: the DB stores an
+        # explicit 0 for a company that paid nothing, so retention stays None.
+        cash_returned = (None if (div is None and bb is None) else
+                         (abs(div) if div is not None else 0.0) + (abs(bb) if bb is not None else 0.0))
+        equity = _row_val(r, "Total Stockholders Equity") or _row_val(r, "Total Equity")
+        product, f = sustainable_growth(_row_val(r, "Revenue"), _row_val(r, "Net Income"),
+                                        _row_val(r, "Total Assets"), equity, cash_returned)
+        out_rows.append({"year": y, **f, "sustainableGrowth": product})
+    if not out_rows:
+        return None
+    products = [x["sustainableGrowth"] for x in out_rows if x["sustainableGrowth"] is not None]
+    rev1 = _row_val(by_year[y1], "Revenue")
+    rev0 = _row_val(by_year[y0], "Revenue") if y0 in by_year else None
+    cagr = ((rev1 / rev0) ** (1.0 / MOAT_WINDOW_YEARS) - 1.0
+            if (rev1 is not None and rev0 is not None and rev1 > 0 and rev0 > 0) else None)
+    return {
+        "rows": out_rows,
+        "averageSustainableGrowth": _r(sum(products) / len(products)) if products else None,
+        "yearsAveraged": len(products),
+        "revenueCagr": _r(cagr),
+        "revenueFromYear": y0 if rev0 is not None else None,
+        "revenueToYear": y1,
+        "buybacksIncluded": saw_buybacks,
+    }
+
+
+def _share_and_margins(rows: list[sqlite3.Row], growth_split: Optional[dict],
+                       gross_margin: bool = True) -> Optional[dict]:
+    """Gross and operating margin in the latest year and five years before,
+    beside industry revenue share now and then (the growth split's own
+    figures, from the same peer panel as the Industry page). ``gross_margin``
+    is off for banks, insurers and REITs, which have no cost of goods sold."""
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+
+    def margins(y: int) -> tuple[Optional[float], Optional[float]]:
+        r = by_year.get(y)
+        if r is None:
+            return None, None
+        rev = _row_val(r, "Revenue")
+        if rev is None or rev <= 0:
+            return None, None
+        return (_safe_div(_row_val(r, "Gross Profit"), rev) if gross_margin else None,
+                _safe_div(_row_val(r, "Operating Income"), rev))
+
+    g1, o1 = margins(y1)
+    g0, o0 = margins(y0)
+    gs = growth_split or {}
+    return {
+        "year": y1,
+        "yearThen": y0,
+        "grossMarginNow": _r(g1), "grossMarginThen": _r(g0),
+        "operatingMarginNow": _r(o1), "operatingMarginThen": _r(o0),
+        "shareNow": gs.get("shareNow"), "shareThen": gs.get("shareThen"),
+        "shareYear": gs.get("fiscalYear"),
+        "shareYearThen": (gs["fiscalYear"] - gs["years"])
+            if (gs.get("fiscalYear") is not None and gs.get("years")) else None,
+    }
+
+
+def _incremental_roic(rows: list[sqlite3.Row]) -> Optional[dict]:
+    """Return on the capital added over the moat window: (NOPAT now − NOPAT
+    five years back) / (invested capital now − invested capital then). The
+    one-year marginal ROIC swings on small capital changes; five years of
+    change is the steadier read. None when capital grew by less than
+    ``_INCREMENTAL_ROIC_MIN_GROWTH`` of its starting base: a tiny denominator
+    prints noise (50 of new capital beside 500 of new profit reads 1,000%)."""
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+    if y0 not in by_year:
+        return None
+    n1, n0 = _nopat_for_row(by_year[y1]), _nopat_for_row(by_year[y0])
+    c1, c0 = _invested_capital(by_year[y1]), _invested_capital(by_year[y0])
+    if None in (n1, n0, c1, c0) or c1 - c0 <= _INCREMENTAL_ROIC_MIN_GROWTH * abs(c0):
+        return None
+    return {"value": _r((n1 - n0) / (c1 - c0)), "fromYear": y0, "toYear": y1}
+
+
+def _moat_direction(rows: list[sqlite3.Row], metric_hist: Optional[dict],
+                    growth_split: Optional[dict]) -> Optional[dict]:
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
+    operating_firm, _ = fcff_applicable(rows[-1])
+    return {
+        "windowYears": MOAT_WINDOW_YEARS,
+        "spread": _spread_direction(metric_hist, equity_basis=not operating_firm),
+        # Return on new capital is an operating-firm measure, like ROIC itself.
+        "incrementalRoic": _incremental_roic(rows) if operating_firm else None,
+        "shareAndMargins": _share_and_margins(rows, growth_split, gross_margin=operating_firm),
+        "sustainableGrowth": _sustainable_growth_history(rows),
+    }
 
 
 # ── Console output ──────────────────────────────────────────────────────────

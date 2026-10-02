@@ -6094,6 +6094,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "costStructure": snap.cost_structure,
         # Generic competitive strategy with industry ranks (plan 3.3)
         "genericStrategy": snap.generic_strategy,
+        # Moat direction and growth sustainability: figures only, no verdict
+        "moatDirection": getattr(snap, "moat_direction", None),
         # Verdict
         "verdict": {
             "qualityScore": snap.quality_score,

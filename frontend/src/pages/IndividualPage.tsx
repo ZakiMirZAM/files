@@ -30,6 +30,7 @@ import { GrowthReconciliationSection } from "../components/individual/GrowthReco
 import { buildGrowthViabilityDeck } from "../lib/growthViability";
 import { ValueLensesSection } from "../components/individual/ValueLensesSection";
 import { PowersSection } from "../components/individual/PowersSection";
+import { MoatDirectionSection } from "../components/individual/MoatDirectionSection";
 import { StrategicResourcesSection } from "../components/individual/StrategicResourcesSection";
 import { CatalystTrapSection } from "../components/individual/CatalystTrapSection";
 import { EventsSection } from "../components/individual/EventsSection";
@@ -422,6 +423,10 @@ export function IndividualPage() {
 
         {data?.analysis && ticker && (
           <PowersSection analysis={data.analysis} ticker={ticker} companyName={companyName} />
+        )}
+
+        {data?.analysis?.moatDirection && ticker && (
+          <MoatDirectionSection data={data.analysis.moatDirection} ticker={ticker} companyName={companyName ?? ticker} />
         )}
 
         {data?.analysis?.shenanigans && (

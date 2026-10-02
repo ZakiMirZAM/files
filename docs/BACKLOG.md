@@ -20,6 +20,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Rank matrix by a single metric | 572e1b1; lib/sectorMetrics.ts `sortMatrixData` |
 | RARR verification wired into live AI answers | rag/server.py verify tier0 on /ask /explain /define; RAG_VERIFY=on |
 | Landing page scroll animations | LandingPage.tsx fade-up + parallax (Scroll World not needed) |
+| Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
 
 ## Small (S): quick wins, existing data
 
@@ -35,7 +36,6 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Capex split + R&D capitalization view | owner earnings split; `_rnd_capitalization` computed | Render both as tables with existing maint_capex questions |
 | China imports/exports y/y | FRED pipeline | Two FRED series on Economic page (OECD source, lags) |
 | 200-month SMA | none | Overlay on price and P/E charts |
-| Moat grow/decline + growth sustainability questions | ind.moat, comp2.relative_moat | 2-3 company-level questions |
 | Sell-with-a-motive deck | indiv.sell_discipline, Graham Ch.20 | Dedicated short deck on the final report |
 | Discretionary + food spending charts | RSAFS retail sales | Split series from FRED |
 | "Does growth justify P/E" + ROIC-WACC vs P/E | FedModelSection (market level), roicWaccSpread | Company-level earnings yield vs 10y + question; ratio only, no new score |

@@ -1029,6 +1029,7 @@ export interface IndividualAnalysis {
   dupont?: Dupont | null;
   leverageRoe?: LeverageRoe | null;
   usesOfCash?: UsesOfCash | null;
+  moatDirection?: MoatDirection | null;
 }
 
 // ── Uses of cash: what each year's operating cash flow was spent on ───────────
@@ -1359,4 +1360,65 @@ export interface IndividualBenchmarks {
   sector: string | null;
   industry: string | null;
   metrics: Record<string, BenchmarkMetric>;
+}
+
+// ── Moat direction and growth sustainability ──────────────────────────────
+// Figures only, no verdict. All rates are fractions (0.05 = 5%).
+
+export interface MoatSpread {
+  /** "capital": ROIC − WACC; "equity": ROE − cost of equity (banks, insurers, REITs). */
+  basis: "capital" | "equity";
+  year: number;
+  yearThen: number | null;
+  spreadNow: number | null;
+  spreadThen: number | null;
+  /** OLS slope of the spread on the year across the window. */
+  slopePerYear: number | null;
+  yearsInSlope: number;
+  returnNow: number | null;
+  costNow: number | null;
+  /** Exact split: spreadChange = returnChange − costChange. */
+  returnChange: number | null;
+  costChange: number | null;
+  spreadChange: number | null;
+  returnFadePerYear: number | null;
+  yearsToZeroAtThisPace: number | null;
+}
+
+export interface MoatShareAndMargins {
+  year: number;
+  yearThen: number;
+  grossMarginNow: number | null;
+  grossMarginThen: number | null;
+  operatingMarginNow: number | null;
+  operatingMarginThen: number | null;
+  shareNow: number | null;
+  shareThen: number | null;
+  shareYear: number | null;
+  shareYearThen: number | null;
+}
+
+export interface SustainableGrowthRow {
+  year: number;
+  margin: number | null;
+  assetTurnover: number | null;
+  assetsOverEquity: number | null;
+  retention: number | null;
+  sustainableGrowth: number | null;
+}
+
+export interface MoatDirection {
+  windowYears: number;
+  spread: MoatSpread | null;
+  incrementalRoic: { value: number | null; fromYear: number; toYear: number } | null;
+  shareAndMargins: MoatShareAndMargins | null;
+  sustainableGrowth: {
+    rows: SustainableGrowthRow[];
+    averageSustainableGrowth: number | null;
+    yearsAveraged: number;
+    revenueCagr: number | null;
+    revenueFromYear: number | null;
+    revenueToYear: number;
+    buybacksIncluded: boolean;
+  } | null;
 }
