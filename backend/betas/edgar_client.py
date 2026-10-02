@@ -31,7 +31,7 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
-from marketdata.http_cache import cached_download
+from marketdata.http_cache import DEFAULT_CACHE_DIR, cached_download
 
 from . import segment_store
 
@@ -571,6 +571,33 @@ class FinancialFacts:
     fiscal_year: int | None
     income: dict[str, float]      # revenue, costOfRevenue, operatingIncome, netIncome, …
     leases: dict[str, float]      # operatingLeaseLiability, operatingLeaseCost, …
+    # Income-tax footnote at the period end: the deferred tax asset for research
+    # capitalized for tax (None when the line is absent), and whether any other
+    # deferred-tax-asset line was reported (None when not known, e.g. a row
+    # cached before these fields existed whose instance is not on disk).
+    rnd_dta: float | None = None
+    dta_readable: bool | None = None
+
+
+# The us-gaap taxonomy has no element for the deferred tax asset that §174
+# capitalization creates, so filers use custom tags (aapl:, msft:, nvda:, meta:,
+# amgn:) and Alphabet reuses the in-process R&D element. Matched on the local
+# name in any namespace, singular "DeferredTaxAsset" included (pep:, txn:, hon:).
+# Seen in filed 10-Ks: ...ResearchAndDevelopmentCapitalization (syk:, mdt:),
+# ...CapitalizationOfResearchAndExperimentalExpenditures (rtx:),
+# ...ResearchExpenditures (cat:), ...ResearchAndDevelopmentExpenditureAmortization
+# (de:), ...ResearchAndExperimentationExpenditureAmortization (hood:). Research
+# tax credits and carryforwards are a different asset and must not read as
+# capitalization.
+_RND_DTA_RE = re.compile(
+    r"^DeferredTaxAssets?(?!.*(?:Credit|Carryforward))"
+    r".*(?:Capitali[sz](?:ed|ation).*Research|Research.*Capitali[sz](?:ed|ation)"
+    r"|ResearchAndExperiment|ResearchAndDevelopmentExpenditure|ResearchExpenditure"
+    r"|InProcessResearchAndDevelopment)"
+)
+# Bumped whenever the footnote parse changes, so tax fields cached under an
+# older parse are re-read from the filing on disk.
+TAX_PARSE_VERSION = 2
 
 
 def _document_period_end(root: ET.Element) -> str | None:
@@ -655,7 +682,10 @@ def parse_financial_facts(xml_bytes: bytes, period_end: str | None = None) -> Fi
         fy: int | None = int(period_end[:4])
     except (ValueError, TypeError):
         fy = None
-    return FinancialFacts(period_end=period_end, fiscal_year=fy, income=income, leases=leases)
+    rnd_dta = next((v for c, v in raw.items() if _RND_DTA_RE.match(c)), None)
+    readable = any(c.startswith("DeferredTaxAsset") and not _RND_DTA_RE.match(c) for c in raw)
+    return FinancialFacts(period_end=period_end, fiscal_year=fy, income=income, leases=leases,
+                          rnd_dta=rnd_dta, dta_readable=readable)
 
 
 def operating_lease_pv(facts: FinancialFacts | None) -> float | None:
@@ -688,13 +718,38 @@ def fetch_financial_facts(conn: sqlite3.Connection, ticker: str, *, force: bool 
     return parse_financial_facts(instance, tenk.period_end)
 
 
-def _ensure_xbrl_table(conn: sqlite3.Connection) -> None:
+def _ensure_xbrl_table(conn: sqlite3.Connection) -> bool:
+    """Create the cache table; returns whether its ``tax_json`` column exists.
+    Tables made before that column get it added once. If a writer holds the
+    lock at that moment the column stays missing for this call only, and the
+    tax fields read as unknown rather than breaking the lease figure."""
     conn.execute(
         """CREATE TABLE IF NOT EXISTS xbrl_financials (
                cik TEXT NOT NULL, fy INTEGER NOT NULL, period_end TEXT,
-               income_json TEXT, leases_json TEXT, updated TEXT,
+               income_json TEXT, leases_json TEXT, updated TEXT, tax_json TEXT,
                PRIMARY KEY (cik, fy))"""
     )
+    if any(r[1] == "tax_json" for r in conn.execute("PRAGMA table_info(xbrl_financials)")):
+        return True
+    try:
+        conn.execute("ALTER TABLE xbrl_financials ADD COLUMN tax_json TEXT")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _tax_fields(facts: FinancialFacts) -> dict:
+    return {"rndDta": facts.rnd_dta, "dtaReadable": facts.dta_readable, "v": TAX_PARSE_VERSION}
+
+
+def _tax_from_cached_instance(accession: str, period_end: str) -> FinancialFacts | None:
+    """Re-parse a filing already on disk, never over the network: rows cached
+    before the tax fields existed carry only the income and lease lines, and
+    rows cached under an older parse carry its answer."""
+    path = DEFAULT_CACHE_DIR / f"sec_instance_{accession.replace('-', '')}.xml"
+    if not path.exists():
+        return None
+    return parse_financial_facts(path.read_bytes(), period_end)
 
 
 def get_financial_facts(conn: sqlite3.Connection, ticker: str, *, force: bool = False) -> FinancialFacts | None:
@@ -702,33 +757,59 @@ def get_financial_facts(conn: sqlite3.Connection, ticker: str, *, force: bool = 
     repeat page loads are instant/offline, fetching from SEC only on a miss (or
     ``force``). Any failure returns None — the caller then falls back to the
     on-balance-sheet lease figure."""
-    _ensure_xbrl_table(conn)
+    has_tax = _ensure_xbrl_table(conn)
     cik = cik_for_ticker(conn, ticker)
     if cik is None:
         return None
     if not force:
         row = conn.execute(
-            "SELECT period_end, fy, income_json, leases_json FROM xbrl_financials "
-            "WHERE cik = ? ORDER BY fy DESC LIMIT 1", (cik,),
+            "SELECT period_end, fy, income_json, leases_json"
+            + (", tax_json" if has_tax else ", NULL")
+            + " FROM xbrl_financials WHERE cik = ? ORDER BY fy DESC LIMIT 1", (cik,),
         ).fetchone()
         if row is not None:
             # Freshness gate (mirrors ingest_ticker): serve the cached row only
             # when it is not behind a newer 10-K; otherwise fall through to fetch.
             tenk = latest_10k(cik)
             if tenk is None or tenk.fiscal_year <= row[1]:
+                tax = json.loads(row[4]) if row[4] else None
+                stale = tax is None or tax.get("v", 1) < TAX_PARSE_VERSION
+                if stale and tenk is not None and tenk.fiscal_year == row[1]:
+                    reparsed = _tax_from_cached_instance(tenk.accession, row[0])
+                    if reparsed is not None:
+                        tax = _tax_fields(reparsed)
+                        if has_tax:
+                            try:
+                                conn.execute(
+                                    "UPDATE xbrl_financials SET tax_json = ? WHERE cik = ? AND fy = ?",
+                                    (json.dumps(tax), cik, row[1]))
+                                conn.commit()
+                            except sqlite3.OperationalError:
+                                pass  # a busy writer only costs the re-parse next time
+                tax = tax or {}
                 return FinancialFacts(
                     period_end=row[0], fiscal_year=row[1],
                     income=json.loads(row[2] or "{}"), leases=json.loads(row[3] or "{}"),
+                    rnd_dta=tax.get("rndDta"), dta_readable=tax.get("dtaReadable"),
                 )
     facts = fetch_financial_facts(conn, ticker, force=force)
     if facts is None:
         return None
-    conn.execute(
-        "INSERT OR REPLACE INTO xbrl_financials (cik, fy, period_end, income_json, "
-        "leases_json, updated) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        (cik, facts.fiscal_year or 0, facts.period_end,
-         json.dumps(facts.income), json.dumps(facts.leases)),
-    )
+    if has_tax:
+        conn.execute(
+            "INSERT OR REPLACE INTO xbrl_financials (cik, fy, period_end, income_json, "
+            "leases_json, updated, tax_json) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)",
+            (cik, facts.fiscal_year or 0, facts.period_end,
+             json.dumps(facts.income), json.dumps(facts.leases),
+             json.dumps(_tax_fields(facts))),
+        )
+    else:
+        conn.execute(
+            "INSERT OR REPLACE INTO xbrl_financials (cik, fy, period_end, income_json, "
+            "leases_json, updated) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (cik, facts.fiscal_year or 0, facts.period_end,
+             json.dumps(facts.income), json.dumps(facts.leases)),
+        )
     conn.commit()
     return facts
 

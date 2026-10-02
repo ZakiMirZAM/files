@@ -803,7 +803,6 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       title: "Intangibles & Hidden Value",
       questions: [
         { id: "indiv.value_explained", text: "What share of enterprise value is explained by reported book value and earnings? If low, which intangible (brand, network, data, IP) is doing the work? (Lev & Gu, The End of Accounting)" },
-        { id: "indiv.rd_expensed", text: "Is heavy R&D or customer-acquisition spend expensed immediately, understating earnings and invested capital so ROIC looks better than it is? (Lev & Gu; Stewart)" },
         { id: "indiv.organic_vs_acq", text: "How much of revenue growth is organic versus bought through acquisitions, and at what multiples? (Lev & Gu)" },
       ],
     },

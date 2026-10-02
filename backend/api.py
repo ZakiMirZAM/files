@@ -6077,6 +6077,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "epv": snap.epv,
         "tobinsQ": snap.tobins_q,
         "ownerEarnings": snap.owner_earnings,
+        # Capital spending split into upkeep and growth, 5 years plus the average
+        "capexSplit": getattr(snap, "capex_split", None),
         # Capital base: goodwill share of invested capital + tangible-capital ROIC/EVA
         "capitalBase": snap.capital_base,
         # Business-events feed: recent 8-K/6-K filings (Lev & Gu Ch.4)
@@ -6096,6 +6098,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "genericStrategy": snap.generic_strategy,
         # Moat direction and growth sustainability: figures only, no verdict
         "moatDirection": getattr(snap, "moat_direction", None),
+        # Model vs free consensus vs the reader, next two fiscal years
+        "nextTwoYears": getattr(snap, "next_two_years", None),
         # Verdict
         "verdict": {
             "qualityScore": snap.quality_score,

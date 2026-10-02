@@ -1,14 +1,32 @@
-import type { ForecastRow, IndividualForecast, WaccBuild } from "../../lib/types";
+import { useMemo, useState } from "react";
+import type { ForecastRow, IndividualForecast, NextTwoYearsBlock, WaccBuild } from "../../lib/types";
 import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
 import { StageToggle, useActiveVariant } from "./StageToggle";
+import { NextTwoYearsSection } from "./NextTwoYearsSection";
+import { QualitativeBlock } from "../QualitativeBlock";
+import {
+  answerScope,
+  buildProjectionsOpening,
+  PROJECTIONS_COPY,
+  PROJECTIONS_OPENING_ID,
+  projectionsVisible,
+} from "../../lib/projectionsDeck";
+import { useSavedAnswer } from "../../lib/useSavedAnswer";
 
 interface ForecastSectionProps {
   forecast: IndividualForecast;
   ticker?: string;
+  /** The key the projections answers are saved under; the page's route ticker. Falls back to `ticker`. */
+  scopeKey?: string;
+  nextTwoYears?: NextTwoYearsBlock | null;
+  companyName?: string;
 }
+
+/** Stable empty rows, so a structure with no projection years does not re-memo every render. */
+const NO_ROWS: ForecastRow[] = [];
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
 const perShare = (v: number | null | undefined): string => formatPerShare(v);
@@ -33,9 +51,21 @@ const STATEMENT_ROWS: Array<{ label: string; get: (r: IndividualForecast["rows"]
   { label: "PV of FCFF", get: (r) => formatCurrency(r.pvFcff) },
 ];
 
-export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionProps) {
+export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYears, companyName }: ForecastSectionProps) {
   const sel = f.valuationSelection ?? null;
   const active = useActiveVariant(ticker, sel?.stageVariants, sel?.recommendedStages);
+  const company = companyName || ticker;
+  const scope = answerScope(scopeKey, ticker);
+  // Q1 is answered before any projection is shown, so its context carries no
+  // model numbers.
+  const opening = useMemo(
+    () => buildProjectionsOpening({ company, dataContext: JSON.stringify({ company, ticker }) }),
+    [company, ticker],
+  );
+  const growthSource = useSavedAnswer("individual", scope, PROJECTIONS_OPENING_ID);
+  // "Show anyway" holds for the scope it was clicked on and is not persisted.
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  const showProjections = projectionsVisible(growthSource, shownFor, scope);
   if (f.applicable === false) {
     return (
       <article className="panel p-6 md:p-8 animate-fade-up">
@@ -117,6 +147,10 @@ export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionPro
         <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">FCFF Firm Valuation</h2>
         <DefinitionLink number={71} prominent className="mt-3">How the FCFF model and WACC work</DefinitionLink>
       </header>
+
+      <div className="mb-6">
+        <QualitativeBlock section="individual" scopeKey={scope} groups={opening} storageSuffix="projections-open" defaultOpen hideHeader />
+      </div>
 
       {/* Model structure: selection rationale + the stage toggle + warnings */}
       {sel && (
@@ -209,7 +243,18 @@ export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionPro
         {/* Projected statements */}
         <div className="lg:col-span-3 panel-soft p-5">
           <p className="eyebrow mb-4">Projected Statements</p>
-          {viewRows.length === 0 ? (
+          {!showProjections ? (
+            <div className="space-y-3">
+              <p className="text-sm text-white/65 leading-relaxed">{PROJECTIONS_COPY.gate}</p>
+              <button
+                type="button"
+                onClick={() => setShownFor(scope)}
+                className="text-xs px-3 py-1.5 rounded-md border border-gold/30 text-gold/90 hover:bg-gold/10 transition-colors"
+              >
+                {PROJECTIONS_COPY.showAnyway}
+              </button>
+            </div>
+          ) : viewRows.length === 0 ? (
             <p className="text-sm text-white/55 leading-relaxed">
               A single-stage model has no explicit projection years: the company
               is treated as already stable, so the whole value is the perpetuity.
@@ -272,6 +317,18 @@ export function ForecastSection({ forecast: f, ticker = "" }: ForecastSectionPro
           )}
         </div>
       </div>
+
+      {showProjections && nextTwoYears?.applicable && (
+        <NextTwoYearsSection
+          key={scope}
+          data={nextTwoYears}
+          scopeKey={scope}
+          company={company}
+          forecast={f}
+          // Only a non-recommended structure overrides the block's model columns.
+          variantRows={isVariantView ? ((active?.rows ?? NO_ROWS) as ForecastRow[]) : null}
+        />
+      )}
 
       {/* Sensitivity */}
       <div className="mt-6">

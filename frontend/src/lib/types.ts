@@ -674,6 +674,121 @@ export interface RndAdjusted {
   roicReported?: number | null;
   roicAdjusted?: number | null;
   note?: string;
+  // Reinvestment and Value extension. investedCapital* and roic* above are on a
+  // beginning-of-year basis (prior year-end capital, plus last year's research
+  // asset on the adjusted side).
+  lifeSource?: "industry" | "default";
+  lifeIndustry?: string | null;
+  materiality?: "revenue" | "operatingProfit";
+  rdToOperatingProfit?: number | null;
+  capitalBasis?: "beginning_of_year";
+  researchAssetPriorYear?: number | null;
+  wacc?: number | null;
+  roicMinusWaccReported?: number | null;
+  roicMinusWaccAdjusted?: number | null;
+  taxMethod?: RndTaxMethod;
+  taxFiscalYear?: number | null;
+  taxRate?: number | null;
+}
+
+export type RndTaxMethod =
+  | "footnote_capitalized"
+  | "footnote_expensed"
+  | "footnote_us_2025_expensed"
+  | "rule_us_capitalized"
+  | "rule_us_expensed"
+  | "rule_non_us_expensed";
+
+// ── Capex split (upkeep vs growth spending, five fiscal years) ─────────
+// Mirrors individualanalysis._capex_split. Money in the reporting currency,
+// ratios are decimals, a null is "not meaningful here", never a zero.
+
+export type CapexSplitMethod =
+  | "greenwald"
+  | "dda_proxy_floor"
+  | "dda_proxy_insufficient"
+  | "unavailable";
+
+export interface CapexSplitFigures {
+  capitalSpending: number | null;
+  ppeToSales: number | null;
+  revenueChange: number | null;
+  growthSpending: number | null;
+  upkeepSpending: number | null;
+  depreciation: number | null;
+  upkeepToDepreciation: number | null;
+  profitOverstatement: number | null;
+}
+
+export interface CapexSplitYear extends CapexSplitFigures {
+  year: number;
+  revenueChangeNominal: number | null;
+  inflation: number | null;
+  acquiredRevenue: number | null;
+  method: CapexSplitMethod;
+}
+
+export interface CapexSplitBlock {
+  applicable: boolean;
+  reason?: string;
+  currency?: string | null;
+  inflationAdjusted?: boolean;
+  acquisitionsAdjusted?: boolean;
+  capitalLight?: boolean;
+  ppeToRevenueLatest?: number | null;
+  years?: CapexSplitYear[];
+  average?: CapexSplitFigures;
+}
+
+// ── Next two years (model vs consensus vs the reader) ─────────
+// Mirrors backend/next_two_years.py. Money and EPS in the reporting currency.
+
+export type NextTwoYearsKey =
+  | "revenue"
+  | "operatingMargin"
+  | "nopat"
+  | "reinvestment"
+  | "fcff"
+  | "roic"
+  | "eva"
+  | "eps";
+
+export interface NextTwoYearsRow {
+  key: NextTwoYearsKey;
+  lastReported: number | null;
+  model1: number | null;
+  model2: number | null;
+}
+
+export interface ConsensusFigure {
+  avg: number;
+  low: number | null;
+  high: number | null;
+  analysts: number | null;
+  growth: number | null;
+}
+
+export type ConsensusHiddenReason = "no_coverage" | "does_not_tie" | "database_behind";
+
+export interface ConsensusYear {
+  label: "current" | "next";
+  fiscalYear: number | null;
+  fiscalYearEnd: string | null;
+  revenue: ConsensusFigure | null;
+  revenueHiddenReason: ConsensusHiddenReason | null;
+  eps: ConsensusFigure | null;
+  epsHiddenReason: ConsensusHiddenReason | null;
+}
+
+export interface NextTwoYearsBlock {
+  applicable: boolean;
+  reason?: string;
+  currency?: string | null;
+  lastFiscalYear?: number;
+  modelYears?: [number, number];
+  rows?: NextTwoYearsRow[];
+  consensus?: { source: "Yahoo Finance"; years: ConsensusYear[] } | null;
+  history?: { year: number; revenue: number | null; operatingMargin: number | null; eps: number | null }[];
 }
 
 // ── Normalized-earnings bridge ─────────
@@ -1030,6 +1145,8 @@ export interface IndividualAnalysis {
   leverageRoe?: LeverageRoe | null;
   usesOfCash?: UsesOfCash | null;
   moatDirection?: MoatDirection | null;
+  capexSplit?: CapexSplitBlock | null;
+  nextTwoYears?: NextTwoYearsBlock | null;
 }
 
 // ── Uses of cash: what each year's operating cash flow was spent on ───────────

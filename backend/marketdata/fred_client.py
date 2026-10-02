@@ -69,7 +69,42 @@ FRED_CATALOG: dict[str, list[tuple[str, str, str]]] = {
         ("BAMLC0A0CM", "Investment-Grade OAS", "%"),
         ("BAA10Y", "Baa minus 10Y Treasury", "%"),
     ],
+    # Consumer prices, so the capex split can strip inflation out of a
+    # company's revenue change: sales that rise only with prices need no new
+    # equipment (see annual_inflation below).
+    "prices": [
+        ("CPIAUCSL", "CPI, all urban consumers (monthly index)", "index"),
+    ],
 }
+
+
+def annual_inflation(obs: list[Obs]) -> dict[int, float]:
+    """Calendar-year inflation from a monthly price index, as decimals.
+
+    A complete year is its twelve-month average over the prior year's average,
+    which smooths the single-month noise a December-to-December rate carries
+    and matches a fiscal year's revenue, earned across the whole year. The
+    newest year is usually partial; it takes the latest month over the same
+    month a year earlier, the only rate its data supports.
+
+    A past year needs ten months, not twelve: October 2025 CPI was never
+    published (the federal shutdown), and requiring every month dropped 2025
+    entirely."""
+    if not obs:
+        return {}
+    by_year: dict[int, list[float]] = {}
+    by_month: dict[str, float] = {}
+    for o in obs:
+        by_year.setdefault(int(o.date[:4]), []).append(o.value)
+        by_month[o.date[:7]] = o.value
+    last = obs[-1].date[:7]
+    newest = int(last[:4])
+    avg = {y: sum(v) / len(v) for y, v in by_year.items() if y < newest and len(v) >= 10}
+    out = {y: avg[y] / avg[y - 1] - 1.0 for y in avg if (y - 1) in avg and avg[y - 1] > 0}
+    prior = by_month.get(f"{newest - 1}{last[4:]}")
+    if prior:
+        out[newest] = by_month[last] / prior - 1.0
+    return out
 
 
 def catalog_series_ids(groups: list[str] | None = None) -> list[str]:

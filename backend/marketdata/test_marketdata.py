@@ -561,3 +561,31 @@ def test_implied_erp_history_replaces_a_previously_mislabelled_point(monkeypatch
         assert [r[0] for r in stored] == ["2025-06-01"]
     finally:
         conn.close()
+
+
+# ── annual CPI inflation (capex split input) ─────────────────────────────────
+
+
+def test_annual_inflation_uses_twelve_month_averages_and_a_partial_newest_year():
+    from .fred_client import Obs, annual_inflation
+
+    obs = [Obs(f"2023-{m:02d}-01", 100.0) for m in range(1, 13)]
+    obs += [Obs(f"2024-{m:02d}-01", 103.0) for m in range(1, 13)]
+    obs += [Obs("2025-01-01", 105.06), Obs("2025-02-01", 106.09)]
+    out = annual_inflation(obs)
+    assert 2023 not in out                       # no prior year to compare
+    assert out[2024] == pytest.approx(0.03)      # 103 average over 100 average
+    assert out[2025] == pytest.approx(106.09 / 103.0 - 1)  # Feb over Feb
+    assert annual_inflation([]) == {}
+
+
+def test_annual_inflation_keeps_a_past_year_missing_one_month():
+    """October 2025 CPI was never published; 2025 must still get a rate."""
+    from .fred_client import Obs, annual_inflation
+
+    obs = [Obs(f"2024-{m:02d}-01", 100.0) for m in range(1, 13)]
+    obs += [Obs(f"2025-{m:02d}-01", 102.0) for m in range(1, 13) if m != 10]
+    obs += [Obs("2026-01-01", 104.0)]
+    out = annual_inflation(obs)
+    assert out[2025] == pytest.approx(0.02)
+    assert out[2026] == pytest.approx(104.0 / 102.0 - 1)

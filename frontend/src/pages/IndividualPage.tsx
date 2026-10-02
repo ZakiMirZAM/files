@@ -29,6 +29,7 @@ import { ReverseDcfSection } from "../components/individual/ReverseDcfSection";
 import { GrowthReconciliationSection } from "../components/individual/GrowthReconciliationSection";
 import { buildGrowthViabilityDeck } from "../lib/growthViability";
 import { ValueLensesSection } from "../components/individual/ValueLensesSection";
+import { ReinvestmentSection } from "../components/individual/ReinvestmentSection";
 import { PowersSection } from "../components/individual/PowersSection";
 import { MoatDirectionSection } from "../components/individual/MoatDirectionSection";
 import { StrategicResourcesSection } from "../components/individual/StrategicResourcesSection";
@@ -302,7 +303,12 @@ export function IndividualPage() {
         )}
 
         {data?.analysis?.forecast && (
-          <ForecastSection forecast={data.analysis.forecast} ticker={data.analysis.ticker} />
+          <ForecastSection
+            forecast={data.analysis.forecast}
+            ticker={data.analysis.ticker} scopeKey={ticker}
+            nextTwoYears={data.analysis.nextTwoYears}
+            companyName={companyName}
+          />
         )}
 
         {/* Where the growth in the model above actually comes from. */}
@@ -370,11 +376,8 @@ export function IndividualPage() {
           />
         )}
 
-        {data?.analysis && (data.analysis.valuationAnchors || data.analysis.rndAdjusted) && (
-          <ValuationExtrasSection
-            anchors={data.analysis.valuationAnchors}
-            rnd={data.analysis.rndAdjusted}
-          />
+        {data?.analysis?.valuationAnchors && (
+          <ValuationExtrasSection anchors={data.analysis.valuationAnchors} />
         )}
 
         {data?.analysis && (data.analysis.epv || data.analysis.tobinsQ || data.analysis.ownerEarnings) && (
@@ -383,6 +386,23 @@ export function IndividualPage() {
             tobinsQ={data.analysis.tobinsQ}
             ownerEarnings={data.analysis.ownerEarnings}
           />
+        )}
+
+        {/* Under the Owner Earnings card: the upkeep figure it uses, year by
+            year, and the same returns with research treated as an investment. */}
+        {data?.analysis && ticker && (data.analysis.capexSplit || data.analysis.rndAdjusted) && (
+          <ErrorBoundary compact>
+            <ReinvestmentSection
+              capexSplit={data.analysis.capexSplit}
+              rnd={data.analysis.rndAdjusted}
+              ownerEarnings={data.analysis.ownerEarnings}
+              forecast={data.analysis.forecast}
+              capitalBase={data.analysis.capitalBase}
+              usesOfCash={data.analysis.usesOfCash}
+              ticker={ticker}
+              companyName={companyName ?? ticker}
+            />
+          </ErrorBoundary>
         )}
 
         {/* What management did with the cash the valuation above just modelled. It
@@ -427,7 +447,12 @@ export function IndividualPage() {
         )}
 
         {data?.analysis?.moatDirection && ticker && (
-          <MoatDirectionSection data={data.analysis.moatDirection} ticker={ticker} companyName={companyName ?? ticker} />
+          <MoatDirectionSection
+            data={data.analysis.moatDirection}
+            ticker={ticker}
+            companyName={companyName ?? ticker}
+            rndAdjusted={data.analysis.rndAdjusted}
+          />
         )}
 
         {data?.analysis?.shenanigans && (

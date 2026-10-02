@@ -23,6 +23,7 @@ Usage:
   val = db.get_metric("AAPL", "Revenue", year=2022)
 """
 
+import math
 import sqlite3
 import os
 import sys
@@ -31,7 +32,7 @@ import warnings
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 # fx_convert lives beside this module. Importing it by bare name works when
@@ -424,6 +425,132 @@ def compute_peg_yf(ticker: str) -> float | None:
     return None
 
 
+def _finite(v) -> float | None:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def consensus_from_info(info: dict | None) -> dict | None:
+    """Analyst consensus from a yfinance ``info`` payload, or None without a
+    forward P/E.
+
+    ``forwardPE`` is Yahoo's own price ÷ next-year consensus EPS, so it stays
+    in one unit even for a depositary receipt quoted against statements in
+    another currency (TSM). ``nextYearGrowth`` compares two EPS figures that
+    Yahoo does NOT always state in one unit: for BABA ``forwardEps`` is USD per
+    receipt while ``epsCurrentYear`` is CNY per share (growth read −79%). So
+    the growth is only computed when the quote and financial currencies match."""
+    if not info:
+        return None
+    fwd_pe = _finite(info.get("forwardPE"))
+    if fwd_pe is None:
+        return None
+    fwd_eps = _finite(info.get("forwardEps"))
+    cur_eps = _finite(info.get("epsCurrentYear"))
+    quote_ccy, fin_ccy = info.get("currency"), info.get("financialCurrency")
+    same_unit = not (quote_ccy and fin_ccy) or quote_ccy == fin_ccy
+    growth = ((fwd_eps / cur_eps - 1.0)
+              if (same_unit and fwd_eps and cur_eps and fwd_eps > 0 and cur_eps > 0) else None)
+    analysts = _finite(info.get("numberOfAnalystOpinions"))
+    return {
+        "forwardPe": fwd_pe,
+        "forwardEps": fwd_eps,
+        "currentYearEps": cur_eps,
+        "nextYearGrowth": growth,
+        "analysts": int(analysts) if analysts is not None else None,
+    }
+
+
+def _yf_month(epoch) -> str | None:
+    """Yahoo's fiscal-year-end epoch seconds as ``YYYY-MM``. Month granularity
+    on purpose: Yahoo's dates are not the filing's (NVDA 2026-01-25 vs the
+    statements' 2026-01-31), so fiscal years are matched on year and month."""
+    v = _finite(epoch)
+    if v is None:
+        return None
+    try:
+        return datetime.fromtimestamp(v, tz=timezone.utc).strftime("%Y-%m")
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _estimate_row(df, period: str, year_ago_col: str) -> dict | None:
+    """One annual row of a yfinance estimate frame with NaN as None, or None
+    when the frame is missing, empty, or has no such row."""
+    try:
+        if df is None or df.empty or period not in df.index:
+            return None
+        r = df.loc[period]
+    except Exception:  # noqa: BLE001 (a malformed frame is "no estimate")
+        return None
+    analysts = _finite(r.get("numberOfAnalysts"))
+    return {
+        "avg": _finite(r.get("avg")),
+        "low": _finite(r.get("low")),
+        "high": _finite(r.get("high")),
+        "analysts": int(analysts) if analysts is not None else None,
+        "yearAgo": _finite(r.get(year_ago_col)),
+    }
+
+
+def estimates_from_yf(revenue_df, earnings_df, info: dict | None) -> dict | None:
+    """Annual analyst estimates from yfinance's ``revenue_estimate`` and
+    ``earnings_estimate`` frames, or None when neither has an annual row.
+
+    ``current`` is Yahoo's ``0y``: the first fiscal year NOT yet reported,
+    ending ``info.nextFiscalYearEnd``; its ``yearAgo`` is Yahoo's figure for
+    ``info.lastFiscalYearEnd``, which is what a caller ties to its own reported
+    year before trusting the estimate. ``next`` is ``+1y``, whose ``yearAgo`` is
+    the ``0y`` estimate, not a reported figure. Revenue is in the reporting
+    currency (``financialCurrency``); EPS can be per depositary receipt and in
+    another currency (TSM: USD per ADR), which only that tie-out catches."""
+    years = {label: {"revenue": _estimate_row(revenue_df, period, "yearAgoRevenue"),
+                     "eps": _estimate_row(earnings_df, period, "yearAgoEps")}
+             for label, period in (("current", "0y"), ("next", "+1y"))}
+    if not any(block for pair in years.values() for block in pair.values()):
+        return None
+    info = info or {}
+    return {
+        "lastFiscalYearEnd": _yf_month(info.get("lastFiscalYearEnd")),
+        "nextFiscalYearEnd": _yf_month(info.get("nextFiscalYearEnd")),
+        "financialCurrency": info.get("financialCurrency") or None,
+        **years,
+    }
+
+
+def fetch_forward_yf(ticker: str) -> dict:
+    """``consensus_from_info`` and ``estimates_from_yf`` off ONE ``yf.Ticker``, so
+    a page pays one Yahoo round-trip for both (``info`` is 3 calls; the two
+    estimate frames share a single ``earningsTrend`` call, cached on the
+    Ticker). Each access is guarded on its own: an unknown symbol raises
+    HTTPError 404 out of every accessor, which yfinance itself does not catch.
+    Not persisted: estimates move, and the individual endpoint that calls this
+    is itself cached for 30 minutes."""
+    out = {"consensus": None, "estimates": None}
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info
+        out["consensus"] = consensus_from_info(info)
+    except Exception:  # noqa: BLE001 (never let a network call break valuation)
+        return out
+    if not info:
+        return out
+    rev = eps = None
+    try:
+        rev = t.revenue_estimate
+        eps = t.earnings_estimate
+    except Exception:  # noqa: BLE001 (revenue alone is still worth showing)
+        pass
+    try:
+        out["estimates"] = estimates_from_yf(rev, eps, info)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 # Live price is a spot quote — NOT persisted to the DB (it changes daily). A short
 # in-memory TTL cache keeps the per-page burst (FCFF + RI + DDM + FCFE + legacy DCF
 # all ask for the same ticker's price) down to a single network call.
@@ -698,6 +825,11 @@ class FinancialDB:
             except Exception:
                 pass
         return peg
+
+    def get_forward(self, ticker: str) -> dict:
+        """Consensus forward P/E plus annual revenue and EPS estimates (Yahoo
+        Finance) from one round-trip, not persisted."""
+        return fetch_forward_yf(ticker)
 
     def get_latest_price_currency(self, ticker: str) -> tuple[float | None, str | None]:
         """``(price, quote currency)`` from yfinance, for the intrinsic-vs-price

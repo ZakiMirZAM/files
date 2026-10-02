@@ -612,6 +612,11 @@ class IndividualSnapshot:
     # Owner earnings (Buffett 1986): cash an owner could withdraw. JSON-safe.
     owner_earnings: Optional[dict] = None
 
+    # Capital spending split into upkeep and growth (Greenwald), the last five
+    # fiscal years plus their average. The upkeep figure is the one owner
+    # earnings uses. JSON-safe.
+    capex_split: Optional[dict] = None
+
     # Capital base: goodwill's share of invested capital + ROIC/EVA on tangible
     # operating capital only (Investment Valuation Ch.25). JSON-safe.
     capital_base: Optional[dict] = None
@@ -643,6 +648,11 @@ class IndividualSnapshot:
     # direction with the ROIC/WACC split, share and margins then and now, and
     # four-factor sustainable growth by year. Figures only. JSON-safe.
     moat_direction: Optional[dict] = None
+
+    # Next two years: model years 1 and 2 beside the last reported year and the
+    # free Yahoo revenue/EPS consensus, shown only where it ties to the
+    # reported accounts. JSON-safe.
+    next_two_years: Optional[dict] = None
 
     # Verdict
     strengths: list[str] = field(default_factory=list)
@@ -4981,86 +4991,245 @@ def _find_score(shenanigans: Optional[dict], key: str) -> Optional[dict]:
 # ── R&D capitalization (Damodaran, Ch.9 'Measuring Earnings') ────────────────
 
 RND_DEFAULT_LIFE = 5          # amortizable life of the research asset (years)
-RND_MATERIALITY = 0.03        # R&D/revenue below this → capitalization is immaterial
+RND_MATERIALITY = 0.03        # R&D/revenue at or above this admits the company
+RND_OPERATING_MATERIALITY = 0.10  # ...or R&D above this share of a positive operating profit
+
+# Amortizable life by industry, from Damodaran's R&D converter (R&DConv.xls,
+# "Amortizable Lives Look-up Table"), keyed by the yfinance industry strings in
+# `tickers`, old and new spellings both. Value: (years, plain label for the page).
+_RND_LIFE_BY_INDUSTRY: dict[str, tuple[int, str]] = {
+    **{k: (3, "software") for k in (
+        "Software - Application", "Software - Infrastructure", "Software - Services")},
+    "Internet Content & Information": (3, "internet companies"),
+    **{k: (3, "video game makers") for k in (
+        "Electronic Gaming & Multimedia", "Electronic - Gaming & Multimedia")},
+    **{k: (5, "chip makers") for k in (
+        "Semiconductors", "Semiconductors & Semiconductor Equipment",
+        "Semiconductor Equipment & Materials")},
+    **{k: (5, "tech hardware makers") for k in (
+        "Computer Hardware", "Computers, Phones & Household Electronics",
+        "Consumer Electronics", "Hardware, Equipment & Parts", "Hardware Equipment & Parts",
+        "Electronic Components")},
+    "Scientific & Technical Instruments": (5, "instrument makers"),
+    **{k: (5, "medical device makers") for k in (
+        "Medical Devices", "Medical - Devices", "Medical - Instruments & Supplies",
+        "Medical Instruments & Supplies")},
+    **{k: (10, "drug makers") for k in (
+        "Drug Manufacturers - General", "Drug Manufacturers - Specialty & Generic",
+        "Drug Manufacturers Specialty Generic", "Biotechnology", "Medical - Pharmaceuticals")},
+    "Aerospace & Defense": (10, "aerospace and defense companies"),
+    **{k: (10, "carmakers") for k in ("Auto - Manufacturers", "Auto Manufacturers")},
+    # The converter's Auto Parts row is 5 years, not the 10 of Auto & Truck.
+    **{k: (5, "auto parts makers") for k in ("Auto - Parts", "Auto Parts")},
+    **{k: (10, "chemical makers") for k in (
+        "Chemicals", "Specialty Chemicals", "Chemicals - Specialty")},
+    "Communication Equipment": (10, "telecom equipment makers"),
+}
+
+_RND_TAX_CAPITALIZED = frozenset({"footnote_capitalized", "rule_us_capitalized"})
+
+
+def _rnd_life(industry: Optional[str]) -> tuple[int, str, Optional[str]]:
+    """(years, lifeSource, lifeIndustry) for a yfinance industry string."""
+    hit = _RND_LIFE_BY_INDUSTRY.get((industry or "").strip())
+    if hit is None:
+        return RND_DEFAULT_LIFE, "default", None
+    return hit[0], "industry", hit[1]
+
+
+def _research_asset(rd_newest_first: list[Optional[float]], life: int) -> float:
+    """Unamortized research asset at a year end (Damodaran Ch.9): this year's R&D
+    in full, last year's at (life-1)/life, down to 1/life for the oldest year
+    still on the books. Missing or non-positive years add nothing."""
+    return sum(v * (life - k) / life
+               for k, v in enumerate(rd_newest_first[:life]) if v is not None and v > 0)
+
+
+def _research_amortization(rd_newest_first: list[Optional[float]], life: int) -> float:
+    """This year's amortization: 1/life of each of the prior `life` years' R&D.
+    None of the current year's spending is amortized (it is assumed to occur at
+    the year end)."""
+    return sum(v / life for v in rd_newest_first[1:life + 1] if v is not None and v > 0)
+
+
+def _rnd_restate(*, rd_now: float, amort: float, ebit: Optional[float], tax: float,
+                 capital: Optional[float], research_asset: float,
+                 tax_capitalized: bool) -> dict:
+    """Operating profit, NOPAT, capital and ROIC with R&D treated as an investment.
+
+    Where R&D is fully deductible for tax, the add-back is not taxed: the
+    deduction was already taken on the whole expense, so NOPAT rises by
+    R&D minus amortization in full (Damodaran Ch.9/10). Where tax law makes the
+    company capitalize it, only amortization is deductible, so the add-back is
+    taxed: NOPAT rises by (R&D - amortization) x (1 - t)."""
+    ebit_adj = (ebit + rd_now - amort) if ebit is not None else None
+    nopat_rep = ebit * (1.0 - tax) if ebit is not None else None
+    add_back = (rd_now - amort) * ((1.0 - tax) if tax_capitalized else 1.0)
+    nopat_adj = (nopat_rep + add_back) if nopat_rep is not None else None
+    capital_adj = (capital + research_asset) if capital is not None else None
+    # A return on negative capital is not a return: a loss over a negative base
+    # prints as a large positive ROIC.
+    return {
+        "ebitAdjusted": ebit_adj,
+        "nopatReported": nopat_rep,
+        "nopatAdjusted": nopat_adj,
+        "capitalAdjusted": capital_adj,
+        "roicReported": _safe_div(nopat_rep, capital) if capital and capital > 0 else None,
+        "roicAdjusted": _safe_div(nopat_adj, capital_adj) if capital_adj and capital_adj > 0 else None,
+    }
+
+
+def _rnd_tax_method(latest: sqlite3.Row, facts: Any = None,
+                    currency: Optional[str] = None) -> str:
+    """How the latest fiscal year's R&D was treated for tax.
+
+    The regime turns on when the TAX year began, not on the fiscal-year label:
+    Apple's FY2025 began in September 2024, still under the capitalization
+    rule. US law: deducted immediately for tax years beginning before 2022,
+    capitalized over 5 years (domestic) for those beginning 2022 through 2024,
+    deducted immediately again from 2025.
+
+    The income-tax footnote decides first when the 10-K facts belong to this
+    fiscal year: a deferred tax asset for capitalized research means it was
+    capitalized. For a tax year that began 2022 through 2024 the law required
+    capitalization, so a footnote without that line is a tagging gap, not proof
+    of a deduction, and the rule stands. Outside that window a footnote with
+    other deferred tax assets and no such line means it was deducted. From 2025
+    the line can remain for foreign research or unamortized balances, so it no
+    longer signals domestic capitalization. Without a usable footnote the
+    year-and-country rule applies; ``currency`` stands in when the latest
+    row's Reported Currency is NULL (the latest non-null one across rows)."""
+    fy = int(latest["Calendar Year"])
+    try:
+        end = _dt.date.fromisoformat(str(latest["Date"])[:10])
+    except (IndexError, KeyError, TypeError, ValueError):
+        end = _dt.date(fy, 12, 31)
+    try:
+        start = end.replace(year=end.year - 1) + _dt.timedelta(days=1)
+    except ValueError:  # a 29 February year end
+        start = end.replace(year=end.year - 1, day=28) + _dt.timedelta(days=1)
+    post_2024 = start > _dt.date(2024, 12, 31)
+    tcja = _dt.date(2022, 1, 1) <= start <= _dt.date(2024, 12, 31)
+
+    if facts is not None and getattr(facts, "fiscal_year", None) == fy:
+        dta = getattr(facts, "rnd_dta", None)
+        evidence = dta is not None and dta > 0
+        readable = bool(getattr(facts, "dta_readable", None))
+        if post_2024:
+            if evidence:
+                return "footnote_us_2025_expensed"
+            return "footnote_expensed" if readable else "rule_us_expensed"
+        if evidence:
+            return "footnote_capitalized"
+        if tcja:
+            return "rule_us_capitalized"
+        return "footnote_expensed" if readable else "rule_us_expensed"
+    if (_row_str(latest, "Reported Currency") or currency or "").strip().upper() == "USD":
+        return "rule_us_capitalized" if tcja else "rule_us_expensed"
+    return "rule_non_us_expensed"
+
+
+def _latest_currency(rows: list[sqlite3.Row]) -> Optional[str]:
+    """The newest non-null Reported Currency; rows ascending by fiscal year."""
+    return next((c for c in (_row_str(r, "Reported Currency") for r in reversed(rows)) if c), None)
 
 
 def _rnd_capitalization(
-    rows: list[sqlite3.Row], life: int = RND_DEFAULT_LIFE, materiality: float = RND_MATERIALITY
+    rows: list[sqlite3.Row], *, wacc: Optional[float] = None,
+    industry: Optional[str] = None, facts: Any = None,
 ) -> dict:
     """Capitalize R&D into a research asset (Damodaran Ch.9): add current R&D back
-    to operating income, subtract amortization of past R&D, and add the unamortized
-    research asset to invested capital — correcting EBIT, NOPAT and ROIC for R&D-
-    heavy firms. Only applied when R&D is material; otherwise returns an explanation."""
+    to operating income, subtract amortization of past R&D, and add the
+    unamortized research asset to invested capital, restating EBIT, NOPAT and
+    ROIC for R&D-heavy firms. Returns use the capital at the START of the year
+    (the book's convention): last year-end book equity plus debt, plus last
+    year-end's research asset on the adjusted side. Only applied when R&D is
+    material; otherwise returns the reason."""
     if not rows:
         return {"applicable": False, "reason": "No data."}
+    rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
     latest = rows[-1]
     rev = _row_val(latest, "Revenue")
     rd_now = _row_val(latest, "Research And Development Expenses")
+    ebit = _row_val(latest, "Operating Income")
     if rd_now is None or rd_now <= 0 or rev in (None, 0):
-        return {"applicable": False, "reason": "No R&D expense reported (or no revenue) — capitalization is not applicable."}
+        return {"applicable": False,
+                "reason": "No research and development expense (or no revenue) is reported."}
     intensity = rd_now / rev
-    if intensity < materiality:
+    rd_to_op = rd_now / ebit if ebit is not None and ebit > 0 else None
+    if intensity >= RND_MATERIALITY:
+        materiality = "revenue"
+    elif rd_to_op is not None and rd_to_op > RND_OPERATING_MATERIALITY:
+        materiality = "operatingProfit"
+    else:
         return {
             "applicable": False,
             "rdIntensity": round(intensity, 4),
-            "reason": f"R&D is {intensity:.1%} of revenue (< {materiality:.0%}); capitalization is immaterial — reported EBIT/ROIC are fine as-is.",
+            "rdToOperatingProfit": round(rd_to_op, 4) if rd_to_op is not None else None,
+            "reason": (f"Research and development is {intensity:.1%} of revenue, under "
+                       f"{RND_MATERIALITY:.0%}, and not more than {RND_OPERATING_MATERIALITY:.0%} "
+                       "of a positive operating profit, so treating it as an investment "
+                       "would barely move the reported figures."),
         }
 
-    rd_hist = [_row_val(r, "Research And Development Expenses") for r in rows]  # oldest→newest
-    n = len(rd_hist)
-    # Research asset = Σ over the last `life` years of the unamortized portion.
-    research_asset = 0.0
-    for i in range(0, life):
-        idx = n - 1 - i
-        if idx < 0:
-            break
-        v = rd_hist[idx]
-        if v is not None and v > 0:
-            research_asset += v * (life - i) / life
-    # Current-year amortization = Σ 1/life of each of the prior `life` years' R&D.
-    amort = 0.0
-    amort_years = 0
-    for i in range(1, life + 1):
-        idx = n - 1 - i
-        if idx < 0:
-            break
-        v = rd_hist[idx]
-        if v is not None and v > 0:
-            amort += v / life
-            amort_years += 1
+    year_t = int(latest["Calendar Year"])
+    prior = rows[-2] if len(rows) >= 2 and int(rows[-2]["Calendar Year"]) == year_t - 1 else None
+    if prior is None:
+        return {"applicable": False, "rdIntensity": round(intensity, 4),
+                "reason": ("The previous fiscal year is not on file, and returns are measured "
+                           "on the capital in place at the start of the year.")}
 
-    ebit = _row_val(latest, "Operating Income")
+    life, life_source, life_industry = _rnd_life(industry)
+    rd_by_year = {int(r["Calendar Year"]): _row_val(r, "Research And Development Expenses")
+                  for r in rows}
+    # Keyed by year, not row position: a missing year contributes nothing
+    # instead of shifting an older year into its slot.
+    rd_newest = [rd_by_year.get(year_t - k) for k in range(life + 1)]
+    asset_now = _research_asset(rd_newest, life)
+    asset_prior = _research_asset(rd_newest[1:], life)
+    amort = _research_amortization(rd_newest, life)
     tax = _effective_tax_rate(latest)
-    ic = _invested_capital(latest)
+    tax_method = _rnd_tax_method(latest, facts, _latest_currency(rows))
+    ic_prior = _invested_capital(prior)
+    s = _rnd_restate(rd_now=rd_now, amort=amort, ebit=ebit, tax=tax, capital=ic_prior,
+                     research_asset=asset_prior,
+                     tax_capitalized=tax_method in _RND_TAX_CAPITALIZED)
 
-    ebit_adj = (ebit + rd_now - amort) if ebit is not None else None
-    nopat_rep = ebit * (1.0 - tax) if ebit is not None else None
-    nopat_adj = ebit_adj * (1.0 - tax) if ebit_adj is not None else None
-    ic_adj = (ic + research_asset) if ic is not None else None
-    roic_rep = _safe_div(nopat_rep, ic)
-    roic_adj = _safe_div(nopat_adj, ic_adj)
+    def _r(v: Optional[float], nd: int = 2) -> Optional[float]:
+        return round(v, nd) if v is not None else None
 
+    spread = (lambda roic: _r(roic - wacc, 4) if roic is not None and wacc is not None else None)
     return {
         "applicable": True,
         "life": life,
-        "yearsOfHistoryUsed": amort_years + 1,
+        "lifeSource": life_source,
+        "lifeIndustry": life_industry,
+        "materiality": materiality,
+        "yearsOfHistoryUsed": sum(1 for v in rd_newest if v is not None and v > 0),
         "rdIntensity": round(intensity, 4),
+        "rdToOperatingProfit": _r(rd_to_op, 4),
         "currentRD": round(rd_now, 2),
-        "researchAsset": round(research_asset, 2),
+        "researchAsset": round(asset_now, 2),
+        "researchAssetPriorYear": round(asset_prior, 2),
         "amortizationThisYear": round(amort, 2),
-        "ebitReported": round(ebit, 2) if ebit is not None else None,
-        "ebitAdjusted": round(ebit_adj, 2) if ebit_adj is not None else None,
-        "nopatReported": round(nopat_rep, 2) if nopat_rep is not None else None,
-        "nopatAdjusted": round(nopat_adj, 2) if nopat_adj is not None else None,
-        "investedCapitalReported": round(ic, 2) if ic is not None else None,
-        "investedCapitalAdjusted": round(ic_adj, 2) if ic_adj is not None else None,
-        "roicReported": round(roic_rep, 4) if roic_rep is not None else None,
-        "roicAdjusted": round(roic_adj, 4) if roic_adj is not None else None,
+        "ebitReported": _r(ebit),
+        "ebitAdjusted": _r(s["ebitAdjusted"]),
+        "nopatReported": _r(s["nopatReported"]),
+        "nopatAdjusted": _r(s["nopatAdjusted"]),
+        "capitalBasis": "beginning_of_year",
+        "investedCapitalReported": _r(ic_prior),
+        "investedCapitalAdjusted": _r(s["capitalAdjusted"]),
+        "roicReported": _r(s["roicReported"], 4),
+        "roicAdjusted": _r(s["roicAdjusted"], 4),
+        "wacc": _r(wacc, 4),
+        "roicMinusWaccReported": spread(s["roicReported"]),
+        "roicMinusWaccAdjusted": spread(s["roicAdjusted"]),
+        "taxMethod": tax_method,
+        "taxFiscalYear": year_t,
+        "taxRate": round(tax, 4) + 0.0,  # + 0.0 turns a -0.0 into 0.0
         "note": (
-            f"R&D capitalized over a {life}-year life (Damodaran, Ch.9). R&D is expensed under "
-            "GAAP, which understates EBIT and invested capital for research-intensive firms; "
-            "capitalizing it restates true operating profitability and ROIC. Life is a default "
-            "assumption — lengthen for pharma/long-cycle R&D, shorten for fast-moving software."
+            f"Research spending is treated as an investment written off over {life} years. "
+            "Returns use the capital in place at the start of the year."
         ),
     }
 
@@ -5534,11 +5703,87 @@ def _capital_base(row: sqlite3.Row, wacc: Optional[float]) -> dict:
 _MAINT_CAPEX_FLOOR_OF_DDA = 0.25  # below this share of D&A the Greenwald estimate is not credible
 
 
-def _maintenance_capex(rows: list[sqlite3.Row], i: int) -> tuple[Optional[float], str]:
+def _us_inflation_by_year() -> dict[int, float]:
+    """US CPI calendar-year inflation from ``market_data.db``, as decimals. The
+    marketdata scheduler stores the series; this only reads it, over a
+    read-only connection, so a page load never writes to that file. Empty when
+    the file or the series is missing, and every revenue change is then nominal."""
+    try:
+        from marketdata import MARKET_DB_PATH
+        from marketdata.fred_client import annual_inflation, read_series
+        if not MARKET_DB_PATH.exists():
+            return {}
+        conn = sqlite3.connect(f"file:{MARKET_DB_PATH.as_posix()}?mode=ro", uri=True)
+        try:
+            return annual_inflation(read_series(conn, "CPIAUCSL"))
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — inflation is an adjustment, never a blocker
+        log.warning("CPI inflation unavailable: %s", exc)
+        return {}
+
+
+def _cpi_year(row: sqlite3.Row) -> int:
+    """The calendar year holding most of the row's fiscal year, which keys the
+    CPI table: Walmart's fiscal year ending January 2025 is labelled 2025 but
+    earned its revenue in 2024. Falls back to the Calendar Year label."""
+    try:
+        end = _dt.date.fromisoformat(str(row["Date"])[:10])
+    except (IndexError, KeyError, TypeError, ValueError):
+        return int(row["Calendar Year"])
+    return (end - _dt.timedelta(days=182)).year
+
+
+def _acquired_revenue(rows: list[sqlite3.Row], i: int) -> Optional[float]:
+    """Revenue bought through acquisitions in the year at index i, estimated as
+    the cash spent on them divided by the firm's own EV/Sales at the prior year
+    end. Acquisition prices buy mostly goodwill and intangibles, so adding them
+    to capex would inflate upkeep; stripping the revenue they bought instead
+    keeps the revenue change organic, the only part plant has to support.
+    None when nothing was spent or no positive EV/Sales is on file."""
+    spent = _row_val(rows[i], "Acquisitions Net")
+    if spent is None or spent >= 0:
+        return None
+    year_i = _row_val(rows[i], "Calendar Year")
+
+    def _ev_sales(r: sqlite3.Row) -> Optional[float]:
+        mc = _row_val(r, "Market Cap")
+        rev = _row_val(r, "Revenue")
+        if mc is None or rev is None or rev <= 0:
+            return None
+        ev = mc + (_row_val(r, "Total Debt") or 0.0) - (_row_val(r, "Cash And Cash Equivalents") or 0.0)
+        return ev / rev if ev > 0 else None
+
+    # Prior year end first, then the newest earlier year in the same five
+    # calendar-year window the PP&E ratio uses.
+    for r in reversed(rows[max(0, i - 5):i]):
+        year = _row_val(r, "Calendar Year")
+        if year_i is not None and (year is None or not (0 < year_i - year <= 5)):
+            continue
+        evs = _ev_sales(r)
+        if evs is not None:
+            return -spent / evs
+    return None
+
+
+def _maintenance_capex_detail(
+    rows: list[sqlite3.Row], i: int, inflation: Optional[dict[int, float]] = None
+) -> dict:
     """Maintenance capital spending for the row at index i, Greenwald's method:
     the share of capex that supported this year's revenue growth is stripped out
     at the firm's own average PP&E-to-sales ratio, and what remains is upkeep.
     Falls back to depreciation and amortization when there is no prior year.
+
+    The revenue change is organic and real: revenue bought through acquisitions
+    comes off first (see _acquired_revenue), capped at the nominal revenue
+    change because a deal cannot add more revenue than the firm gained (a
+    pre-revenue target, or a price far above EV/Sales), and for a USD reporter
+    last year's revenue is grown by US CPI before the change is taken, because
+    a price rise needs no new capacity. The CPI year is the calendar year
+    holding most of the fiscal year (a January year end takes the year before).
+    A NULL currency on the row falls back to the newest non-null one; with none
+    at all it is unknown and gets no adjustment, and neither does a year with no
+    CPI figure.
 
     The ratio uses NET property, plant and equipment because the warehouse has no
     gross PP&E column. Net PP&E is smaller than gross, so the ratio understates
@@ -5554,6 +5799,11 @@ def _maintenance_capex(rows: list[sqlite3.Row], i: int) -> tuple[Optional[float]
     """
     capex = _row_val(rows[i], "Capital Expenditure")
     dda = _row_val(rows[i], "Depreciation And Amortization")
+    out: dict[str, Any] = {
+        "ratio": None, "revenueChangeNominal": None, "revenueChange": None,
+        "inflation": None, "acquiredRevenue": None, "growth": None,
+        "upkeep": None, "dda": dda, "capex": capex, "method": "unavailable",
+    }
     rev_i = _row_val(rows[i], "Revenue")
     year_i = _row_val(rows[i], "Calendar Year")
     rev_prev = _row_val(rows[i - 1], "Revenue") if i > 0 else None
@@ -5580,13 +5830,28 @@ def _maintenance_capex(rows: list[sqlite3.Row], i: int) -> tuple[Optional[float]
             continue
         ratios.append(ppe / rev)
     ratio = (sum(ratios) / len(ratios)) if ratios else None
+    out["ratio"] = ratio
 
-    if capex is None or rev_i is None or rev_prev is None or ratio is None or not consecutive:
+    if rev_i is not None and rev_prev is not None and consecutive:
+        pi = None
+        ccy = _row_str(rows[i], "Reported Currency") or _latest_currency(rows)
+        if inflation and (ccy or "").strip().upper() == "USD":
+            pi = inflation.get(_cpi_year(rows[i]))
+        acquired = _acquired_revenue(rows, i)
+        if acquired is not None:
+            acquired = min(acquired, max(0.0, rev_i - rev_prev))
+        out["revenueChangeNominal"] = rev_i - rev_prev
+        out["inflation"] = pi
+        out["acquiredRevenue"] = acquired
+        out["revenueChange"] = rev_i - (acquired or 0.0) - rev_prev * (1.0 + (pi or 0.0))
+
+    if capex is None or out["revenueChange"] is None or ratio is None:
         if dda is not None:
-            return dda, "dda_proxy_insufficient"
-        return None, "unavailable"
+            out.update(upkeep=dda, method="dda_proxy_insufficient")
+        return out
 
-    growth_capex_est = max(0.0, ratio * (rev_i - rev_prev))
+    growth_capex_est = max(0.0, ratio * out["revenueChange"])
+    out["growth"] = growth_capex_est
     maint = min(max(abs(capex) - growth_capex_est, 0.0), abs(capex))
     # A fast grower can push the estimate to nearly zero, which would charge no
     # upkeep at all. Below a quarter of D&A the estimate is not credible, so the
@@ -5604,11 +5869,21 @@ def _maintenance_capex(rows: list[sqlite3.Row], i: int) -> tuple[Optional[float]
         and dda > 0
         and maint < _MAINT_CAPEX_FLOOR_OF_DDA * dda
     ):
-        return dda, "dda_proxy_floor"
-    return maint, "greenwald"
+        out.update(upkeep=dda, method="dda_proxy_floor")
+        return out
+    out.update(upkeep=maint, method="greenwald")
+    return out
 
 
-def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
+def _maintenance_capex(
+    rows: list[sqlite3.Row], i: int, inflation: Optional[dict[int, float]] = None
+) -> tuple[Optional[float], str]:
+    """(upkeep, method) for the row at index i. See _maintenance_capex_detail."""
+    d = _maintenance_capex_detail(rows, i, inflation)
+    return d["upkeep"], d["method"]
+
+
+def _owner_earnings(rows: list[sqlite3.Row], inflation: Optional[dict[int, float]] = None) -> dict:
     """Owner earnings (Buffett, 1986 letter): reported earnings plus depreciation
     and amortization, minus maintenance capital spending and any working capital
     the business had to absorb. Maintenance capex is estimated with Greenwald's
@@ -5625,7 +5900,7 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
         return {"applicable": False,
                 "reason": "Net income or depreciation and amortization is unavailable."}
 
-    maint_capex, maint_method = _maintenance_capex(rows, len(rows) - 1)
+    maint_capex, maint_method = _maintenance_capex(rows, len(rows) - 1, inflation)
     if maint_capex is None:
         return {"applicable": False,
                 "reason": "Maintenance capital spending cannot be estimated."}
@@ -5660,7 +5935,7 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
         wc_y = _row_val(r, "Change In Working Capital")
         if ni_y is None or dda_y is None:
             continue
-        maint_y, _ = _maintenance_capex(rows, idx)
+        maint_y, _ = _maintenance_capex(rows, idx, inflation)
         if maint_y is None:
             continue
         history.append({"year": int(r["Calendar Year"]),
@@ -5681,10 +5956,13 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
         "lookThroughFlag": lookthrough_flag,
         "history": history,
         "assumption": (
-            "Maintenance capital spending is estimated with Greenwald's method. "
+            "Maintenance capital spending is estimated from capital intensity. "
             "It takes capital spending for the year and removes the spending "
             "needed to support this year's revenue growth, sized at the firm's "
-            "average ratio of net property, plant and equipment to sales. What "
+            "average ratio of net property, plant and equipment to sales. The "
+            "growth counted leaves out revenue bought through acquisitions and, "
+            "for a company reporting in US dollars, the part that is only US "
+            "consumer price inflation. What "
             "is left is the cost of standing still, so spending beyond it counts "
             "as growth. Depreciation and amortization is the fallback when the "
             "history is too short to measure that ratio, or when a fiscal year "
@@ -5698,6 +5976,82 @@ def _owner_earnings(rows: list[sqlite3.Row]) -> dict:
             "cost of upkeep, and free cash flow charges growth spending against "
             "today. Owner earnings sit between the two."
         ),
+    }
+
+
+CAPEX_SPLIT_YEARS = 5
+CAPITAL_LIGHT_PPE_TO_REVENUE = 0.05   # net PP&E under this share of revenue
+
+
+def _capex_split(rows: list[sqlite3.Row], inflation: Optional[dict[int, float]] = None) -> dict:
+    """Capital spending split into upkeep and growth for the last five fiscal
+    years, oldest to newest, plus their average. Every year comes from
+    _maintenance_capex_detail, the same call owner earnings makes, so the two
+    blocks can never disagree on upkeep. Growth spending is what capital
+    spending exceeds upkeep by, never negative, the same definition as owner
+    earnings' growth capex. Upkeep minus depreciation is how far reported
+    profit overstates what the business earns after keeping its plant whole."""
+    rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
+    if len(rows) < 2:
+        return {"applicable": False,
+                "reason": "Needs at least two fiscal years to measure a revenue change."}
+    latest = rows[-1]
+    ok, _ = fcff_applicable(latest)
+    if not ok:
+        return {"applicable": False,
+                "reason": ("A bank's or insurer's assets are loans and securities, not plant "
+                           "and equipment, and a property trust is valued on its funds from "
+                           "operations, so a capital spending split does not apply.")}
+
+    def _r(v: Optional[float], nd: int = 2) -> Optional[float]:
+        return round(v, nd) if v is not None else None
+
+    years: list[dict] = []
+    for i in range(max(0, len(rows) - CAPEX_SPLIT_YEARS), len(rows)):
+        d = _maintenance_capex_detail(rows, i, inflation)
+        spend = abs(d["capex"]) if d["capex"] is not None else None
+        upkeep, dep = d["upkeep"], d["dda"]
+        years.append({
+            "year": int(rows[i]["Calendar Year"]),
+            "capitalSpending": _r(spend),
+            # The ratio only counts as used when the estimate was built from it.
+            "ppeToSales": _r(d["ratio"], 4) if d["method"] in ("greenwald", "dda_proxy_floor") else None,
+            "revenueChange": _r(d["revenueChange"]),
+            "revenueChangeNominal": _r(d["revenueChangeNominal"]),
+            "inflation": _r(d["inflation"], 4),
+            "acquiredRevenue": _r(d["acquiredRevenue"]),
+            "growthSpending": _r(max(spend - upkeep, 0.0)) if spend is not None and upkeep is not None else None,
+            "upkeepSpending": _r(upkeep),
+            "depreciation": _r(dep),
+            "upkeepToDepreciation": _r(_safe_div(upkeep, dep), 4) if dep and dep > 0 else None,
+            "profitOverstatement": _r(upkeep - dep) if upkeep is not None and dep is not None else None,
+            "method": d["method"],
+        })
+
+    def _mean(key: str) -> Optional[float]:
+        vals = [y[key] for y in years if y[key] is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    average: dict[str, Optional[float]] = {
+        k: _r(_mean(k)) for k in ("capitalSpending", "revenueChange", "growthSpending",
+                                  "upkeepSpending", "depreciation", "profitOverstatement")
+    }
+    average["ppeToSales"] = _r(_mean("ppeToSales"), 4)
+    mean_up, mean_dep = _mean("upkeepSpending"), _mean("depreciation")
+    average["upkeepToDepreciation"] = (_r(mean_up / mean_dep, 4)
+                                       if mean_up is not None and mean_dep else None)
+
+    ppe_rev = _safe_div(_row_val(latest, "Property Plant Equipment Net"), _row_val(latest, "Revenue"))
+    currency = _latest_currency(rows)
+    return {
+        "applicable": True,
+        "currency": currency,
+        "inflationAdjusted": any(y["inflation"] is not None for y in years),
+        "acquisitionsAdjusted": any((y["acquiredRevenue"] or 0) > 0 for y in years),
+        "capitalLight": ppe_rev is not None and ppe_rev < CAPITAL_LIGHT_PPE_TO_REVENUE,
+        "ppeToRevenueLatest": _r(ppe_rev, 4),
+        "years": years,
+        "average": average,
     }
 
 
@@ -5991,7 +6345,11 @@ def build_individual_snapshot(
         log.warning("bank profitability failed for %s: %s", ticker.upper(), exc)
         bank_profitability = None
     try:
-        rnd_adjusted = _rnd_capitalization(rows)
+        # Runs after the forecast (WACC) and the 10-K facts (tax footnote).
+        _wb = forecast.get("waccBuild") if isinstance(forecast, dict) else None
+        rnd_adjusted = _rnd_capitalization(
+            rows, wacc=_wb.get("wacc") if isinstance(_wb, dict) else None,
+            industry=_row_str(latest, "t_industry"), facts=xbrl_facts)
     except Exception as exc:  # noqa: BLE001
         log.warning("rnd capitalization failed for %s: %s", ticker.upper(), exc)
         rnd_adjusted = None
@@ -6040,11 +6398,19 @@ def build_individual_snapshot(
     except Exception as exc:  # noqa: BLE001
         log.warning("tobins q failed for %s: %s", ticker.upper(), exc)
         tobins_q = None
+    # One CPI read per snapshot, shared by owner earnings and the capex split so
+    # both use the same upkeep figure.
+    inflation = _us_inflation_by_year()
     try:
-        owner_earnings = _owner_earnings(rows)
+        owner_earnings = _owner_earnings(rows, inflation)
     except Exception as exc:  # noqa: BLE001
         log.warning("owner earnings failed for %s: %s", ticker.upper(), exc)
         owner_earnings = None
+    try:
+        capex_split = _capex_split(rows, inflation)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("capex split failed for %s: %s", ticker.upper(), exc)
+        capex_split = None
     esg = None
     if db is not None and _esg_data is not None:
         try:
@@ -6175,6 +6541,23 @@ def build_individual_snapshot(
         log.warning("moat direction failed for %s: %s", ticker.upper(), exc)
         moat_direction = None
 
+    # Next two years: the model's first two projected years beside the last
+    # reported year, Yahoo's revenue and EPS consensus, and the reader's own.
+    # Only the annual estimates are used here; the consensus forward P/E from
+    # the same round-trip is not shown on this page.
+    estimates = None
+    if db is not None:
+        try:
+            estimates = db.get_forward(ticker).get("estimates")
+        except Exception as exc:  # noqa: BLE001 — a network call must not break the snapshot
+            log.warning("forward estimates fetch failed for %s: %s", ticker.upper(), exc)
+    try:
+        from next_two_years import build_next_two_years
+        next_two_years = build_next_two_years(rows, forecast, estimates)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("next two years failed for %s: %s", ticker.upper(), exc)
+        next_two_years = None
+
     net_income_growth_latest = horizontal_income["Net Income"].get(years[-1])
     strengths, weaknesses, quality_score, verdict = _build_verdict({
         "ratios": ratios,
@@ -6229,6 +6612,7 @@ def build_individual_snapshot(
         epv=epv,
         tobins_q=tobins_q,
         owner_earnings=owner_earnings,
+        capex_split=capex_split,
         capital_base=capital_base,
         dupont=dupont,
         leverage_roe=leverage_roe,
@@ -6237,6 +6621,7 @@ def build_individual_snapshot(
         cost_structure=cost_structure,
         generic_strategy=generic_strategy,
         moat_direction=moat_direction,
+        next_two_years=next_two_years,
         strengths=strengths,
         weaknesses=weaknesses,
         verdict=verdict,

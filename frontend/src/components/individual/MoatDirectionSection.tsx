@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import type { MoatDirection } from "../../lib/types";
+import type { MoatDirection, RndAdjusted } from "../../lib/types";
 import { formatMetricValue } from "../../lib/metricFormat";
 import { buildMoatDirectionDeck } from "../../lib/moatDirectionDeck";
 import { QUALITATIVE_QUESTIONS } from "../../lib/questions";
@@ -13,6 +13,7 @@ interface MoatDirectionSectionProps {
   data: MoatDirection;
   ticker: string;
   companyName: string;
+  rndAdjusted?: RndAdjusted | null;
 }
 
 const SPREAD_DEF_NUMBER = 44; // ROIC − WACC Spread
@@ -30,7 +31,7 @@ const POWERS_GROUP = QUALITATIVE_QUESTIONS.individual.find((g) => g.title === "T
  * company can fund on its own money. Figures only: the reader decides what they
  * mean in the deck below, with their own 7 Powers answers in view.
  */
-export function MoatDirectionSection({ data: d, ticker, companyName }: MoatDirectionSectionProps) {
+export function MoatDirectionSection({ data: d, ticker, companyName, rndAdjusted }: MoatDirectionSectionProps) {
   const answers = useQuery(api.qualitative.getAnswersForScope, { section: "individual", scopeKey: ticker });
   const powers = useMemo(() => {
     const byId = new Map((answers ?? []).map((a) => [a.questionId, a.answer]));
@@ -39,6 +40,9 @@ export function MoatDirectionSection({ data: d, ticker, companyName }: MoatDirec
       .filter((p) => p.answer.trim() !== "");
   }, [answers]);
 
+  const rdSpread =
+    rndAdjusted?.applicable && rndAdjusted.roicMinusWaccAdjusted != null ? rndAdjusted.roicMinusWaccAdjusted : null;
+
   const deck = useMemo(
     () =>
       buildMoatDirectionDeck({
@@ -46,10 +50,11 @@ export function MoatDirectionSection({ data: d, ticker, companyName }: MoatDirec
         dataContext: JSON.stringify({
           company: companyName,
           moatDirection: d,
+          rndAdjustedSpreadToday: rdSpread,
           sevenPowersAnswers: powers.map((p) => ({ question: p.question, answer: p.answer })),
         }),
       }),
-    [companyName, d, powers],
+    [companyName, d, rdSpread, powers],
   );
 
   const s = d.spread;
@@ -101,6 +106,9 @@ export function MoatDirectionSection({ data: d, ticker, companyName }: MoatDirec
               <p className="text-xs text-white/55 leading-relaxed pt-1">
                 At this pace the spread reaches zero in about {s.yearsToZeroAtThisPace.toFixed(1)} years.
               </p>
+            )}
+            {rdSpread != null && (
+              <Figure label="ROIC − WACC today, research treated as an investment" metric="ROIC − WACC Spread" value={signed(rdSpread)} tone={rdSpread} />
             )}
             {d.incrementalRoic?.value != null && (
               <Figure
