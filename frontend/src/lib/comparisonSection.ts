@@ -356,6 +356,7 @@ function num(v: number | null | undefined, unit: string): string {
   if (!finite(v)) return "n/a";
   const s = Math.abs(v).toFixed(2);
   const sign = v < 0 ? "-" : "";
+  if (unit === "pts") return `${sign}${s} pts`;
   return unit === "%" ? `${sign}${s}%` : `${sign}${s}x`;
 }
 
@@ -389,7 +390,7 @@ export function comparisonContext(
       const m = p.metrics![k];
       const u = m.unit === "%" ? "%" : "x";
       lines.push(
-        `${flagged.includes(k) ? "[ASKED] " : ""}${m.label} | ${num(m.company, u)} | ${num(m.industryMedian, u)} | ${num(m.groupMedian, u)} | ${num(m.gapIndustry, u)} | ${num(m.gapGroup, u)} | ${m.rank ?? "n/a"} of ${m.count ?? "n/a"}`,
+        `${flagged.includes(k) ? "[ASKED] " : ""}${m.label} | ${num(m.company, u)} | ${num(m.industryMedian, u)} | ${num(m.groupMedian, u)} | ${num(m.gapIndustry, u === "%" ? "pts" : u)} | ${num(m.gapGroup, u === "%" ? "pts" : u)} | ${m.rank ?? "n/a"} of ${m.count ?? "n/a"}`,
       );
     }
   }
