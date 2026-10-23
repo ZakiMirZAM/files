@@ -62,7 +62,14 @@ export type IndividualSectionKey =
   // The multi-stage intrinsic-valuation engine (model selection, stage counts,
   // per-track fundamental growth, stable-phase discipline, H model). Follows
   // the other post-599 bands into the 800s.
-  | "intrinsicModels"; // 870-889 -> ForecastSection / StageToggle / EquityModelsSection
+  | "intrinsicModels" // 870-889 -> ForecastSection / StageToggle / EquityModelsSection
+  // Story-to-value definitions (story section overview, total market, target
+  // margin, stable growth, chance the story ends). Follows the other post-599
+  // bands into the 800s; 889 was the only free slot in the 870s.
+  | "storyValuation" // 890-899 -> StorySection + ForecastSection story mode
+  // P/E vs growth and returns, and justified EV/NOPAT. 890-899 is held by the
+  // story-DCF branch, so this band starts at 910.
+  | "peGrowth"; // 910-919 -> PeGrowthSection + the EV/NOPAT card in EVAValuationSection
 
 /** Inclusive number ranges per section, the ONE place ranges are defined. */
 const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, number]> = [
@@ -115,6 +122,9 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   ["capitalAllocation", 800, 849],
   ["leverageRoe", 850, 869],
   ["intrinsicModels", 870, 889],
+  // Story-to-value definitions (see the note on IndividualSectionKey above).
+  ["storyValuation", 890, 899],
+  ["peGrowth", 910, 919],
 ];
 
 /** Per-number exceptions; takes precedence over SECTION_RANGES. */
@@ -134,6 +144,8 @@ const TITLE_OVERRIDES: Partial<Record<number, string>> = {
   76: "R&D Capitalization",
   195: "Tobin's Q",
   508: "Intrinsic Value per Share",
+  910: "P/E vs Growth and Returns",
+  911: "Justified EV / NOPAT",
   523: "Efficiency Growth (Changing ROIC)",
   510: "EV / EBITDA Exit Cross-Check per Share",
   511: "P / FCF Exit Cross-Check per Share",
@@ -211,6 +223,8 @@ const normLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 /** UI labels that differ from the definition titles/filenames. */
 const LABEL_ALIASES: Array<[string, number]> = [
+  // The EV/NOPAT card in the EVA section
+  ["Actual EV / NOPAT", 911], ["Actual ÷ justified", 911],
   // Ratios panel shorthand
   ["ROE", 2], ["ROIC", 3], ["ROA", 4], ["ROS", 5],
   ["Debt service cov", 10], ["Interest cov", 11],
@@ -224,7 +238,9 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["Cash / Share", 31], ["Tangible BV / Share", 32], ["Equity / Share", 33],
   ["Capex / Share", 34], ["Interest Debt / Share", 35],
   // Trends-grid labels that differ from titles
-  ["Net Margin", 5], ["Operating Margin", 39], ["Equity Multiplier", 40],
+  // Net Margin is Net Income / Revenue: comparative #204 Net Income Ratio, not
+  // #5 Return On Sales (Operating Income / Revenue).
+  ["Net Margin", 204], ["Operating Margin", 39], ["Equity Multiplier", 40],
   ["Sales / Invested Capital", 45], ["Capex / Depreciation", 46],
   ["FCF / Net Income", 49], ["Operating Leverage", 50],
   ["Liabilities / Equity", 51], ["Net Debt / OCF", 52],
@@ -307,6 +323,10 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["Goodwill & Stock Comp", 536], ["Goodwill / assets", 536],
   ["SBC / operating cash flow", 535],
   ["Securities held aside", 112],
+  // Story valuation table + FCFF tiles. Labels whose normalized form misses
+  // the covering definition's filename stem.
+  ["Tax rate (effective)", 852], ["Cost of capital", 183],
+  ["Return on capital after growth ends", 880],
 ];
 
 const LABEL_TO_NUMBER: Map<string, number> = (() => {

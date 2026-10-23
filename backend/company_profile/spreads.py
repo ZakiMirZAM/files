@@ -127,3 +127,64 @@ def build_spread_table(
             "metrics marked % are already multiplied by 100."
         ),
     }
+
+
+# A year's median needs at least this many firms reporting that year; below it
+# the median is null rather than, say, the company's own value (one filer).
+MIN_HISTORY_REPORTERS = 3
+
+
+def build_spread_history(
+    ticker: str,
+    peer_history: dict[str, dict[str, dict[int, float]]],
+    group_members: set[str],
+    *,
+    max_years: int = 5,
+) -> dict[str, list[dict[str, Any]]]:
+    """Per metric, the company's value and the industry and group medians for
+    each of the company's last ``max_years`` reported years.
+
+    ``peer_history`` is ``{ticker: {metric_key: {year: display_value}}}`` for
+    every firm in the ranked set, INCLUDING the company. The medians are the
+    same true medians ``build_spread_table`` takes, applied to one year at a
+    time over whichever firms reported that year, with how many did. A median
+    over fewer than ``MIN_HISTORY_REPORTERS`` firms is null. Nothing is rescaled.
+    """
+    ticker = ticker.upper()
+    peer_history = {t.upper(): h for t, h in peer_history.items()}
+    group_members = {t.upper() for t in group_members}
+    company = peer_history.get(ticker, {})
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key in sorted(company):
+        years = sorted(company[key])[-max_years:]
+        rows = []
+        for y in years:
+            industry_vals = [
+                v for v in (h.get(key, {}).get(y) for h in peer_history.values())
+                if safe_float(v) is not None
+            ]
+            group_vals = [
+                v for v in (
+                    peer_history[t].get(key, {}).get(y)
+                    for t in group_members if t in peer_history
+                )
+                if safe_float(v) is not None
+            ]
+            rows.append({
+                "year": y,
+                "company": r6(safe_float(company[key].get(y))),
+                "industryMedian": (
+                    r6(median_of(industry_vals))
+                    if len(industry_vals) >= MIN_HISTORY_REPORTERS else None
+                ),
+                "groupMedian": (
+                    r6(median_of(group_vals))
+                    if len(group_vals) >= MIN_HISTORY_REPORTERS else None
+                ),
+                "industryCount": len(industry_vals),
+                "groupCount": len(group_vals),
+            })
+        if rows:
+            out[key] = rows
+    return out

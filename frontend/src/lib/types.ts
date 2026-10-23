@@ -4,6 +4,10 @@ export interface QualitativeQuestion {
   id: string;
   text: string;
   hint?: string;
+  /** Numbered steps shown under "Work it out in steps:" and sent to the tutor. */
+  steps?: string[];
+  /** The closing teaching sentence after the steps. */
+  close?: string;
 }
 
 export interface QualitativeGroup {
@@ -236,6 +240,9 @@ export interface ForecastAssumptions {
   dilutedShares: number | null;
   exitPfcfMultiple: number | null;
   evEbitdaMultiple?: number | null;
+  /** Set on a story forecast (POST story-dcf) only. */
+  salesToCapital?: number | null;
+  stableRoic?: number | null;
 }
 
 export interface ForecastRow {
@@ -287,6 +294,20 @@ export interface EvaValuation {
   firmValue: number;
   equityValue: number;
   intrinsicPerShare: number | null;
+  /** Actual EV/NOPAT against the multiple ROIC, WACC and g justify. */
+  evNopat?: EvNopat | null;
+}
+
+/** Mirrors individualanalysis._ev_nopat. Multiples are times, rates decimals. */
+export interface EvNopat {
+  enterpriseValue: number | null;
+  nopat: number | null;
+  actual: number | null;
+  justified: number | null;
+  actualToJustified: number | null;
+  roic: number | null;
+  wacc: number | null;
+  growth: number | null;
 }
 
 export interface BetaProvenanceComponent {
@@ -429,6 +450,64 @@ export interface IndividualForecast {
   betaOneIntrinsicPerShare?: number | null;
   eva?: EvaValuation | null;
   sensitivity: ForecastSensitivity;
+}
+
+// ── Story-based DCF (POST /api/individual/{t}/story-dcf, GET .../story-context) ──
+
+export type StoryInputName =
+  | "totalMarket"
+  | "marketGrowth10y"
+  | "shareYear10"
+  | "targetMargin"
+  | "salesToCapital"
+  | "failureProbability"
+  | "distressProceeds"
+  | "stableRoic"
+  | "stages";
+
+/** The story-dcf request body: null keeps the model's number (and, for `stages`, runs 3). */
+export type StoryDcfInputs = Record<StoryInputName, number | null>;
+
+export interface StoryInputCheck {
+  status: "applied" | "kept";
+  /** The site rule that kept the model's number, when status is "kept". */
+  rule: string | null;
+}
+
+/** The valuation's stage count: 1, 2 or 3. */
+export type StoryStageCount = 1 | 2 | 3;
+
+export interface StoryChecks {
+  /** Every input but `stages`, whose story and used counts are in `stages`. */
+  inputs: Partial<Record<StoryInputName, StoryInputCheck>>;
+  revenueGrowth: { story: number | null; model: number; used: number };
+  stages: { story: StoryStageCount | null; used: StoryStageCount };
+  marketYear10: number | null;
+  revenueYear10: number;
+  impliedShareYear10: number | null;
+  stableGrowth: number;
+  riskFreeRate: number;
+  ironTriangleReturn: number | null;
+  wacc: number;
+  valueIfStoryWorksPerShare: number;
+  failureProbability: number;
+  distressPerShare: number;
+  failureAdjustedPerShare: number;
+}
+
+export type StoryForecast = IndividualForecast & { storyChecks: StoryChecks };
+
+export type StoryDcfResult = StoryForecast | { applicable: false; reason: string };
+
+/** The factual bundle the story conversion reads. Only the fields the page
+ *  uses are typed; the rest is passed through untouched. */
+export interface StoryContext {
+  applicable: boolean;
+  reason?: string;
+  companyName?: string;
+  currency?: string | null;
+  dataBlock?: string;
+  [key: string]: unknown;
 }
 
 // Metadata for a fundamental display metric (from the backend registry).
@@ -907,6 +986,113 @@ export interface ReverseDcf {
   note?: string;
 }
 
+// ── Reverse breakeven: what each driver must be for value to equal price ──────
+// GET /api/individual/{ticker}/reverse-dcf. Rates are decimals; per-share values
+// are in the price's currency.
+
+export type BreakevenDriverName = "revenueGrowth" | "targetMargin" | "stableRoic" | "salesToCapital";
+export type BreakevenStatus = "solved" | "above_range" | "below_range";
+
+export interface BreakevenDriver {
+  driver: BreakevenDriverName;
+  model: number | null;
+  /** Makes value per share equal the price. Null unless status is "solved". */
+  implied: number | null;
+  low: number;
+  high: number;
+  /** Null only when no value in the range could be computed at all. */
+  status: BreakevenStatus | null;
+  /** Unsolved only: the value per share nearest the price over the range (the highest
+   *  when above_range, the lowest when below_range) and the driver value giving it. */
+  bestValue: number | null;
+  bestAt: number | null;
+  firm: number | null;
+  firmBasis: "fiveYearMedian" | "latest";
+  peerMedian: number | null;
+  peerTopDecile: number | null;
+  /** The driver value the valuation below runs at: implied when solved, else the
+   *  end of the range nearest the price. Null when status is null. */
+  valuationAt: number | null;
+  valuation: DcfBreakdown | null;
+}
+
+/** One engine run laid out from the projection to the value per share. Money in the
+ *  reporting currency, per-share in the price's currency, rates as decimals. */
+export interface DcfBreakdown {
+  rows: Array<{
+    year: number;
+    revenue: number;
+    operatingMargin: number;
+    ebitAfterTax: number;
+    reinvestment: number;
+    fcff: number;
+    discountFactor: number;
+    pvFcff: number;
+  }>;
+  stableGrowth: number;
+  stableReturn: number | null;
+  costOfCapital: number;
+  terminal: {
+    ebitAfterTaxNext: number;
+    reinvestmentRate: number | null;
+    fcffNext: number;
+    waccMinusGrowth: number;
+    value: number;
+  };
+  pvTerminal: number;
+  pvExplicit: number;
+  enterpriseValue: number;
+  cash: number;
+  grossDebt: number;
+  minorityInterest: number;
+  equityValue: number;
+  dilutedShares: number;
+  valuePerShare: number;
+  /** valuePerShare - priceUsed; negative is a shortfall. */
+  gapToPrice: number;
+}
+
+export interface BreakevenCell {
+  value: number | null;
+  atOrAbovePrice: boolean;
+}
+
+export interface BreakevenGrid {
+  rowDriver: BreakevenDriverName;
+  colDriver: BreakevenDriverName;
+  rowAxis: number[];
+  /** Ascending and unrounded; the model's own number sits at rowModelIndex / colModelIndex. */
+  colAxis: number[];
+  rowModelIndex: 0 | 6;
+  colModelIndex: 0 | 6;
+  /** cells[rowIndex][colIndex]; cells[rowModelIndex][colModelIndex] is the model's numbers. */
+  cells: BreakevenCell[][];
+  /** True when any cell is at or above the price. */
+  reachesPrice: boolean;
+}
+
+export interface ReverseBreakevenApplicable {
+  applicable: true;
+  priceUsed: number;
+  valueAtModel: number | null;
+  /** The model's own run, for the side-by-side with a driver's run. */
+  modelValuation: DcfBreakdown | null;
+  wacc: number | null;
+  stableGrowth: number | null;
+  drivers: BreakevenDriver[];
+  grids: { growthMargin: BreakevenGrid; growthRoic: BreakevenGrid };
+  plausibility: {
+    impliedRevenueYear10: number | null;
+    peerTotalRevenue: number | null;
+    impliedShareOfPeerRevenue: number | null;
+    impliedStableRoic: number | null;
+    currentRoic: number | null;
+    wacc: number | null;
+  };
+}
+
+export type ReverseBreakeven = ReverseBreakevenApplicable | { applicable: false; reason: string };
+
 // ── EPV / Tobin's Q / owner earnings (value lenses beside the DCF) ────────────
 
 export interface EpvBlock {
@@ -1147,6 +1333,82 @@ export interface IndividualAnalysis {
   moatDirection?: MoatDirection | null;
   capexSplit?: CapexSplitBlock | null;
   nextTwoYears?: NextTwoYearsBlock | null;
+  peGrowth?: PeGrowth | null;
+}
+
+// ── P/E vs growth and returns ─────────────────────────────────────────────
+// Mirrors individualanalysis._pe_growth. Rates are decimals (0.05 = 5%),
+// multiples are times. A null is "not meaningful here", never a zero.
+
+/** A solver that can fall off either end: a value, or the side it misses on. */
+export type SolverBound = "above" | "below" | null;
+
+export interface PeGrowthScenario {
+  case: "bear" | "base" | "bull";
+  source: "historical" | "sustainable" | "consensus";
+  growth: number;
+  fairPe: number | null;
+  actualToFairPe: number | null;
+}
+
+export interface PeGrowthPeer {
+  ticker: string;
+  name: string;
+  isSubject: boolean;
+  pe: number;
+  fairPe: number | null;
+  gap: number | null;
+  spread: number;
+}
+
+export interface PeGrowth {
+  applicable: boolean;
+  consensusSource: string | null;
+  consensusAnalysts: number | null;
+  forwardPe: number | null;
+  trailingPe: number | null;
+  earningsYield: number | null;
+  treasury10y: number | null;
+  costOfEquity: number | null;
+  earningsYieldMinusKe: number | null;
+  epsGrowth5y: number | null;
+  epsGrowthTrend5y: number | null;
+  consensusGrowth: number | null;
+  peg: number | null;
+  roe: number | null;
+  retention: number | null;
+  sustainableGrowth: number | null;
+  reinvestmentRate: number | null;
+  marginalRoic: number | null;
+  roeMinusKe: number | null;
+  roic: number | null;
+  wacc: number | null;
+  roicMinusWacc: number | null;
+  spreadHistory: { year: number; roeMinusKe: number | null; roicMinusWacc: number | null }[];
+  stableGrowth: number | null;
+  fairPe: number | null;
+  actualToFairPe: number | null;
+  noGrowthPe: number | null;
+  growthPremiumShare: number | null;
+  impliedGrowth: number | null;
+  impliedGrowthTwoStage: { growth: number | null; bound: SolverBound } | null;
+  highGrowthYears: { growth: number; years: number | null; bound: SolverBound } | null;
+  impliedReturnAtConsensus: number | null;
+  impliedMinusSustainable: number | null;
+  impliedMinusConsensus: number | null;
+  grid: { keAxis: number[]; growthAxis: number[]; matrix: (number | null)[][] } | null;
+  rateShock: { up: number | null; down: number | null } | null;
+  scenarios: PeGrowthScenario[];
+  highGrowthYearsWindow: number;
+  epsHistory: { year: number; eps: number | null }[];
+  peers: {
+    fiscalYear: number | null;
+    peers: PeGrowthPeer[];
+    regression: { slope: number; intercept: number; r2: number | null; n: number } | null;
+    subject: { predictedPe: number; residual: number } | null;
+    peerCount: number;
+    minPeersForFit: number;
+  } | null;
 }
 
 // ── Uses of cash: what each year's operating cash flow was spent on ───────────

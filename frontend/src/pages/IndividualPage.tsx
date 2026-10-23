@@ -16,8 +16,10 @@ import { MetricsTrendsSection } from "../components/individual/MetricsTrendsSect
 import { DupontSection } from "../components/individual/DupontSection";
 import { LeverageRoeSection } from "../components/individual/LeverageRoeSection";
 import { ForecastSection } from "../components/individual/ForecastSection";
+import { StorySection } from "../components/individual/StorySection";
 import { EVAValuationSection } from "../components/individual/EVAValuationSection";
 import { ResidualIncomeSection } from "../components/individual/ResidualIncomeSection";
+import { PeGrowthSection } from "../components/individual/PeGrowthSection";
 import { EquityModelsSection } from "../components/individual/EquityModelsSection";
 import { BankProfitabilitySection } from "../components/individual/BankProfitabilitySection";
 import { ValuationExtrasSection } from "../components/individual/ValuationExtrasSection";
@@ -48,9 +50,12 @@ import { StageGoalPanel } from "../components/StageGoalPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { NextStagePanel } from "../components/connections/NextStagePanel";
 import { PeerRankingTable } from "../components/PeerRankingTable";
+import { ComparisonSection } from "../components/individual/ComparisonSection";
 import { PEER_RANKING } from "../lib/connectionsCopy";
 import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
 import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
+import { PRICE_DECK_TITLE, STORY_DECK_TITLE } from "../lib/questions";
+import { buildPriceDeck } from "../lib/story";
 import type { IndividualBenchmarks } from "../lib/types";
 import { Search } from "lucide-react";
 
@@ -127,6 +132,8 @@ export function IndividualPage() {
   // "TICKER {em dash} Name" heading: interpolated into a question it would put
   // an em dash into rendered copy.
   const companyName = analysis?.name ?? ticker;
+
+  const priceDeck = useMemo(() => buildPriceDeck(companyName ?? ""), [companyName]);
 
   const connectDeck = useMemo(
     () =>
@@ -228,6 +235,23 @@ export function IndividualPage() {
         </div>
       )}
 
+      {result?.status === "ok" && analysis?.industry && ticker && resolvedTicker && (
+        <div className="mb-6">
+          <ErrorBoundary compact>
+            <ComparisonSection
+              ticker={ticker}
+              resolvedTicker={resolvedTicker}
+              companyName={companyName ?? ticker}
+              events={analysis.events}
+              hasSegments={Boolean(
+                (analysis as { businessProfile?: { segments?: unknown[] | null } }).businessProfile
+                  ?.segments?.length,
+              )}
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
       <div className="space-y-6">
         {result?.status === "api_down" && <DataStatusBanner />}
 
@@ -302,6 +326,12 @@ export function IndividualPage() {
           />
         )}
 
+        {/* The reader's own story of the company, turned into DCF inputs. Keyed by
+            the route ticker, the key its answers are saved under. */}
+        {data?.analysis?.forecast && data.analysis.forecast.applicable !== false && ticker && (
+          <StorySection ticker={ticker} companyName={companyName ?? ticker} dataContext={aiDataContext} />
+        )}
+
         {data?.analysis?.forecast && (
           <ForecastSection
             forecast={data.analysis.forecast}
@@ -319,8 +349,21 @@ export function IndividualPage() {
           />
         )}
 
-        {data?.analysis?.forecast?.reverseDcf && (
-          <ReverseDcfSection data={data.analysis.forecast.reverseDcf} />
+        {data?.analysis?.forecast && ticker && <ReverseDcfSection ticker={ticker} />}
+
+        {/* What today's price implies, beside the section that works it out.
+            Keyed by the route ticker, the key its answers are saved under. */}
+        {ticker && priceDeck.length > 0 && (
+          <div className="pt-2">
+            <QualitativeBlock
+              section="individual"
+              scopeKey={ticker}
+              groups={priceDeck}
+              storageSuffix="price"
+              hideHeader
+              dataContext={aiDataContext}
+            />
+          </div>
         )}
 
         {/* Is that growth genuine and sustainable? A standing deck the user answers. */}
@@ -358,6 +401,14 @@ export function IndividualPage() {
 
         {data?.analysis?.residualIncome && (
           <ResidualIncomeSection residualIncome={data.analysis.residualIncome} />
+        )}
+
+        {/* Beside the P/B vs ROE anchor: the same ROE, cost of equity and
+            stable growth, read through the P/E instead of the book value. */}
+        {data?.analysis?.peGrowth?.applicable && ticker && (
+          <ErrorBoundary compact>
+            <PeGrowthSection data={data.analysis.peGrowth} ticker={ticker} companyName={companyName ?? ticker} />
+          </ErrorBoundary>
         )}
 
         {data?.analysis?.creditAnalysis && (
@@ -484,6 +535,10 @@ export function IndividualPage() {
               // here, in the page-bottom bank, and the deck would appear twice.
               "Capital Allocation",
               CONNECT_DECK_TITLE.company,
+              // Rendered by the story section and beside the Reverse DCF. Without
+              // this they would also render here, in the page-bottom bank, twice.
+              STORY_DECK_TITLE,
+              PRICE_DECK_TITLE,
             ]}
             dataContext={aiDataContext}
           />

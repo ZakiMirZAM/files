@@ -436,3 +436,39 @@ stem, so the renumbering is invisible to `MetricTerm`) now live at 884-888:
 | [x] | 886 | 886-Return-On-Capital-Against-The-Industry.md | Return On Capital Against The Industry |
 | [x] | 887 | 887-Expected-Growth-Against-Actual-Growth.md | Expected Growth Against Actual Growth |
 | [x] | 888 | 888-Reinvestment-Rate-Sustainability.md | Reinvestment Rate Sustainability |
+
+### Story valuation (890-899)
+
+The story-based DCF: the reader tells the company's story in words, the AI converts the
+answers into eight valuation inputs with a proof for each, and the FCFF valuation can run
+on the story's numbers. Band registered as `storyValuation` (890-899) in
+`src/lib/individualDefinitions.ts`, serving StorySection and ForecastSection story mode.
+890 is the section overview in the concept format; 891-894 follow the strict 9-part
+template.
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 890 | 890-How-A-Story-Becomes-A-Value.md | How A Story Becomes A Value (overview, concept format) |
+| [x] | 891 | 891-Total-Market.md | Total Market |
+| [x] | 892 | 892-Target-Operating-Margin.md | Target Operating Margin |
+| [x] | 893 | 893-Stable-Growth-Rate.md | Stable Growth Rate |
+| [x] | 894 | 894-Chance-The-Story-Ends.md | Chance The Story Ends |
+
+Reused existing defs: Revenue Growth → 188, Operating Margin → 039, Sales to capital → 045
+and 520, Terminal Value And Excess Returns → 880, Implied Market Share → 882, WACC → 183,
+Marginal ROIC → 048, Intrinsic Value per Share → 508, Effective Tax Rate → 852. Label
+aliases added in `LABEL_ALIASES`: "Tax rate (effective)" → 852, "Cost of capital" → 183,
+"Return on capital after growth ends" → 880.
+## P/E vs growth and returns, and justified EV/NOPAT (910-919)
+
+Band `peGrowth`. 890-899 is held by the story-DCF branch, so this band starts at 910.
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 910 | 910-PE-Vs-Growth-And-Returns.md | P/E vs Growth and Returns (concept format, PeGrowthSection overview) |
+| [x] | 911 | 911-Justified-EV-NOPAT.md | Justified EV / NOPAT (concept format, EVA section card) |
+
+Reused existing defs: P/E → 061, PEG → 018, ROE → 002, ROIC → 003, WACC → 183,
+Cost of Equity → 184, Excess Return (ROE − Ke) → 185, ROIC − WACC Spread → 044,
+Reinvestment Rate → 047, Marginal ROIC → 048, Fundamental Growth → 519,
+Risk-Free Rate → 500.

@@ -6,6 +6,7 @@ import { useDebouncedSave } from "../lib/useDebouncedSave";
 import { CONNECT_AI } from "../lib/connectQuestions";
 import { budgetWaitMessage } from "../lib/askBudget";
 import { useAskAi } from "../lib/useAskAi";
+import { questionWithSteps } from "../lib/questionPrompt";
 import { cn } from "../lib/cn";
 
 export { EXTRA_CONTEXT_TIMEOUT_MS } from "../lib/useAskAi";
@@ -15,6 +16,10 @@ export interface QuestionFieldProps {
   questionId: string;
   question: string;
   hint?: string;
+  /** Numbered steps shown under the question and sent to the tutor with it. */
+  steps?: string[];
+  /** The closing teaching sentence shown after the steps. */
+  close?: string;
   section: SectionKey;
   scopeKey: string;
   dataContext?: string;
@@ -48,6 +53,8 @@ export function QuestionField({
   questionId,
   question,
   hint,
+  steps,
+  close,
   section,
   scopeKey,
   dataContext,
@@ -71,7 +78,8 @@ export function QuestionField({
 
   const ask = () =>
     askAi({
-      question,
+      // The steps and the closing sentence ride with the question, as shown.
+      question: questionWithSteps(question, steps, close),
       guidance,
       questionId,
       section,
@@ -95,6 +103,17 @@ export function QuestionField({
         </span>
         {hint && <span className="block text-xs text-white/35 mt-1">{hint}</span>}
       </label>
+      {steps && steps.length > 0 && (
+        <div className="mt-2 text-sm text-white/70 leading-relaxed">
+          <p>Work it out in steps:</p>
+          <ol className="list-decimal pl-5 mt-1 space-y-1">
+            {steps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {close && <p className="mt-2 text-sm text-white/70 leading-relaxed">{close}</p>}
       <button
         type="button"
         disabled={!allowed}

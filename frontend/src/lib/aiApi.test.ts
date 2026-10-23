@@ -3,7 +3,7 @@
 // parser has to produce a usable report from either shape, and never throw:
 // verification is commentary on an answer, and the answer is the product.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseVerification, toVerificationReport } from "./aiApi";
 
 const SHADOW = {
@@ -86,5 +86,78 @@ describe("parseVerification", () => {
     expect(parseVerification(undefined)).toBeUndefined();
     expect(parseVerification("")).toBeUndefined();
     expect(parseVerification("{not json")).toBeUndefined();
+  });
+});
+
+import { convertStory, toStoryConversion } from "./aiApi";
+const NAMES = ["totalMarket", "marketGrowth10y", "shareYear10", "targetMargin", "salesToCapital", "failureProbability", "distressProceeds", "stableRoic", "stages"];
+const raw = { rows: NAMES.map((input) => ({ input, storyQuote: "q", value: 0.1, unit: "fraction", proof: "p", sources: [], verification: { status: "verified", report: null } })), riskFlags: [], weakestLink: "w", counterStory: "c" };
+describe("toStoryConversion", () => {
+  it("accepts the server shape", () => { expect(toStoryConversion(raw)?.rows).toHaveLength(9); });
+  it("rejects a table missing an input", () => { expect(toStoryConversion({ ...raw, rows: raw.rows.slice(1) })).toBeNull(); });
+  it("coerces unknown statuses and non-numbers", () => {
+    const odd = { ...raw, rows: [{ ...raw.rows[0], value: "9%", verification: { status: "weird" } }, ...raw.rows.slice(1)] };
+    const c = toStoryConversion(odd)!;
+    expect(c.rows[0].value).toBeNull();
+    expect(c.rows[0].verification.status).toBe("unavailable");
+  });
+});
+
+describe("convertStory", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const reply = (body: string) => vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200 })));
+  const params = { ticker: "RACE", company: "Ferrari", answers: {}, dataBlock: "d" };
+  it("shows the proxy's error sentence when the RAG server is down", async () => {
+    // ai_proxy's fallback: a 200 after heartbeat spaces, an error and no rows.
+    reply('  {"answer":"","explanation":"","definition":"","sources":[],"error":"AI backend temporarily unavailable"}');
+    await expect(convertStory(params)).rejects.toThrow("AI backend temporarily unavailable");
+    expect(toStoryConversion({ error: "AI backend temporarily unavailable" })).toBeNull();
+  });
+  it("treats a reply without the table as a failure, never an empty table", async () => {
+    reply('{"rows":[],"sources":[]}');
+    await expect(convertStory(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+  });
+  it("returns the table", async () => {
+    reply(JSON.stringify(raw));
+    expect((await convertStory(params)).rows.map((r) => r.input)).toEqual(NAMES);
+  });
+});
+
+import { answerStoryQuestion } from "./aiApi";
+describe("answerStoryQuestion", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const reply = (body: string) => {
+    const f = vi.fn(async (_url: string, _init?: RequestInit) => new Response(body, { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    return f;
+  };
+  const params = { ticker: "RACE", company: "Ferrari", questionId: "indiv.story.market", question: "Q",
+                   userAnswer: "", dataBlock: "d" };
+  it("shows the proxy's error sentence when the RAG server is down", async () => {
+    reply('  {"answer":"","explanation":"","definition":"","sources":[],"error":"AI backend temporarily unavailable"}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("AI backend temporarily unavailable");
+  });
+  it("treats a reply without builtOnReader, or an empty AI answer, as a failure", async () => {
+    reply('{"answer":"text"}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+    reply('{"answer":"  ","sources":[],"builtOnReader":false}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+    // The old verdict shape carries no answer to use.
+    reply('{"adequate":true,"answer":"","sources":[]}');
+    await expect(answerStoryQuestion(params)).rejects.toThrow("The AI answer could not be read. Try again.");
+  });
+  it("returns the written and the built-on shapes", async () => {
+    reply('{"answer":" researched ","sources":["Book, chapter 1", 3],"builtOnReader":false}');
+    expect(await answerStoryQuestion(params)).toEqual({ answer: "researched", sources: ["Book, chapter 1"], builtOnReader: false });
+    reply('{"answer":"built","sources":[],"builtOnReader":true}');
+    expect(await answerStoryQuestion(params)).toEqual({ answer: "built", sources: [], builtOnReader: true });
+  });
+  it("posts the server's field names", async () => {
+    const f = reply('{"answer":"a","sources":[],"builtOnReader":false}');
+    await answerStoryQuestion({ ...params, otherAnswers: { "indiv.story.edge": "e" } });
+    const [url, init] = f.mock.calls[0];
+    expect(url.endsWith("/story-answer")).toBe(true);
+    expect(JSON.parse(init!.body as string)).toEqual({ ticker: "RACE", company: "Ferrari",
+      questionId: "indiv.story.market", question: "Q", userAnswer: "", otherAnswers: { "indiv.story.edge": "e" }, data: "d" });
   });
 });

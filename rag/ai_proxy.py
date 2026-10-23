@@ -27,7 +27,7 @@ UPSTREAM = "http://127.0.0.1:3001"
 PORT = 3002
 HEARTBEAT_INTERVAL = 8          # seconds between keep-alive bytes
 UPSTREAM_TIMEOUT = 600          # generous ceiling; server.py has its own budget caps
-STREAM_PATHS = {"/ask", "/explain", "/define", "/verify"}   # POST answer routes
+STREAM_PATHS = {"/ask", "/explain", "/define", "/verify", "/story-inputs", "/story-answer"}   # POST answer routes
 
 
 async def _call_upstream(session, method, url, body, headers):

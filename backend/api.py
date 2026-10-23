@@ -35,6 +35,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict, Field
 
 # ── Path wiring ──────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +132,14 @@ try:
         DISPLAY_METRICS,
         MARGINAL_TAX_RATE,
     )
+    from story_dcf import (  # type: ignore
+        build_story_context,
+        build_story_forecast,
+        industry_ranges,
+        market_position,
+        story_inputs_from_body,
+    )
+    from reverse_breakeven import build_reverse_breakeven  # type: ignore
     from comparitivestockanalysis import (  # type: ignore
         build_snapshot as build_comparative_snapshot,
         score_industry,
@@ -4141,20 +4150,15 @@ def _latest_or_ttm(rs: list[Any], ticker: str) -> Any:
     return latest  # off / shadow
 
 
-def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
-    """Every metric for a single company from its latest annual row (and prior
-    year for operating leverage). Uses the company's OWN beta and capital
-    structure for a per-company WACC and EVA. `_mc` carries the weight. Ratios
-    return None when their denominator is non-positive (would be meaningless)."""
-    rev = _sf(latest, "Revenue"); oi = _sf(latest, "Operating Income"); ni = _sf(latest, "Net Income")
-    assets = _sf(latest, "Total Assets"); eq = _sf(latest, "Total Stockholders Equity")
-    liab = _sf(latest, "Total Liabilities")
+def _metric_intermediates(latest: Any) -> dict[str, float | None]:
+    """The derived terms _company_metrics builds its value-creation metrics on:
+    tax rate, NOPAT, invested capital, Ke, Kd, WACC and EVA. One place, so the
+    spread table can show a company's own inputs from the exact same arithmetic
+    the metrics use. Decimal units (a 21% tax rate is 0.21)."""
+    oi = _sf(latest, "Operating Income"); eq = _sf(latest, "Total Stockholders Equity")
     td = _sf(latest, "Total Debt") or 0.0
-    netdebt = _sf(latest, "Net Debt"); fcf = _sf(latest, "Free Cash Flow"); ocf = _sf(latest, "Operating Cash Flow")
-    cap = _sf(latest, "Capital Expenditure"); da = _sf(latest, "Depreciation And Amortization")
     ibt = _sf(latest, "Income Before Tax"); tax = _sf(latest, "Income Tax Expense")
     ie = _sf(latest, "Interest Expense"); mc = _sf(latest, "Market Cap")
-    ii = _sf(latest, "Interest Income")
     beta = latest["beta"]
 
     tr = max(0.0, min(0.45, tax / ibt)) if (ibt and ibt > 0 and tax is not None) else 0.21
@@ -4168,6 +4172,30 @@ def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
     V = E + td
     wacc = (ke * (E / V) + kd * (1 - tr) * (td / V)) if V > 0 else ke
     eva = (nopat - wacc * ic) if (nopat is not None and ic is not None) else None
+    return {
+        "taxRate": tr, "nopat": nopat, "investedCapital": ic,
+        "costOfEquity": ke, "costOfDebt": kd, "wacc": wacc, "eva": eva,
+    }
+
+
+def _company_metrics(latest: Any, prior: Any | None) -> dict[str, float | None]:
+    """Every metric for a single company from its latest annual row (and prior
+    year for operating leverage). Uses the company's OWN beta and capital
+    structure for a per-company WACC and EVA. `_mc` carries the weight. Ratios
+    return None when their denominator is non-positive (would be meaningless)."""
+    rev = _sf(latest, "Revenue"); oi = _sf(latest, "Operating Income"); ni = _sf(latest, "Net Income")
+    assets = _sf(latest, "Total Assets"); eq = _sf(latest, "Total Stockholders Equity")
+    liab = _sf(latest, "Total Liabilities")
+    td = _sf(latest, "Total Debt") or 0.0
+    netdebt = _sf(latest, "Net Debt"); fcf = _sf(latest, "Free Cash Flow"); ocf = _sf(latest, "Operating Cash Flow")
+    cap = _sf(latest, "Capital Expenditure"); da = _sf(latest, "Depreciation And Amortization")
+    ibt = _sf(latest, "Income Before Tax")
+    ie = _sf(latest, "Interest Expense"); mc = _sf(latest, "Market Cap")
+    ii = _sf(latest, "Interest Income")
+
+    mid = _metric_intermediates(latest)
+    nopat, ic = mid["nopat"], mid["investedCapital"]
+    ke, wacc, eva = mid["costOfEquity"], mid["wacc"], mid["eva"]
 
     def r(n: float | None, d: float | None) -> float | None:
         if n is None or d is None or d <= 0:
@@ -6096,6 +6124,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "costStructure": snap.cost_structure,
         # Generic competitive strategy with industry ranks (plan 3.3)
         "genericStrategy": snap.generic_strategy,
+        # P/E vs growth and returns: figures only, no verdict
+        "peGrowth": getattr(snap, "pe_growth", None),
         # Moat direction and growth sustainability: figures only, no verdict
         "moatDirection": getattr(snap, "moat_direction", None),
         # Model vs free consensus vs the reader, next two fiscal years
@@ -6182,28 +6212,38 @@ def _benchmark_payload(ticker: str, sector: str | None, industry: str | None,
     return {"ticker": ticker, "sector": sector, "industry": industry, "metrics": metrics}
 
 
+def _company_metric_rows(ticker: str) -> tuple[Any, Any | None, list[Any]]:
+    """(latest, prior, rows newest first) for one company, the rows the
+    _company_metrics path reads. Raises nothing the callers must not catch;
+    an unknown ticker returns (None, None, [])."""
+    sel = ", ".join(f'f."{c}"' for c in _SECTOR_NEEDED_COLS)
+    sql = (
+        f"SELECT f.Ticker, t.sector AS sec, {_cb_beta('t')}, "
+        'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
+        " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
+        " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
+        " WHERE UPPER(f.Ticker) = ?"
+        " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
+    )
+    with db_conn() as conn:
+        rows = conn.execute(sql, (ticker,)).fetchall()
+    rs = [r for r in rows if _sector_row_plausible(r)]
+    if not rs:
+        return None, None, []
+    rs.sort(key=lambda x: int(x["yr"]), reverse=True)
+    latest = _latest_or_ttm(rs, ticker)
+    prior = rs[1] if len(rs) > 1 else None
+    return latest, prior, rs
+
+
 def _company_benchmark_metrics(ticker: str) -> dict[str, Any]:
     """The company's own latest-year metric column, computed by the SAME
     _company_metrics path the matrices use so units and method match the
     group columns. Best effort: {} on any failure."""
     try:
-        sel = ", ".join(f'f."{c}"' for c in _SECTOR_NEEDED_COLS)
-        sql = (
-            f"SELECT f.Ticker, t.sector AS sec, {_cb_beta('t')}, "
-            'CAST(f."Calendar Year" AS INTEGER) AS yr, ' + sel +
-            " FROM financials f JOIN tickers t ON t.ticker = f.Ticker"
-            " LEFT JOIN security_map s ON s.symbol = f.Ticker" + _cb_join() +
-            " WHERE UPPER(f.Ticker) = ?"
-            " AND f.\"Calendar Year\" GLOB '[0-9][0-9][0-9][0-9]'"
-        )
-        with db_conn() as conn:
-            rows = conn.execute(sql, (ticker,)).fetchall()
-        rs = [r for r in rows if _sector_row_plausible(r)]
-        if not rs:
+        latest, prior, _rs = _company_metric_rows(ticker)
+        if latest is None:
             return {}
-        rs.sort(key=lambda x: int(x["yr"]), reverse=True)
-        latest = _latest_or_ttm(rs, ticker)
-        prior = rs[1] if len(rs) > 1 else None
         return _company_metrics(latest, prior)
     except Exception as exc:  # noqa: BLE001 — the company column is a nicety
         log.warning("[api] company benchmark column for %s failed: %s", ticker, exc)
@@ -6250,15 +6290,19 @@ def individual_benchmarks_endpoint(request: Request,
 # The response is cached for thirty minutes, so the extra allowance costs
 # nothing (finding M2).
 @limiter.limit("30/minute")
-@cached(ttl_seconds=30 * 60, key_prefix="db")
 def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
     # Phase 2: fold an alias (GS-PA, BRK.B, MS-PO, GOOGL) onto its primary listing
     # BEFORE load_ticker_rows / the tickers + financials SELECTs, all of which key
     # off ticker_upper. _resolve_symbol also does the uppercase + dot->dash
     # normalize, so it fully replaces the old ticker.upper(); with security_map
     # absent it IS ticker.upper()-with-dots-dashed, i.e. unchanged behaviour.
-    ticker_upper = _resolve_symbol(ticker)
+    return _individual_payload(_resolve_symbol(ticker))
 
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _individual_payload(ticker_upper: str) -> dict[str, Any]:
+    """The individual page payload for a resolved ticker, shared by the page
+    route and the story route (a route never calls another route)."""
     # Build full snapshot using the existing analysis pipeline (DCF, verdict,
     # ratios, horizontal/vertical, per-share). Returns None if no data.
     snap_dict: dict[str, Any] | None = None
@@ -6378,6 +6422,103 @@ def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER
         # analysis being None by design — None when the pipeline was healthy.
         "analysis_error": snap_error,
     }
+
+
+# ── Story DCF (the reader's story priced on the page's own engine) ───────────
+
+_STORY_NO_VALUATION = "No valuation is available for this company, so the story cannot be priced."
+
+
+def _story_base(tk: str) -> tuple[dict | None, list]:
+    """The cached analysis block plus the company's rows, ascending by year.
+    Raises the page route's 404 for an unknown ticker."""
+    payload = _individual_payload(tk)
+    rows = sorted(load_ticker_rows(get_db(), tk), key=lambda r: int(r["Calendar Year"]))
+    return payload.get("analysis"), rows
+
+
+class StoryDcfBody(BaseModel):
+    """Story inputs; null keeps the model's number. These bounds are the only
+    range guard (valuation/story.py validates nothing), so they match the C2
+    contract exactly. strict: a JSON true or "0.5" is not a number here."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+
+    totalMarket: Optional[float] = Field(None, gt=0, lt=1e16)
+    marketGrowth10y: Optional[float] = Field(None, ge=-0.5, le=1.0)
+    shareYear10: Optional[float] = Field(None, ge=0, le=10)
+    targetMargin: Optional[float] = Field(None, ge=-2, le=2)
+    salesToCapital: Optional[float] = Field(None, gt=0, le=100)
+    failureProbability: Optional[float] = Field(None, ge=0, le=1)
+    distressProceeds: Optional[float] = Field(None, ge=0, lt=1e16)
+    stableRoic: Optional[float] = Field(None, gt=0, le=2)
+    # The story's stage count; null runs the 3-stage default.
+    stages: Optional[int] = Field(None, ge=1, le=3)
+
+
+@app.post("/api/individual/{ticker}/story-dcf")
+@limiter.limit("30/minute")
+# Never cached: every body is a different story.
+def story_dcf_endpoint(request: Request, body: StoryDcfBody,
+                       ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    analysis, rows = _story_base(_resolve_symbol(ticker))
+    if not analysis or not analysis.get("forecast") or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    return build_story_forecast(analysis["forecast"], rows[-1],
+                                story_inputs_from_body(body.model_dump()))
+
+
+def _story_industry(industry: str | None) -> tuple[dict, Any]:
+    """The industry's percentile ranges and its peer panel (IndustryPanel or None)."""
+    if not industry:
+        return {}, None
+    from connections.sector_cache import get_industry_panel  # noqa: PLC0415
+    with db_conn() as conn:
+        ranges = industry_ranges(conn, industry)
+        try:
+            panel = get_industry_panel(conn, industry)
+        except Exception as exc:  # noqa: BLE001 - the market position is context, never a blocker
+            log.warning("[api] story industry panel for %s failed: %s", industry, exc)
+            panel = None
+    return ranges, panel
+
+
+@app.get("/api/individual/{ticker}/story-context")
+@limiter.limit("20/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def story_context_endpoint(request: Request,
+                           ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    """The facts the story AI reads (contract C3), with the data block Tier 0
+    checks its proofs against."""
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    tk = _resolve_symbol(ticker)
+    analysis, rows = _story_base(tk)
+    if not analysis or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    ranges, panel = _story_industry(analysis.get("industry"))
+    return build_story_context(ticker=tk, analysis=analysis, rows=rows, ranges=ranges,
+                               market=market_position(panel, tk))
+
+
+@app.get("/api/individual/{ticker}/reverse-dcf")
+@limiter.limit("20/minute")
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def reverse_dcf_endpoint(request: Request,
+                         ticker: str = PathParam(pattern=TICKER_PATTERN)) -> dict[str, Any]:
+    """What each driver must be for the value to equal today's price, two breakeven
+    grids, and the firm's and its peers' figures to judge them by."""
+    if not ANALYSIS_MODULES_OK:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    tk = _resolve_symbol(ticker)
+    analysis, rows = _story_base(tk)
+    if not analysis or not analysis.get("forecast") or not rows:
+        return {"applicable": False, "reason": _STORY_NO_VALUATION}
+    ranges, panel = _story_industry(analysis.get("industry"))
+    ctx = build_story_context(ticker=tk, analysis=analysis, rows=rows, ranges=ranges,
+                              market=market_position(panel, tk))
+    return build_reverse_breakeven(analysis["forecast"], rows[-1], ctx)
 
 
 # ── Live quote (yfinance) ────────────────────────────────────────────────────
@@ -6774,6 +6915,98 @@ def _spread_peer_columns(industry: str) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _spread_peer_history(industry: str) -> dict[str, dict[str, dict[int, float]]]:
+    """{ticker: {individual_metric_key: {year: display value}}}.
+
+    The per-year history _company_metrics_for_industry already builds for every
+    peer (one _company_metrics run per stored year), re-keyed like the latest
+    columns above. Same producer, same display units."""
+    cm = _company_metrics_for_industry(industry, SPREADS_PEER_LIMIT)
+    out: dict[str, dict[str, dict[int, float]]] = {}
+    for tk, col in (cm.get("data") or {}).items():
+        hist = col.get("_history") or {}
+        per: dict[str, dict[int, float]] = {}
+        for ind_key, mx_key in _BENCHMARK_KEY_MAP.items():
+            pts = {int(p["period"]): p["value"] for p in hist.get(mx_key) or []}
+            if pts:
+                per[ind_key] = pts
+        out[str(tk).upper()] = per
+    return out
+
+
+def _company_year_history(rows_newest_first: list[Any]) -> dict[str, dict[int, float]]:
+    """The company's own per-year spread metrics, built exactly like the peer
+    history in _company_metrics_for_industry: one _company_metrics run per stored
+    annual row, with the prior year for operating leverage."""
+    asc = list(reversed(rows_newest_first))
+    out: dict[str, dict[int, float]] = {}
+    for j, row in enumerate(asc):
+        ym = _company_metrics(row, asc[j - 1] if j > 0 else None)
+        for ind_key, mx_key in _BENCHMARK_KEY_MAP.items():
+            v = ym.get(mx_key)
+            if v is not None:
+                out.setdefault(ind_key, {})[int(row["yr"])] = v
+    return out
+
+
+# The lines each spread metric reads, in formula order, so the definition panel
+# can show the company's own inputs beside its result. Names are keys of
+# `inputs.values`: stored columns keep their DB names (reporting-currency
+# amounts; growth columns and Payout Ratio are decimals); the derived terms come
+# from _metric_intermediates (decimals). Mirrors _company_metrics line by line.
+_SPREAD_METRIC_INPUTS: dict[str, tuple[str, ...]] = {
+    "roic": ("Operating Income", "taxRate", "nopat", "Total Stockholders Equity",
+             "Total Debt", "investedCapital"),
+    "wacc": ("beta", "costOfEquity", "costOfDebt", "taxRate", "Market Cap", "Total Debt"),
+    "roic_wacc_spread": ("nopat", "investedCapital", "wacc"),
+    "eva_margin": ("nopat", "wacc", "investedCapital", "eva", "Revenue"),
+    "roe": ("Net Income", "Total Stockholders Equity"),
+    "cost_of_equity": ("beta", "costOfEquity"),
+    "excess_return": ("Net Income", "Total Stockholders Equity", "costOfEquity"),
+    "justified_pb": ("Net Income", "Total Stockholders Equity", "costOfEquity",
+                     "Payout Ratio", "riskFreeRate"),
+    "pb": ("Market Cap", "Total Stockholders Equity"),
+    "pe": ("Market Cap", "Net Income"),
+    "net_interest_margin": ("Interest Income", "Interest Expense", "Total Assets"),
+    "dupont_tax_burden": ("Net Income", "Income Before Tax"),
+    "dupont_interest_burden": ("Income Before Tax", "Operating Income"),
+    "dupont_ebit_margin": ("Operating Income", "Revenue"),
+    "net_margin": ("Net Income", "Revenue"),
+    "asset_turnover": ("Revenue", "Total Assets"),
+    "equity_multiplier": ("Total Assets", "Total Stockholders Equity"),
+    "operating_margin": ("Operating Income", "Revenue"),
+    "revenue_growth": ("Revenue Growth",),
+    "net_income_growth": ("Net Income Growth",),
+    "operating_leverage": ("Operating Income", "Prior Operating Income", "Revenue",
+                           "Prior Revenue"),
+    "capex_depreciation": ("Capital Expenditure", "Depreciation And Amortization"),
+    "sales_invested_capital": ("Revenue", "investedCapital"),
+    "fcf_net_income": ("Free Cash Flow", "Net Income"),
+    "net_debt_ocf": ("Net Debt", "Operating Cash Flow"),
+    "liabilities_equity": ("Total Liabilities", "Total Stockholders Equity"),
+}
+
+
+def _spread_company_inputs(latest: Any, prior: Any | None) -> dict[str, Any]:
+    """The company's own input values for the spread metrics: the stored lines
+    _company_metrics reads plus its derived terms. No new arithmetic."""
+    values: dict[str, float | None] = {
+        c: _sf(latest, c) for c in _SECTOR_NEEDED_COLS if c != "Reported Currency"
+    }
+    values["beta"] = _sf(latest, "beta")
+    values.update(_metric_intermediates(latest))
+    values["riskFreeRate"] = _live_rf()
+    if prior is not None:
+        values["Prior Operating Income"] = _sf(prior, "Operating Income")
+        values["Prior Revenue"] = _sf(prior, "Revenue")
+    keys = latest.keys() if hasattr(latest, "keys") else ()
+    return {
+        "fiscalYear": int(latest["yr"]) if "yr" in keys else None,
+        "currency": (latest["Reported Currency"] if "Reported Currency" in keys else None) or "USD",
+        "values": {k: (round(v, 6) if isinstance(v, float) else v) for k, v in values.items()},
+    }
+
+
 @cached(ttl_seconds=30 * 60, key_prefix="db")
 def _spreads_payload(tk: str) -> dict[str, Any]:
     """Cached body of the spread table (plan 5.2)."""
@@ -6836,8 +7069,8 @@ def _spreads_payload(tk: str) -> dict[str, Any]:
         industry_weighted[ind_key] = _bench_num(industry_col, mx_key)
         sector_weighted[ind_key] = _bench_num(sector_col, mx_key)
 
-    from company_profile.spreads import build_spread_table
-    return build_spread_table(
+    from company_profile.spreads import build_spread_history, build_spread_table
+    table = build_spread_table(
         tk, peer_values, group_members, labels, units,
         industry_weighted=industry_weighted,
         sector_weighted=sector_weighted,
@@ -6846,6 +7079,26 @@ def _spreads_payload(tk: str) -> dict[str, Any]:
         sector=sector,
         fiscal_year=fiscal_year,
     )
+
+    # The company's inputs and every firm's per-year values, from the same
+    # _company_metrics runs. Best effort: a failure drops these two keys only.
+    try:
+        latest, prior, rows = _company_metric_rows(tk)
+        peer_history = _spread_peer_history(industry)
+        if rows:
+            peer_history[tk] = _company_year_history(rows)
+            table["inputs"] = _spread_company_inputs(latest, prior)
+            table["metricInputs"] = {
+                k: list(v) for k, v in _SPREAD_METRIC_INPUTS.items() if k in table["metrics"]
+            }
+        table["history"] = build_spread_history(tk, peer_history, group_members)
+        table["historyNote"] = (
+            "Past years use each firm's stored figures for that year. The peers "
+            "and the strategic group are today's."
+        )
+    except Exception as exc:  # noqa: BLE001 — the latest table still stands
+        log.warning("[api] spreads inputs/history for %s failed: %s", tk, exc)
+    return table
 
 
 @app.get("/api/individual/{ticker}/spreads")

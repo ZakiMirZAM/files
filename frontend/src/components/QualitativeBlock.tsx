@@ -201,6 +201,8 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
                       questionId={q.id}
                       question={q.text}
                       hint={q.hint}
+                      steps={q.steps}
+                      close={q.close}
                       section={section}
                       scopeKey={scopeKey}
                       // Per-question context (integrity figures) wins; else the block's.

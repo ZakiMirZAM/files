@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { askPrompt, askDataContext } from "./questionPrompt";
+import { askPrompt, askDataContext, questionWithSteps } from "./questionPrompt";
 import { buildConnectDeck } from "./connectQuestions";
 import { pageGatherFor } from "./pageStageContext";
 
@@ -118,7 +118,7 @@ describe("QuestionField renders the question and not the guidance", () => {
   });
 
   it("sends the composed prompt in the AI request", () => {
-    expect(source).toMatch(/askAi\(\{\s+question,\s+guidance,/);
+    expect(source).toMatch(/askAi\(\{[\s\S]*?question: questionWithSteps\(question, steps, close\),\s+guidance,/);
     expect(hook).toContain("question: askPrompt(req.question, req.guidance)");
   });
 
@@ -156,5 +156,25 @@ describe("QuestionField renders the question and not the guidance", () => {
   it("does not ask at all when the reader left the page mid-gather", () => {
     expect(hook).toContain("if (!mounted.current) {");
     expect(hook).toContain("return null;");
+  });
+});
+
+describe("questionWithSteps", () => {
+  it("appends the steps and the closing sentence for the tutor", () => {
+    expect(questionWithSteps("What market?", ["Read the 10-K.", "List rivals."], "The market sets the ceiling."))
+      .toBe("What market?\nWork it out in steps:\n1. Read the 10-K.\n2. List rivals.\nThe market sets the ceiling.");
+  });
+  it("leaves a plain question unchanged", () => {
+    expect(questionWithSteps("What market?")).toBe("What market?");
+    expect(questionWithSteps("What market?", [], undefined)).toBe("What market?");
+  });
+  it("adds a closing sentence even when there are no steps", () => {
+    expect(questionWithSteps("What market?", undefined, "The market sets the ceiling."))
+      .toBe("What market?\nThe market sets the ceiling.");
+  });
+  it("QuestionField renders the steps and sends them to the tutor", () => {
+    const src = readFileSync(FIELD, "utf8");
+    expect(src).toContain("Work it out in steps:");
+    expect(src).toContain("question: questionWithSteps(question, steps, close),");
   });
 });

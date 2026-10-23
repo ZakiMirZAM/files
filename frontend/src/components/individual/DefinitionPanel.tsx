@@ -94,6 +94,7 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
   const overrideSeries = openState?.series;
   const overrideTitle = openState?.title;
   const overrideDescription = openState?.description;
+  const calculation = openState?.calculation;
   // The opener's scope (a clicked matrix cell) wins; a clicked label has none,
   // so one is derived from the page in view.
   const questionScope =
@@ -305,6 +306,26 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                       Group values are market-cap-weighted averages of each company's most
                       recent fiscal year, from the sector and industry scorecards.
                     </p>
+                  </div>
+                )}
+                {calculation && (
+                  <div className="mb-5 pb-5 border-b border-gold/10">
+                    <p className="label mb-2.5">{calculation.heading}</p>
+                    <dl className="space-y-1.5">
+                      {calculation.rows.map((r) => (
+                        <div key={r.label} className="flex items-baseline justify-between gap-3">
+                          <dt className="text-[0.75rem] text-white/60">{r.label}</dt>
+                          <dd className="font-mono text-[0.75rem] tabular-nums text-white/80">{r.value}</dd>
+                        </div>
+                      ))}
+                      <div className="flex items-baseline justify-between gap-3 pt-1.5 border-t border-white/[0.06]">
+                        <dt className="text-[0.75rem] text-gold/80">{calculation.result.label}</dt>
+                        <dd className="font-mono text-[0.8rem] tabular-nums text-gold">{calculation.result.value}</dd>
+                      </div>
+                    </dl>
+                    {calculation.note && (
+                      <p className="mt-2.5 text-[0.65rem] leading-relaxed text-white/35">{calculation.note}</p>
+                    )}
                   </div>
                 )}
                 {overrideDescription != null ? (

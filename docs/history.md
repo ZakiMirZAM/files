@@ -33,3 +33,10 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     half-formed thoughts, which fights the house voice. `/ask` also moved to **Opus 5 at `high`
     effort** (from Sonnet 5 at `max`, which measured 15 turns and overran the client timeout);
     on the same request that cut 115s to 33.7s and numeric fidelity 0.73 to 1.00.
+  - **2026-09-27** (story DCF, Task 10): every route moved to **Opus 5.5 (`claude-opus-5-5`) at
+    `medium` effort** (`ASK_MODEL` default, `EXPLAIN_MODEL`, `DEFINE_MODEL`; the story routes reuse
+    `ASK_MODEL`; `RAG_ASK_MODEL` / `RAG_ASK_EFFORT` still override). `STORY_ANSWER_SYSTEM` no longer
+    judges the reader's answer: it always writes one, building on the reader's, in the frame-1 shape
+    (Who, What, Where, When, Why, How, Significance, Assumptions, one labelled paragraph each) and
+    returns `{answer, sources, builtOnReader}`. `STORY_SYSTEM` gains a ninth row, `stages` (1, 2 or
+    3). ASK, EXPLAIN and DEFINE prompt texts unchanged; both story hashes re-recorded.

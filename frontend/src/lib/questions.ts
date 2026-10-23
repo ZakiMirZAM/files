@@ -25,6 +25,15 @@ export const SECTOR_DEFINE_TITLE = "Define This Sector First";
  *  industry page with answers saved per industry. Excluded from the bottom bank. */
 export const INDUSTRY_DEFINE_TITLE = "Define This Industry First";
 
+/** Title of the story deck: eight questions that build the company's story,
+ *  a synthesis, then the two checks on it. Rendered by the story section above
+ *  the DCF with answers saved per company. Excluded from the bottom bank. */
+export const STORY_DECK_TITLE = "Your Story";
+
+/** Title of the one-question deck rendered beside the Reverse DCF section.
+ *  Excluded from the bottom bank. */
+export const PRICE_DECK_TITLE = "What the Price Implies";
+
 export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
   economic: [
     {
@@ -807,12 +816,144 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
       ],
     },
     {
-      title: "Narrative & Expectations",
+      // Owner-approved text, word for word from docs/plans/2026-09-27-story-dcf-plan.md
+      // Part A. The method lines are sources for the build only, never copy.
+      title: STORY_DECK_TITLE,
       questions: [
+        // Method: substitutes judged by price and performance, and switching costs (Porter, Competitive Strategy Ch.1). Market definition by the 5 percent price test and geographic reach (Besanko, Economics of Strategy Part Two). Sizing from a larger known market (Damodaran, Narrative and Numbers Ch.14, GoPro; Investment Valuation Ch.11).
+        {
+          id: "indiv.story.market",
+          text: "What business is {company} really in, judged by what its customers pay it for rather than by its industry label, and how large is the market that business competes in?",
+          steps: [
+            "Read the business description and the segment note in the latest 10-K (in Latest Filings), and write one plain sentence per revenue line saying what the customer pays {company} to do.",
+            "List every product or service that does the same job for that customer. Start from the Key Players table on the Industry page, then add substitutes from other industries (a substitute is anything that performs the same function, even when a different kind of company sells it).",
+            "For each alternative, compare what it costs with what the customer gets for it, and note what switching would cost the customer: retraining staff, new equipment, time spent testing a new supplier, redesigning their own product, or ending a relationship.",
+            "Keep inside your market only the alternatives customers would move to in large numbers if {company} raised its prices by about 5 percent for a year, and that serve the same purpose on the same occasions.",
+            "Mark where customers can buy. Goods that are costly to ship, or that customers must travel to reach, form separate local markets.",
+            "State what customers spend in total today on everything left inside your market, using rivals' reported sales or industry figures, or by starting from a larger market of known size and multiplying by the share of customers who fit your description.",
+          ],
+          close: "The market you draw sets the ceiling on how large {company} can ever become, so size it at what customers could plausibly spend.",
+        },
+        // Method: penetration, new buyer segments, charting substitutes and complements, demographics and needs (Porter, Competitive Strategy Ch.8). What makes early buyers switch and what holds them back (Porter Ch.10). The four market-size choices (Damodaran, Narrative and Numbers Ch.14, Table 14.4).
+        {
+          id: "indiv.story.new_customers",
+          text: "Over the next ten years, will the market you named grow by winning customers who do not buy today, or only at the pace of the buyers it already has?",
+          steps: [
+            "Name who could use the product at all and estimate what share of them already buys. A market where most possible buyers already own the product grows only through replacement buying and growth in the number of buyers.",
+            "Name the groups that do not buy today, and for each one name what they use instead.",
+            "For each group, say what the product gives them that their current choice cannot, and whether that gain is better performance or only a lower price. Then list what holds them back: retraining, new equipment, writing off what they already bought, the damage if the new product fails, or the chance that a better version arrives soon.",
+            "List the products bought and used alongside this one (financing, trained staff, supporting equipment) and the substitutes, and say whether each is getting cheaper, better, or easier to get.",
+            "Check whether the pool of buyers is growing or shrinking by age, income, or location, and whether changing tastes or new rules are creating the need or removing it.",
+            "State whether you expect the market to stay the same size apart from inflation, grow by about a quarter, grow by about half, or double over ten years, and name the one or two reasons that carry the most weight.",
+          ],
+          close: "Most very fast market growth comes from first-time buyers and ends once most of them have bought, and the costlier the switch, the slower new buyers arrive.",
+        },
+        // Method: network economies and scale economies, each with a benefit and a barrier (7 Powers Part I). Network boundaries and closed networks (Little Book That Builds Wealth Ch.5). Relative scale (Little Book Ch.7). Proprietary experience (Porter Ch.1). Share tiers (Damodaran, Narrative and Numbers Ch.14, Table 14.5; Investment Valuation Ch.11).
+        {
+          id: "indiv.story.size",
+          text: "Does getting bigger make it easier for {company} to win its next customer, and if so, does that pull reach the whole market or only the places and customer groups where {company} already leads?",
+          steps: [
+            "Ask whether each new customer makes the product more useful to existing customers, as when more buyers draw more sellers, and whether a cheaper rival product would still lose because customers want to be where everyone else already is.",
+            "If so, find the edge of that pull. Say whether a new user in one city, country, or customer group adds value for users elsewhere or only nearby, and whether customers can use a rival network at the same time, which weakens the pull.",
+            "List {company}'s large costs that do not rise with each sale, such as content, research, delivery routes, or plants. Compare {company}'s size with its nearest rival in the Key Players table, because size relative to rivals creates a cost gap and absolute size does not.",
+            "Check whether rivals can close that gap by copying the method, hiring away the people, buying the same equipment, or sharing the cost with another business they own, and whether a smaller rival that cut prices to gain share would simply be matched.",
+            "Check the record: has {company}'s share risen as it grew, and has profit per store, route, branch, or customer risen as it got bigger?",
+            "State which case fits: no pull, so rivals keep their share; pull in a few local markets; pull in many local markets; or pull that carries into new markets too. Note any legal limit on a dominant share.",
+          ],
+          close: "In most businesses size brings no lasting pull and shares stay spread out; where the pull exists, the edge of the network or the cost gap over the nearest rival sets how far the leader can pull ahead.",
+        },
+        // Method: returns first, then the real and mistaken moats, the test for each source, and erosion (Little Book That Builds Wealth Ch.2 to 8 and 11). Benefit plus barrier, checked against every direct and functional competitor (7 Powers Part I and appendix). Impediments to imitation (Besanko Part Three). A brand story needs an above-median margin (Damodaran, Narrative and Numbers Ch.8).
+        {
+          id: "indiv.story.edge",
+          text: "What lets {company} charge more than its rivals for the same thing, or deliver the same thing for less, and can competitors copy that edge within ten years?",
+          steps: [
+            "Check that the edge shows up in results first. Compare {company}'s operating margin and return on invested capital (ROIC, operating profit per dollar invested in the business) with the Peer ranking table across every year shown. An edge appears as a higher margin, or as more sales at the same price; if neither appears, name what has changed in the business before you assume one.",
+            "Name the source from this list: a brand customers pay extra for, a patent or government license, switching costs (the money, retraining, and risk of errors a customer takes on by leaving), a network where each new user makes the product more useful to the others, or lower costs from a cheaper process, a better location, a unique asset such as a low-cost mine, or being bigger than rivals in the same market. Great products, high market share, good execution, and a talented chief executive do not count on their own.",
+            "Test the source against outside evidence. For a brand, find a similar competing product and see whether customers pay {company} more or come back because of the name. For patents, count how many products carry the profit and when the main ones expire. For a license, check whether a regulator also caps prices. For scale, compare size with the largest rival in the same market. For a process, explain why rivals have not copied it yet.",
+            "For each current and likely competitor, including companies whose different product does the same job for the customer, name why that competitor cannot copy the edge (a law, ownership, decades of history, know-how nobody has written down) or would lose money trying (a price war against a larger rival, or damage to its own existing business).",
+            "List what could wear the edge down within ten years: new technology, customers merging into a few large buyers, a rival that does not need to earn a profit, a patent expiry, a closed network opening to other providers, customers refusing price increases, or {company} spending on businesses where it has no edge.",
+          ],
+          close: "A margin above the industry's belongs in the forecast only for an edge that passes steps 3 and 4; an edge that fails either step gets copied, and prices fall toward cost.",
+        },
+        // Method: growth assets by business type (Damodaran, Narrative and Numbers Ch.6, Tables 6.1 and 6.2). Research and acquisitions counted as reinvestment, marginal sales to capital, industry comparison (Investment Valuation Ch.11 and Ch.23).
+        {
+          id: "indiv.story.growth_cost",
+          text: "What will {company} have to spend to add each new dollar of sales over the next ten years: factories and equipment, stores or networks, research, acquisitions, cash tied up in inventory and customer credit, or very little?",
+          steps: [
+            "Name the assets that actually produce {company}'s sales, using the business description and segment note in the latest 10-K.",
+            "Count research spending and the price paid for acquisitions as spending to grow, alongside capital spending above depreciation and any rise in inventory and customer credit, even though accounting records research as an expense.",
+            "Work out how many dollars of new sales each dollar of that spending produced over several years, by dividing the rise in sales by the rise in invested capital (debt plus equity, minus cash).",
+            "Compare that figure with the main competitors. Say whether the business has one standard way of investing to grow or several, and which way has produced more growth and profit.",
+            "Decide whether {company}'s spending per new dollar of sales will fall as it grows (spare capacity, fixed costs spread over more sales, each new customer making the product more useful to the others) or rise (tougher competition, saturated markets, ever larger acquisitions needed to move the total).",
+          ],
+          close: "Growth that needs heavy spending before each new sale leaves less cash for owners, and a company that grows by buying others has to keep buying larger ones to hold the same growth rate.",
+        },
+        // Method: identify the macro variable, find its normal level, trace how the company passes it through to profit, value macro-neutral first (Damodaran, Narrative and Numbers Ch.13). Business type, operating leverage and debt as the drivers of risk (Investment Valuation Ch.8; Applied Corporate Finance Ch.4). Buyer concentration (Porter Ch.1).
+        {
+          id: "indiv.story.outside_forces",
+          text: "Which forces outside management's control could move {company}'s results the most over the next ten years: the economy, a commodity price, interest or exchange rates, a single country, a regulator, or a few large customers, and how exposed is the company to each?",
+          steps: [
+            "Name the one or two outside forces that most drive {company}'s sales and profit, using the geographic revenue, the risk factors section of the 10-K, and the note that lists any customer buying 10 percent or more of sales.",
+            "For each force, read its long history on the Economic page or in public price data. Judge what a normal level is and how far it has swung, and note whether the latest year's profit was earned at an unusually high or low level of that force.",
+            "Say whether customers can put off buying {company}'s product in a bad year (a luxury item, a car, new equipment) or have to keep buying it (food, medicine, electricity).",
+            "Trace how {company}'s own setup turns each swing into a profit swing: fixed costs that stay put when sales fall (check how far operating profit moved against sales in past downturns), high-cost production, price hedges or long contracts that soften the swing, and debt that enlarges it.",
+            "Check whether a few large customers could force prices down or walk away, and whether one country's politics or one regulator's decision sets what {company} can charge.",
+            "State whether your story assumes each force stays near today's level or moves, and keep that forecast apart from your view of the company, so you can later tell which part was wrong.",
+          ],
+          close: "A business whose profit swings with forces it cannot control is riskier, investors demand a higher return before they will own it, and borrowed money makes that swing larger.",
+        },
+        // Method: narrative breaks, discrete versus continuous risk, buffer and access to capital (Damodaran, Narrative and Numbers Ch.11). Cash burn, rating-based default rates, distress sale value, and the two-case formula (Investment Valuation Ch.12, 22 and 23; Narrative and Numbers Ch.8, figure 8.2).
+        {
+          id: "indiv.story.end",
+          text: "What could end {company}'s story altogether over the next ten years, and how likely is it: debt that cannot be repaid or refinanced, running out of cash, losing a court case, license, or product approval, one product failing, a government taking over the business, or a disaster?",
+          steps: [
+            "List the specific events that could stop {company} outright, using the risk factors section of the 10-K and the legal proceedings note. Keep these all-or-nothing events apart from the ordinary ups and downs that only lower profit.",
+            "Put the debt next to the cash. Read the debt maturities note for how much falls due in the next five years, and if the company loses money, work out how many months the cash on hand lasts at the current yearly loss. Then read the interest coverage and synthetic rating in the Credit Analysis section.",
+            "Judge the cushion. Is {company} large, with steady cash and open access to banks, bond buyers, and new shareholders even in a market crisis, or small and dependent on new money arriving on time? Can any of the listed risks be insured or hedged?",
+            "Say what owners would be left with if the story ended: what the assets would fetch in a forced sale after lenders are repaid, which is often nothing for shareholders.",
+            "State the chance of failure over ten years and your reasons. A figure near zero is a valid answer for a large, profitable company with little debt.",
+          ],
+          close: "A story that can break outright is worth its value if it works times the chance it works, plus what is left if it ends times the chance it ends, and value is lost because a forced sale fetches less than a working business.",
+        },
+        // Method: terminal return on capital, with three choices (Investment Valuation Ch.12). Which powers survive into maturity (7 Powers Part II). Fading but above-average returns (Besanko Part Three). Eroding moats (Little Book Ch.8). Growth neutral when ROIC equals the cost of capital (Narrative and Numbers Ch.9).
+        {
+          id: "indiv.story.edge_duration",
+          text: "When {company}'s fast growth ends, will it still earn more on new investment than its cost of capital (the yearly return investors require for the risk they take), or will competition pull its returns down to that level?",
+          steps: [
+            "Read the ROIC − WACC spread history on this page (WACC is the cost of capital). Say whether the gap has held, narrowed, or widened, and put it next to the industry's gap, because whole industries can earn above the cost of capital for decades while single companies drift toward their industry.",
+            "Take the edge you named in question 4 and say whether it survives slow growth. Brands and processes built over decades, and switching costs on customers already signed, tend to last. A cost lead from size or a network lead lasts only if {company} is already clearly bigger than every rival when growth slows. A single patent lasts until it expires unless new patents keep replacing it. A business model that incumbents refuse to copy protects {company} only against those incumbents, and newer firms can use the same model.",
+            "Look for signs the edge is already wearing down: customers pushing back on price increases, new customers won only with discounts, a new technology or business model aimed at what {company} sells, fewer and larger buyers, or cash spent on businesses where {company} has no edge.",
+            "Choose the return on new investment for the years after growth: equal to the cost of capital if no edge survives steps 2 and 3, the industry average if the edge is one the whole industry shares, and above the industry average only if a named edge survives both steps.",
+          ],
+          close: "Growth adds value only while returns on new investment beat the cost of capital; once the two are equal, faster growth no longer changes the value, so a return above the cost of capital that runs forever needs a named edge behind it.",
+        },
+        // Method: story types (Damodaran, Narrative and Numbers Ch.3, Table 3.1), the business version of who, what, when, where and why, told in specifics (Ch.3), and hope replacing expectation as the sign of a fairy tale (Ch.2 and Ch.7).
+        {
+          id: "indiv.story.synthesis",
+          text: "Write {company}'s story as you would tell it to someone who has never heard of the company.",
+          steps: [
+            "Pick the kind of story it is: a dominant leader pressing its advantage, a challenger with a better or cheaper product, a company that found a need nobody was meeting, a disruptor changing how the business is run, a low-cost seller winning on volume, or a mature business defending what it has. A company can tell two of these at once.",
+            "Say who its customers and rivals are, what the business looks like in ten years, where it will sell, and why it wins, using your answers above.",
+            "Put the parts in order: the market, {company}'s place in it, what that place earns, what growth costs, and how the story could end.",
+            "Check each sentence for a reason behind it. A sentence that states a hope with no reason from the questions above goes, because a story built on hopes is the one most likely to break.",
+          ],
+          close: "No length limit; pull together everything from the questions above into the best complete picture you can.",
+        },
+        // The book tests the story next, then checks it against the market it named.
         { id: "indiv.story_test", text: "Is the growth story possible (does it exceed its addressable market or beat GDP forever), plausible (consistent with margins, reinvestment, competition), and probable?" },
-        { id: "indiv.reverse_dcf", text: "What growth and margin does today's price imply (reverse DCF), and is that more or less optimistic than my own forecast? (Mauboussin & Rappaport, Expectations Investing)" },
-        { id: "indiv.narrative_break", text: "What single event or data point would break the narrative, and am I watching for it?" },
         { id: "indiv.big_market", text: "Does the story rely on a big market that many competitors are chasing, so the winners cannot all earn their cost of capital?" },
+      ],
+    },
+    {
+      title: PRICE_DECK_TITLE,
+      questions: [
+        { id: "indiv.price.bet", text: "What does the market have to believe about {company}'s future for today's price to be fair, and which of those beliefs carries the most weight? A price that rests on one bold belief breaks when that belief fails; a price spread across several modest ones is harder to break." },
+        { id: "indiv.price.market_size", text: "Is the market {company} sells into large enough, and growing fast enough, to support the growth the price assumes, or does the price quietly assume {company} will enter markets it is not in today? Revenue can never outgrow the market it comes from." },
+        { id: "indiv.price.margin_edge", text: "What would let {company} earn the margin the price assumes when most rivals cannot, and is that advantage already proven or still a promise? A margin far above competitors' is only as safe as the edge that produces it." },
+        { id: "indiv.price.edge_duration", text: "How long can {company} keep earning more on its investments than those investments cost, and what would eventually close that gap: new rivals, new technology, regulators, or customers who stop paying a premium? When a price needs excess returns forever, it is betting that nobody ever catches up." },
+        { id: "indiv.price.value_or_price", text: "Is the market valuing {company} on the cash it will produce, or pricing it on something else, such as index buying, momentum, scarcity of similar companies, or a story investors love? A price driven by demand for the stock can stay away from value for a long time, so being right about value does not tell you when the gap closes." },
+        { id: "indiv.price.your_story", text: "Where does your own story for {company} part ways with the story the price tells, and what evidence would eventually show which one is right? Disagreeing with the market is only useful when you can name the belief you disagree on and what would settle it." },
+        { id: "indiv.price.synthesis", text: "Write the story the market is telling about {company} through today's price, say which parts of it you believe and which you do not, and what you would be willing to pay for the story you do believe. No length limit; pull together everything above into the best complete picture you can." },
       ],
     },
     {

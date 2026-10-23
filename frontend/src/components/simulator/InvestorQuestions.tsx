@@ -108,7 +108,9 @@ export function InvestorQuestions() {
                                   isChecked && "text-white/40 line-through decoration-gold/40",
                                 )}
                               >
-                                {q.text}
+                                {/* The story deck names {company}; this checklist is about no
+                                    one company, so it reads the placeholder as a phrase. */}
+                                {q.text.split("{company}").join("the company")}
                               </span>
                             </label>
                           </li>

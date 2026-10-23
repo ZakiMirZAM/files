@@ -57,6 +57,7 @@ from valuation import stages as _vstages  # noqa: E402
 from valuation import selector as _vselector  # noqa: E402
 from valuation import engines as _vengines  # noqa: E402
 from valuation import diagnostics as _vdiag  # noqa: E402
+from valuation import pe_growth as _vpe  # noqa: E402
 
 # Uses of cash. Self-contained and imports nothing from this module, so there is
 # no cycle. It owns the cash-flow sign convention, which is not uniform in this
@@ -643,6 +644,11 @@ class IndividualSnapshot:
     # Generic competitive strategy (plan 3.3): raw figures with industry rank
     # and count, no percentile or grid placement. JSON-safe.
     generic_strategy: Optional[dict] = None
+
+    # P/E vs growth and returns (Damodaran Ch.11/18): forward and trailing
+    # P/E, the book's growth measures beside the consensus, fair P/E, the
+    # growth the P/E implies, sensitivity, scenarios and peers. JSON-safe.
+    pe_growth: Optional[dict] = None
 
     # Moat direction and growth sustainability (feature plan item 11): spread
     # direction with the ROIC/WACC split, share and margins then and now, and
@@ -1905,6 +1911,33 @@ def _eva_valuation(
     }
 
 
+def _ev_nopat(*, price: Optional[float], shares: Optional[float],
+              gross_debt: Optional[float], minority: Optional[float],
+              cash: Optional[float], nopat: Optional[float], roic: Optional[float],
+              wacc: Optional[float], g: Optional[float]) -> dict:
+    """Actual EV/NOPAT against the multiple ROIC, WACC and g justify
+    (Damodaran Ch.17: EV/FCFF = 1/(WACC − g), FCFF = NOPAT × (1 − g/ROIC)).
+    EV uses the same bridge as the EVA section: equity at the current price
+    plus gross debt and minority interest, less cash."""
+    ev = None
+    if price is not None and price > 0 and shares is not None and shares > 0:
+        ev = price * shares + (gross_debt or 0.0) + (minority or 0.0) - (cash or 0.0)
+    actual = (ev / nopat) if (ev is not None and ev > 0 and nopat is not None and nopat > 0) else None
+    justified = (_vpe.justified_ev_nopat(roic, wacc, g)
+                 if None not in (roic, wacc, g) else None)
+    ratio = (actual / justified) if (actual is not None and justified) else None
+    return {
+        "enterpriseValue": round(ev, 2) if ev is not None else None,
+        "nopat": round(nopat, 2) if nopat is not None else None,
+        "actual": round(actual, 4) if actual is not None else None,
+        "justified": round(justified, 4) if justified is not None else None,
+        "actualToJustified": round(ratio, 4) if ratio is not None else None,
+        "roic": round(roic, 6) if roic is not None else None,
+        "wacc": round(wacc, 6) if wacc is not None else None,
+        "growth": round(g, 6) if g is not None else None,
+    }
+
+
 def compute_forecast(
     rows: list[sqlite3.Row],
     beta: float | None = None,
@@ -2386,6 +2419,11 @@ def compute_forecast(
             g_term=g_term, equity_adjust=equity_adjust, shares=shares,
             horizon=len(base["rows"]),
         )
+        if eva is not None:
+            eva["evNopat"] = _ev_nopat(
+                price=current_price, shares=shares, gross_debt=gross_debt,
+                minority=minority, cash=cash, nopat=_nopat_for_row(latest),
+                roic=roic, wacc=wacc, g=g_term)
 
     # Sensitivity: intrinsic per share across WACC × explicit revenue growth.
     wacc_axis = [round(wacc + d, 4) for d in (-0.015, -0.0075, 0.0, 0.0075, 0.015)]
@@ -6057,6 +6095,447 @@ def _capex_split(rows: list[sqlite3.Row], inflation: Optional[dict[int, float]] 
 
 # ── Snapshot builder ────────────────────────────────────────────────────────
 
+# ── P/E vs growth and returns (Damodaran Ch.11, Ch.17, Ch.18) ───────────────
+
+PE_GROWTH_HIGH_GROWTH_YEARS = 5   # the two-stage "high growth" window
+PE_GROWTH_SPREAD_YEARS = 10       # spread history shown beside the panel
+PE_GROWTH_PEERS_SHOWN = 12        # peers listed; the regression uses all
+# Plausibility bounds for a peer to enter the P/E regression, the same ones
+# the sector and comparative scorecards apply (api._SECTOR_CLIP: peRatio 0 to
+# 100, roeEquity ±100%, costOfEquity 2% to 25%). Outside them the figure is a
+# data artefact (tiny earnings, near-zero book), and one such firm moves the
+# regression line more than the rest of the industry together.
+PE_PEER_MAX_PE = 100.0
+PE_PEER_MAX_ROE = 1.0
+PE_PEER_KE_RANGE = (0.02, 0.25)
+
+
+def _eps_series(rows: list[sqlite3.Row]) -> dict[int, Optional[float]]:
+    """EPS per fiscal year, oldest first. A row with net income but no share
+    count uses the last known diluted count, the forecast's own rule (a
+    missing count is a data gap, not a fact about the company)."""
+    out: dict[int, Optional[float]] = {}
+    shares: Optional[float] = None
+    for r in sorted(rows, key=lambda r: int(r["Calendar Year"])):
+        shares = _row_val(r, "Weighted Average Shs Out Dil") or shares
+        eps = _row_val(r, "Net Income Per Share")
+        if eps is None:
+            eps = _safe_div(_row_val(r, "Net Income"), shares)
+        out[int(r["Calendar Year"])] = eps
+    return out
+
+
+def _latest_of(series: Optional[dict]) -> Optional[float]:
+    pts = [(int(y), v) for y, v in (series or {}).items() if v is not None]
+    return max(pts)[1] if pts else None
+
+
+def _r(v: Optional[float], d: int = 6) -> Optional[float]:
+    return round(v, d) if v is not None else None
+
+
+def _pe_growth(
+    rows: list[sqlite3.Row], *, residual_income: Optional[dict],
+    forecast: Optional[dict], metric_hist: Optional[dict],
+    consensus: Optional[dict], price: Optional[float], price_unusable: bool,
+    rf: Optional[float],
+) -> Optional[dict]:
+    """Does growth justify the P/E? Figures only, no verdict.
+
+    The P/E is the consensus forward P/E, the one the fair-P/E equation is
+    written in (price over NEXT year's earnings). ROE, retention, cost of
+    equity and stable growth are the Residual Income block's own, so this
+    panel and the P/B vs ROE panel beside it read the same inputs. Growth is
+    measured the Ch.11 ways (geometric and log-linear EPS growth, retention
+    × ROE); the analyst consensus is shown next to it for comparison."""
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
+    latest = rows[-1]
+    rf_eff = RISK_FREE_RATE if rf is None else rf
+
+    eps = _eps_series(rows)
+    last_year = max(eps)
+    window = [eps.get(last_year - 5 + i) for i in range(6)]
+    g_geo = _vpe.geometric_growth(window[0], window[-1], 5)
+    g_trend = _vpe.log_linear_growth(window)
+
+    ri = residual_income or {}
+    ke = ri.get("costOfEquity")
+    roe = ri.get("roeUsed") if ri.get("applicable") else None
+    retention = ri.get("retention") if ri.get("applicable") else None
+    sustainable = roe * retention if (roe is not None and retention is not None) else None
+    g_stable = _vpe.stable_growth(rf_eff, sustainable) if sustainable is not None else None
+    ok = roe is not None and roe > 0 and ke is not None and ke > 0 and g_stable is not None
+
+    c = consensus or {}
+    fwd_pe = c.get("forwardPe") if (c.get("forwardPe") or 0) > 0 else None
+    ey = 1.0 / fwd_pe if fwd_pe else None
+    g_cons = c.get("nextYearGrowth")
+
+    px = _effective_price(price, _row_val(latest, "Market Cap"),
+                          _row_val(latest, "Weighted Average Shs Out Dil"), price_unusable)
+    eps0 = eps[last_year]
+    trailing = (px / eps0) if (px and eps0 and eps0 > 0) else None
+    # The price-multiple rule (_price_multiple): a live P/E more than 3x away
+    # from the filed one is a unit mismatch, not a market move. BRK-B resolves
+    # to BRK-A, whose share price over B-equivalent EPS read 24,434x.
+    ref = _row_val(latest, "PE Ratio") or _safe_div(_row_val(latest, "Market Cap"),
+                                                    _row_val(latest, "Net Income"))
+    if trailing and ref and ref > 0 and max(trailing / ref, ref / trailing) > _MULTIPLE_DIVERGENCE:
+        trailing = None
+    # PEG on the TRAILING P/E: the growth is measured from trailing EPS, and
+    # a forward P/E would count the first year's growth twice (Ch.18).
+    peg = (trailing / (g_geo * 100.0)) if (trailing and g_geo and g_geo > 0) else None
+
+    a = (forecast or {}).get("assumptions") or {}
+    roic, wacc = a.get("roic"), a.get("wacc")
+
+    fair = _vpe.fair_forward_pe(roe, ke, g_stable) if ok else None
+    implied = _vpe.implied_growth(fwd_pe, roe, ke) if (ok and fwd_pe) else None
+    years = None
+    if ok and fwd_pe and g_geo is not None and g_geo > g_stable:
+        years = {"growth": _r(g_geo), **_vpe.solve_high_growth_years(fwd_pe, g_geo, roe, ke, g_stable)}
+        years["years"] = _r(years["years"], 2)
+    scenarios = []
+    if ok:
+        for s in _vpe.growth_scenarios(
+                {"historical": g_geo, "sustainable": sustainable, "consensus": g_cons},
+                roe, ke, g_stable, years=PE_GROWTH_HIGH_GROWTH_YEARS):
+            f = s["fairPe"]
+            scenarios.append({**s, "growth": _r(s["growth"]), "fairPe": _r(f, 3),
+                              "actualToFairPe": _r(fwd_pe / f) if (fwd_pe and f and f > 0) else None})
+
+    two_stage = None
+    if ok and fwd_pe:
+        ts = _vpe.solve_two_stage_growth(fwd_pe, PE_GROWTH_HIGH_GROWTH_YEARS, roe, ke, g_stable)
+        two_stage = {"growth": _r(ts["growth"]), "bound": ts["bound"]}
+
+    er, rw = (metric_hist or {}).get("excess_return") or {}, (metric_hist or {}).get("roic_wacc_spread") or {}
+    spread_years = sorted({int(y) for y in (*er.keys(), *rw.keys())})[-PE_GROWTH_SPREAD_YEARS:]
+    grid = _vpe.fair_pe_grid(roe, ke, g_stable) if ok else None
+    shock = _vpe.rate_shock(roe, ke, rf_eff, sustainable) if ok else None
+
+    return {
+        "applicable": True,
+        "consensusSource": "Yahoo Finance" if fwd_pe else None,
+        "consensusAnalysts": c.get("analysts"),
+        "forwardPe": _r(fwd_pe, 3),
+        "trailingPe": _r(trailing, 3),
+        "earningsYield": _r(ey),
+        "treasury10y": _r(rf_eff),
+        "costOfEquity": _r(ke),
+        "earningsYieldMinusKe": _r(ey - ke) if (ey is not None and ke is not None) else None,
+        "epsGrowth5y": _r(g_geo),
+        "epsGrowthTrend5y": _r(g_trend),
+        "consensusGrowth": _r(g_cons),
+        "peg": _r(peg, 3),
+        "roe": _r(roe),
+        "retention": _r(retention),
+        "sustainableGrowth": _r(sustainable),
+        "reinvestmentRate": _r(_latest_of((metric_hist or {}).get("reinvestment_rate"))),
+        "marginalRoic": _r(_latest_of((metric_hist or {}).get("marginal_roic"))),
+        "roeMinusKe": _r(roe - ke) if (roe is not None and ke is not None) else None,
+        "roic": _r(roic),
+        "wacc": _r(wacc),
+        "roicMinusWacc": _r(roic - wacc) if (roic is not None and wacc is not None) else None,
+        "spreadHistory": [
+            {"year": y, "roeMinusKe": _r(er.get(y)), "roicMinusWacc": _r(rw.get(y))}
+            for y in spread_years
+        ],
+        "stableGrowth": _r(g_stable),
+        "fairPe": _r(fair, 3),
+        "actualToFairPe": _r(fwd_pe / fair) if (fwd_pe and fair and fair > 0) else None,
+        "noGrowthPe": _r(1.0 / ke, 3) if ke else None,
+        "growthPremiumShare": _r(_vpe.growth_premium_share(ey, ke)) if (ey is not None and ke) else None,
+        "impliedGrowth": _r(implied),
+        "impliedGrowthTwoStage": two_stage,
+        "highGrowthYears": years,
+        "impliedReturnAtConsensus": _r(_vpe.implied_return(fwd_pe, roe, g_cons))
+            if (ok and fwd_pe and g_cons is not None) else None,
+        "impliedMinusSustainable": _r(implied - sustainable)
+            if (implied is not None and sustainable is not None) else None,
+        "impliedMinusConsensus": _r(implied - g_cons)
+            if (implied is not None and g_cons is not None) else None,
+        "grid": {k: ([[_r(v, 3) for v in row] for row in val] if k == "matrix" else [_r(v) for v in val])
+                 for k, val in grid.items()} if grid else None,
+        "rateShock": {k: _r(v, 3) for k, v in shock.items()} if shock else None,
+        "scenarios": scenarios,
+        "highGrowthYearsWindow": PE_GROWTH_HIGH_GROWTH_YEARS,
+        "epsHistory": [{"year": y, "eps": _r(v)} for y, v in sorted(eps.items()) if v is not None],
+    }
+
+
+# ── Moat direction and growth sustainability (feature plan item 11) ──────────
+# Figures only, no verdict: the spread today and five years back, its average
+# change per year (OLS slope over the window, not two endpoints), the exact
+# split of that change into ROIC and WACC, the four-factor sustainable growth
+# per year beside revenue growth, and share and margins now against then.
+
+MOAT_WINDOW_YEARS = 5
+# Data-sufficiency guard, not a label: below 5% capital growth over the
+# window the return on new capital is withheld as noise.
+_INCREMENTAL_ROIC_MIN_GROWTH = 0.05
+
+
+def _roic_fade(roic_by_year: dict[int, Optional[float]]) -> Optional[dict]:
+    """ROIC fade over the moat window: minus the OLS slope of ROIC on the year,
+    so a positive figure is ROIC given up per year. One function for the moat
+    strip and the Growth Viability flag, so the page states one fade rate.
+    None with fewer than three years in the window."""
+    pts = sorted((int(y), v) for y, v in roic_by_year.items() if v is not None)
+    if not pts:
+        return None
+    y1 = pts[-1][0]
+    pts = [(y, v) for y, v in pts if y >= y1 - MOAT_WINDOW_YEARS]
+    if len(pts) < 3:
+        return None
+    slope = _ols_slope([float(y) for y, _ in pts], [v for _, v in pts])
+    if slope is None:
+        return None
+    return {"fade": -slope, "first": pts[0][1], "last": pts[-1][1],
+            "fromYear": pts[0][0], "toYear": y1}
+
+
+def _spread_direction(metric_hist: Optional[dict], equity_basis: bool = False) -> Optional[dict]:
+    """ROIC − WACC today, five years back, the OLS slope across the window,
+    and the exact split of the five-year change: Δspread = ΔROIC − ΔWACC.
+    Reads the same per-year ROIC and WACC as the spread history table (each
+    year's WACC carries that year's rates), so a spread that fell because
+    rates rose shows up in the WACC term, not the ROIC term.
+
+    ``equity_basis`` (banks, insurers, REITs, where debt is raw material and
+    ROIC − WACC means nothing) runs the same arithmetic on ROE − cost of
+    equity, the other line of the spread history table."""
+    mh = metric_hist or {}
+    rkey, ckey = ("roe", "cost_of_equity") if equity_basis else ("roic", "wacc")
+    roic, wacc = mh.get(rkey) or {}, mh.get(ckey) or {}
+    years = sorted(int(y) for y in roic if roic.get(y) is not None and wacc.get(y) is not None)
+    if not years:
+        return None
+    y1 = years[-1]
+    y0 = y1 - MOAT_WINDOW_YEARS
+    window = [y for y in years if y >= y0]
+    spread = {y: roic[y] - wacc[y] for y in window}
+    slope = (_ols_slope([float(y) for y in window], [spread[y] for y in window])
+             if len(window) >= 3 else None)
+    has_then = y0 in spread
+    # Rounded to the displayed precision (a percent to 3 decimals) so the
+    # printed parts add to the printed total.
+    d_roic = _r(roic[y1] - roic[y0], 5) if has_then else None
+    d_wacc = _r(wacc[y1] - wacc[y0], 5) if has_then else None
+    fade = _roic_fade({y: roic[y] for y in window})
+    now = spread[y1]
+    return {
+        # "capital": ROIC − WACC; "equity": ROE − cost of equity.
+        "basis": "equity" if equity_basis else "capital",
+        "year": y1,
+        "yearThen": y0 if has_then else None,
+        "spreadNow": _r(now),
+        "spreadThen": _r(spread[y0]) if has_then else None,
+        "slopePerYear": _r(slope),
+        "yearsInSlope": len(window),
+        "returnNow": _r(roic[y1]),
+        "costNow": _r(wacc[y1]),
+        "returnChange": d_roic,
+        "costChange": d_wacc,
+        # Exact: the printed total is rebuilt from the printed parts.
+        "spreadChange": _r(d_roic - d_wacc, 5) if has_then else None,
+        "returnFadePerYear": _r(fade["fade"]) if fade else None,
+        # Arithmetic only, shown only while the spread is positive and falling.
+        "yearsToZeroAtThisPace": _r(now / -slope, 2)
+            if (slope is not None and slope < 0 and now > 0) else None,
+    }
+
+
+def _sustainable_growth_history(rows: list[sqlite3.Row]) -> Optional[dict]:
+    """Porter's four factors per year over the moat window (net margin × asset
+    turnover × assets/equity × retention), beside revenue growth over the same
+    years. Retention counts buybacks as cash returned, the augmented payout of
+    valuation/inputs.py (Damodaran Ch.13.3): 1 − (dividends + buybacks) / net
+    income. It can go below zero when a company returns more than it earns;
+    that is shown as computed, never clamped."""
+    from company_profile.rivals import sustainable_growth  # noqa: PLC0415
+
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+    out_rows: list[dict] = []
+    saw_buybacks = False
+    for y in range(y0 + 1, y1 + 1):
+        r = by_year.get(y)
+        if r is None:
+            continue
+        div = _row_val(r, "Dividends Paid")
+        bb = _row_val(r, "Common Stock Repurchased")
+        saw_buybacks = saw_buybacks or bb is not None
+        # Both columns NULL is missing data, not zero payout: the DB stores an
+        # explicit 0 for a company that paid nothing, so retention stays None.
+        cash_returned = (None if (div is None and bb is None) else
+                         (abs(div) if div is not None else 0.0) + (abs(bb) if bb is not None else 0.0))
+        equity = _row_val(r, "Total Stockholders Equity") or _row_val(r, "Total Equity")
+        product, f = sustainable_growth(_row_val(r, "Revenue"), _row_val(r, "Net Income"),
+                                        _row_val(r, "Total Assets"), equity, cash_returned)
+        out_rows.append({"year": y, **f, "sustainableGrowth": product})
+    if not out_rows:
+        return None
+    products = [x["sustainableGrowth"] for x in out_rows if x["sustainableGrowth"] is not None]
+    rev1 = _row_val(by_year[y1], "Revenue")
+    rev0 = _row_val(by_year[y0], "Revenue") if y0 in by_year else None
+    cagr = ((rev1 / rev0) ** (1.0 / MOAT_WINDOW_YEARS) - 1.0
+            if (rev1 is not None and rev0 is not None and rev1 > 0 and rev0 > 0) else None)
+    return {
+        "rows": out_rows,
+        "averageSustainableGrowth": _r(sum(products) / len(products)) if products else None,
+        "yearsAveraged": len(products),
+        "revenueCagr": _r(cagr),
+        "revenueFromYear": y0 if rev0 is not None else None,
+        "revenueToYear": y1,
+        "buybacksIncluded": saw_buybacks,
+    }
+
+
+def _share_and_margins(rows: list[sqlite3.Row], growth_split: Optional[dict],
+                       gross_margin: bool = True) -> Optional[dict]:
+    """Gross and operating margin in the latest year and five years before,
+    beside industry revenue share now and then (the growth split's own
+    figures, from the same peer panel as the Industry page). ``gross_margin``
+    is off for banks, insurers and REITs, which have no cost of goods sold."""
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+
+    def margins(y: int) -> tuple[Optional[float], Optional[float]]:
+        r = by_year.get(y)
+        if r is None:
+            return None, None
+        rev = _row_val(r, "Revenue")
+        if rev is None or rev <= 0:
+            return None, None
+        return (_safe_div(_row_val(r, "Gross Profit"), rev) if gross_margin else None,
+                _safe_div(_row_val(r, "Operating Income"), rev))
+
+    g1, o1 = margins(y1)
+    g0, o0 = margins(y0)
+    gs = growth_split or {}
+    return {
+        "year": y1,
+        "yearThen": y0,
+        "grossMarginNow": _r(g1), "grossMarginThen": _r(g0),
+        "operatingMarginNow": _r(o1), "operatingMarginThen": _r(o0),
+        "shareNow": gs.get("shareNow"), "shareThen": gs.get("shareThen"),
+        "shareYear": gs.get("fiscalYear"),
+        "shareYearThen": (gs["fiscalYear"] - gs["years"])
+            if (gs.get("fiscalYear") is not None and gs.get("years")) else None,
+    }
+
+
+def _incremental_roic(rows: list[sqlite3.Row]) -> Optional[dict]:
+    """Return on the capital added over the moat window: (NOPAT now − NOPAT
+    five years back) / (invested capital now − invested capital then). The
+    one-year marginal ROIC swings on small capital changes; five years of
+    change is the steadier read. None when capital grew by less than
+    ``_INCREMENTAL_ROIC_MIN_GROWTH`` of its starting base: a tiny denominator
+    prints noise (50 of new capital beside 500 of new profit reads 1,000%)."""
+    by_year = {int(r["Calendar Year"]): r for r in rows}
+    if not by_year:
+        return None
+    y1 = max(by_year)
+    y0 = y1 - MOAT_WINDOW_YEARS
+    if y0 not in by_year:
+        return None
+    n1, n0 = _nopat_for_row(by_year[y1]), _nopat_for_row(by_year[y0])
+    c1, c0 = _invested_capital(by_year[y1]), _invested_capital(by_year[y0])
+    if None in (n1, n0, c1, c0) or c1 - c0 <= _INCREMENTAL_ROIC_MIN_GROWTH * abs(c0):
+        return None
+    return {"value": _r((n1 - n0) / (c1 - c0)), "fromYear": y0, "toYear": y1}
+
+
+def _moat_direction(rows: list[sqlite3.Row], metric_hist: Optional[dict],
+                    growth_split: Optional[dict]) -> Optional[dict]:
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda r: int(r["Calendar Year"]))
+    operating_firm, _ = fcff_applicable(rows[-1])
+    return {
+        "windowYears": MOAT_WINDOW_YEARS,
+        "spread": _spread_direction(metric_hist, equity_basis=not operating_firm),
+        # Return on new capital is an operating-firm measure, like ROIC itself.
+        "incrementalRoic": _incremental_roic(rows) if operating_firm else None,
+        "shareAndMargins": _share_and_margins(rows, growth_split, gross_margin=operating_firm),
+        "sustainableGrowth": _sustainable_growth_history(rows),
+    }
+
+
+def _pe_peers(conn: sqlite3.Connection, peer_set: Any, subject: str,
+              rf: Optional[float], erp: Optional[float]) -> Optional[dict]:
+    """P/E against fair P/E for every profitable peer, one method for all:
+    P/E and ROE from the latest filed year (stored market cap ÷ net income),
+    CAPM cost of equity on the same live risk-free rate and premium, stable
+    growth = retention × ROE capped at the risk-free rate. The fair P/E is
+    stated on the same trailing basis.
+
+    USD filers only: the stored market cap of some foreign filers is in the
+    quote currency, not the reporting one, so their P/E is off by the
+    exchange rate (the scorecards hard-filter the same way)."""
+    peers = [p for p in (getattr(peer_set, "peers", None) or [])
+             if p.reported_currency == "USD"]
+    if not peers:
+        return None
+    rf_eff = RISK_FREE_RATE if rf is None else rf
+    tickers = [p.ticker for p in peers]
+    ph = ",".join("?" * len(tickers))
+    beta = {r[0]: r[1] for r in conn.execute(
+        f"SELECT ticker, beta FROM tickers WHERE ticker IN ({ph})", tickers)}
+    years = sorted({p.calendar_year for p in peers})
+    yh = ",".join("?" * len(years))
+    payout = {(r[0], int(r[1])): (r[2], r[3]) for r in conn.execute(
+        f'SELECT Ticker, CAST("Calendar Year" AS INTEGER), "Payout Ratio", "Dividends Paid" '
+        f'FROM financials WHERE Ticker IN ({ph}) AND CAST("Calendar Year" AS INTEGER) IN ({yh})',
+        [*tickers, *years])}
+
+    out: list[dict] = []
+    for p in peers:
+        ni, mc, eq = (p.ratios.get(k) for k in ("Net Income", "Market Cap", "Total Stockholders Equity"))
+        if not (ni and mc and eq) or ni <= 0 or mc <= 0 or eq <= 0:
+            continue   # P/E and ROE mean nothing on a loss or negative book
+        roe = ni / eq
+        ke = capm_discount_rate(beta.get(p.ticker), rf=rf, erp=erp, market_fallback=True)
+        if (mc / ni > PE_PEER_MAX_PE or roe > PE_PEER_MAX_ROE
+                or not PE_PEER_KE_RANGE[0] <= ke <= PE_PEER_KE_RANGE[1]):
+            continue
+        pr, div = payout.get((p.ticker, p.calendar_year), (None, None))
+        if pr is None and div is not None:
+            pr = abs(div) / ni
+        pr = min(max(pr if pr is not None else 0.0, 0.0), 1.0)
+        g = _vpe.stable_growth(rf_eff, (1.0 - pr) * roe)
+        fwd = _vpe.fair_forward_pe(roe, ke, g)
+        out.append({"ticker": p.ticker, "name": p.name, "pe": mc / ni,
+                    "fairPe": fwd * (1.0 + g) if fwd is not None else None,
+                    "spread": roe - ke, "revenueUsd": p.revenue_usd})
+
+    cmp = _vpe.peer_comparison(out, subject)
+    ranked = sorted(cmp["peers"], key=lambda x: x["revenueUsd"], reverse=True)
+    shown = ranked[:PE_GROWTH_PEERS_SHOWN]
+    shown += [x for x in ranked[PE_GROWTH_PEERS_SHOWN:] if x["isSubject"]]
+    reg, subj = cmp["regression"], cmp["subject"]
+    return {
+        "fiscalYear": getattr(peer_set, "fiscal_year", None),
+        "peers": [{"ticker": x["ticker"], "name": x["name"], "isSubject": x["isSubject"],
+                   "pe": _r(x["pe"], 3), "fairPe": _r(x["fairPe"], 3), "gap": _r(x["gap"], 3),
+                   "spread": _r(x["spread"])} for x in shown],
+        "regression": {"slope": _r(reg["slope"], 3), "intercept": _r(reg["intercept"], 3),
+                       "r2": _r(reg["r2"], 3), "n": reg["n"]} if reg else None,
+        "subject": {k: _r(v, 3) for k, v in subj.items()} if subj else None,
+        "peerCount": cmp["peerCount"],
+        "minPeersForFit": _vpe.MIN_PEERS_FOR_FIT,
+    }
+
+
 def build_individual_snapshot(
     ticker: str,
     rows: list[sqlite3.Row],
@@ -6468,6 +6947,7 @@ def build_individual_snapshot(
     business_profile = None
     cost_structure = None
     generic_strategy = None
+    pe_peers = None
     growth_split = None
     _snap_sector = latest["t_sector"] if "t_sector" in latest.keys() else None
     _snap_industry = latest["t_industry"] if "t_industry" in latest.keys() else None
@@ -6517,6 +6997,11 @@ def build_individual_snapshot(
                     log.warning("generic strategy failed for %s: %s", ticker.upper(), exc)
                     generic_strategy = None
                 try:
+                    pe_peers = _pe_peers(_cp_conn, _cp_peers, ticker.upper(), rf, erp)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("P/E peers failed for %s: %s", ticker.upper(), exc)
+                    pe_peers = None
+                try:
                     # Share now and five years back: the connections growth
                     # split, on the one cached industry panel.
                     from connections.sector_cache import get_industry_panel
@@ -6535,6 +7020,26 @@ def build_individual_snapshot(
                     growth_split = None
             _cp_conn.close()
 
+    # P/E vs growth and returns. The consensus is Yahoo's forward P/E, which is
+    # price and EPS in one unit, so a receipt's currency mismatch cannot reach it.
+    # The same Yahoo round-trip brings the annual revenue and EPS estimates the
+    # Next two years table sets beside the model.
+    consensus = estimates = None
+    if db is not None:
+        try:
+            fwd = db.get_forward(ticker)
+            consensus, estimates = fwd.get("consensus"), fwd.get("estimates")
+        except Exception as exc:  # noqa: BLE001 — a network call must not break the snapshot
+            log.warning("consensus fetch failed for %s: %s", ticker.upper(), exc)
+    try:
+        pe_growth = _pe_growth(rows, residual_income=residual_income, forecast=forecast,
+                               metric_hist=metric_hist, consensus=consensus,
+                               price=live_price, price_unusable=price_unusable, rf=rf)
+        if pe_growth is not None:
+            pe_growth["peers"] = pe_peers
+    except Exception as exc:  # noqa: BLE001
+        log.warning("P/E growth failed for %s: %s", ticker.upper(), exc)
+        pe_growth = None
     try:
         moat_direction = _moat_direction(rows, metric_hist, growth_split)
     except Exception as exc:  # noqa: BLE001
@@ -6543,14 +7048,6 @@ def build_individual_snapshot(
 
     # Next two years: the model's first two projected years beside the last
     # reported year, Yahoo's revenue and EPS consensus, and the reader's own.
-    # Only the annual estimates are used here; the consensus forward P/E from
-    # the same round-trip is not shown on this page.
-    estimates = None
-    if db is not None:
-        try:
-            estimates = db.get_forward(ticker).get("estimates")
-        except Exception as exc:  # noqa: BLE001 — a network call must not break the snapshot
-            log.warning("forward estimates fetch failed for %s: %s", ticker.upper(), exc)
     try:
         from next_two_years import build_next_two_years
         next_two_years = build_next_two_years(rows, forecast, estimates)
@@ -6620,6 +7117,7 @@ def build_individual_snapshot(
         business_profile=business_profile,
         cost_structure=cost_structure,
         generic_strategy=generic_strategy,
+        pe_growth=pe_growth,
         moat_direction=moat_direction,
         next_two_years=next_two_years,
         strengths=strengths,

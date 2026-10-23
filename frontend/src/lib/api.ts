@@ -1,4 +1,15 @@
-import type { IndividualBenchmarks, IndustryEntry, SectionData, SectorEtfData, SectorMetricsData } from "./types";
+import type {
+  IndividualBenchmarks,
+  IndustryEntry,
+  ReverseBreakeven,
+  SectionData,
+  SectorEtfData,
+  SectorMetricsData,
+  StoryContext,
+  StoryDcfInputs,
+  StoryDcfResult,
+  StoryForecast,
+} from "./types";
 import {
   EndpointError,
   getJson,
@@ -374,6 +385,62 @@ export async function fetchIndividual(ticker: string): Promise<IndividualResult>
     console.warn(`[api] /api/individual/${t} failed, using mock`, err);
     return { status: "api_down", mock: makeIndividualData(t) };
   }
+}
+
+/**
+ * The shared-cache key one story valuation is loaded under. StorySection and
+ * ForecastSection both build it from the ROUTE ticker, so one request serves
+ * both. The body is part of the key: every story is a different valuation.
+ */
+export function storyDcfKey(key: string, body: StoryDcfInputs): string {
+  return "story-dcf|" + key.toUpperCase() + "|" + JSON.stringify(body);
+}
+
+/** The figures the story conversion reads: the company's history, its
+ *  industry's ranges, the model's own numbers and the data block the AI's
+ *  proofs are checked against. */
+export async function fetchStoryContext(ticker: string, signal?: AbortSignal): Promise<StoryContext> {
+  const enc = encodeURIComponent(ticker.toUpperCase());
+  return getJson<StoryContext>(
+    `${API_BASE}/api/individual/${enc}/story-context`,
+    "story figures",
+    signal,
+    SLOW_ROUTE_TIMEOUT_MS,
+  );
+}
+
+/** What each valuation driver must be for value per share to equal the price. */
+export async function fetchReverseBreakeven(ticker: string, signal?: AbortSignal): Promise<ReverseBreakeven> {
+  const enc = encodeURIComponent(ticker.toUpperCase());
+  return getJson<ReverseBreakeven>(
+    `${API_BASE}/api/individual/${enc}/reverse-dcf`,
+    "reverse DCF figures",
+    signal,
+    SLOW_ROUTE_TIMEOUT_MS,
+  );
+}
+
+/** The FCFF valuation re-run on the story's numbers (null keeps the model's). */
+export async function postStoryDcf(
+  ticker: string,
+  body: StoryDcfInputs,
+  signal?: AbortSignal,
+): Promise<StoryDcfResult> {
+  const enc = encodeURIComponent(ticker.toUpperCase());
+  const res = await fetch(`${API_BASE}/api/individual/${enc}/story-dcf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+    signal: signal ?? AbortSignal.timeout(SLOW_ROUTE_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new EndpointError(`The story valuation did not load (server said ${res.status}).`, res.status);
+  }
+  return (await res.json()) as StoryDcfResult;
+}
+
+export function isStoryForecast(r: StoryDcfResult): r is StoryForecast {
+  return "storyChecks" in r;
 }
 
 /** Returns true only if the ticker exists in financials.db's `tickers` table.

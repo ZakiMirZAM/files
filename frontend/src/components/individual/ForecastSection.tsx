@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import type { ForecastRow, IndividualForecast, NextTwoYearsBlock, WaccBuild } from "../../lib/types";
+import { useMemo, useState, type ReactNode } from "react";
+import type { ForecastRow, IndividualForecast, NextTwoYearsBlock, StoryChecks, WaccBuild } from "../../lib/types";
 import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
@@ -15,18 +15,30 @@ import {
   projectionsVisible,
 } from "../../lib/projectionsDeck";
 import { useSavedAnswer } from "../../lib/useSavedAnswer";
+import { isStoryForecast, postStoryDcf, storyDcfKey } from "../../lib/api";
+import { SLOW_ROUTE_TIMEOUT_MS, useResource } from "../../lib/useResource";
+import { stageShapeLabel, storyDcfBody } from "../../lib/story";
+import { setStoryMode, useStoredStory, useStoryMode, type StoryMode } from "../../lib/storyStore";
 
 interface ForecastSectionProps {
   forecast: IndividualForecast;
   ticker?: string;
-  /** The key the projections answers are saved under; the page's route ticker. Falls back to `ticker`. */
+  /** The ROUTE ticker: the key the reader's story and projections answers are stored under. Falls back to `ticker`. */
   scopeKey?: string;
   nextTwoYears?: NextTwoYearsBlock | null;
   companyName?: string;
 }
 
+/** What the view needs beyond the forecast itself. */
+type ViewExtras = Pick<ForecastSectionProps, "scopeKey" | "nextTwoYears" | "companyName">;
+
 /** Stable empty rows, so a structure with no projection years does not re-memo every render. */
 const NO_ROWS: ForecastRow[] = [];
+
+const MODES: Array<{ mode: StoryMode; label: string }> = [
+  { mode: "model", label: "Model's numbers" },
+  { mode: "story", label: "My story's numbers" },
+];
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
 const perShare = (v: number | null | undefined): string => formatPerShare(v);
@@ -51,8 +63,104 @@ const STATEMENT_ROWS: Array<{ label: string; get: (r: IndividualForecast["rows"]
   { label: "PV of FCFF", get: (r) => formatCurrency(r.pvFcff) },
 ];
 
-export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYears, companyName }: ForecastSectionProps) {
-  const sel = f.valuationSelection ?? null;
+/**
+ * FCFF Firm Valuation, on the model's numbers by default. Once the reader has
+ * turned their story into numbers, a switch reprices it on the story instead,
+ * and the page shows one value per share at a time.
+ */
+export function ForecastSection({ forecast, ticker = "", scopeKey, nextTwoYears, companyName }: ForecastSectionProps) {
+  const key = scopeKey ?? ticker;
+  const extras: ViewExtras = { scopeKey, nextTwoYears, companyName };
+  const stored = useStoredStory(key);
+  const mode = useStoryMode(key);
+  // A story reprices only a forecast the model could run, the same condition
+  // the page uses to show the story deck.
+  const hasStory = stored != null && forecast.applicable !== false;
+  const body = hasStory && mode === "story" ? storyDcfBody(stored.conversion.rows) : null;
+  // The same key StorySection uses, so one request serves both.
+  const story = useResource(
+    body ? storyDcfKey(key, body) : null,
+    (s) => postStoryDcf(key, body!, s),
+    { what: "story valuation", timeoutMs: SLOW_ROUTE_TIMEOUT_MS },
+  );
+  const switcher = hasStory ? <NumbersSwitch storyKey={key} mode={mode} /> : null;
+
+  if (!body) return <ForecastView forecast={forecast} ticker={ticker} switcher={switcher} {...extras} />;
+  const result = story.state === "ready" ? story.data : null;
+  if (result && isStoryForecast(result)) {
+    return <ForecastView forecast={result} ticker={ticker} switcher={switcher} storyChecks={result.storyChecks} {...extras} />;
+  }
+  // Never the model's value under the story label: until the story's own
+  // value is back, the section says why it is not showing one.
+  return (
+    <ForecastFrame switcher={switcher}>
+      <div className="panel-soft p-5">
+        <p className="text-[0.95rem] leading-7 text-white/70">
+          {result
+            ? result.reason
+            : story.state === "error"
+              ? story.error
+              : "Running the valuation on your story's numbers."}
+        </p>
+        {story.state === "error" && (
+          <button type="button" className="btn-outline mt-3" onClick={story.retry}>Try again</button>
+        )}
+      </div>
+    </ForecastFrame>
+  );
+}
+
+function NumbersSwitch({ storyKey, mode }: { storyKey: string; mode: StoryMode }) {
+  return (
+    <div role="group" aria-label="Which numbers the valuation uses" className="mt-4 flex flex-wrap items-center gap-1.5">
+      {MODES.map(({ mode: m, label }) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={mode === m}
+          onClick={() => setStoryMode(storyKey, m)}
+          className={cn(
+            "px-2.5 py-1 rounded-sm border text-[0.7rem] font-mono transition-colors",
+            mode === m
+              ? "border-gold/60 bg-gold/15 text-gold"
+              : "border-white/15 text-white/60 hover:border-gold/40 hover:text-gold/80",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ForecastFrame({ switcher, children }: { switcher?: ReactNode; children: ReactNode }) {
+  return (
+    <article className="panel p-6 md:p-8 animate-fade-up">
+      <header className="mb-5">
+        <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">FCFF Firm Valuation</h2>
+        {switcher}
+      </header>
+      {children}
+    </article>
+  );
+}
+
+function ForecastView({
+  forecast: f,
+  ticker,
+  switcher,
+  storyChecks,
+  scopeKey,
+  nextTwoYears,
+  companyName,
+}: {
+  forecast: IndividualForecast;
+  ticker: string;
+  switcher?: ReactNode;
+  storyChecks?: StoryChecks | null;
+} & ViewExtras) {
+  // A story sets its own stage count: no model structure, no stage lens.
+  const sel = storyChecks ? null : f.valuationSelection ?? null;
   const active = useActiveVariant(ticker, sel?.stageVariants, sel?.recommendedStages);
   const company = companyName || ticker;
   const scope = answerScope(scopeKey, ticker);
@@ -68,17 +176,14 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
   const showProjections = projectionsVisible(growthSource, shownFor, scope);
   if (f.applicable === false) {
     return (
-      <article className="panel p-6 md:p-8 animate-fade-up">
-        <header className="mb-5">
-          <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">FCFF Firm Valuation</h2>
-        </header>
+      <ForecastFrame switcher={switcher}>
         <div className="panel-soft p-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-gold/70 shrink-0 mt-0.5" />
           <p className="text-[0.95rem] leading-7 text-white/70">
             {f.notApplicableReason ?? "FCFF/EVA is not applicable for this sector."}
           </p>
         </div>
-      </article>
+      </ForecastFrame>
     );
   }
   const a = f.assumptions;
@@ -132,6 +237,12 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
     { k: "Horizon", v: `${a.horizonYears} yrs` },
     { k: "Revenue growth", v: `${rate(a.revenueGrowthInitial)} → ${rate(a.revenueGrowthTerminal)}` },
     { k: "Operating margin", v: `${rate(a.operatingMarginCurrent)} → ${rate(a.operatingMarginTarget)}` },
+    ...(storyChecks
+      ? [
+          { k: "Sales to capital", v: a.salesToCapital == null ? "n/a" : `${a.salesToCapital.toFixed(3)}x` },
+          { k: "Return on capital after growth ends", v: rate(a.stableRoic) },
+        ]
+      : []),
     { k: "Tax rate (effective)", v: rate(a.taxRate) },
     { k: "ROIC", v: rate(a.roic) },
     { k: "WACC", v: rate(a.wacc) },
@@ -146,11 +257,22 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
       <header className="mb-6">
         <h2 className="font-display text-2xl md:text-3xl font-semibold text-white">FCFF Firm Valuation</h2>
         <DefinitionLink number={71} prominent className="mt-3">How the FCFF model and WACC work</DefinitionLink>
+        {switcher}
       </header>
 
       <div className="mb-6">
         <QualitativeBlock section="individual" scopeKey={scope} groups={opening} storageSuffix="projections-open" defaultOpen hideHeader />
       </div>
+
+      {storyChecks && (
+        <div className="panel-soft p-5 mb-6">
+          <p className="eyebrow mb-2">Model Structure</p>
+          <p className="text-sm text-white/75">
+            <MetricTerm metric="Number of stages" resolve={() => 883} asSpan />
+            {`: ${stageShapeLabel(storyChecks.stages.used)}`}
+          </p>
+        </div>
+      )}
 
       {/* Model structure: selection rationale + the stage toggle + warnings */}
       {sel && (
@@ -208,6 +330,9 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
             <BridgeRow label="− Gross debt" value={money(f.grossDebt)} />
             <BridgeRow label="− Minority interest" value={money(f.minorityInterest)} />
             <BridgeRow label="= Equity value" value={money(view.equityValue)} strong />
+            {storyChecks && storyChecks.failureProbability > 0 && (
+              <BridgeRow label="Chance the story ends" value={rate(storyChecks.failureProbability)} />
+            )}
             <div className="pt-1 mt-2">
               <div className="flex items-baseline justify-between">
                 <span className="text-white/55 text-xs"><MetricTerm metric="Intrinsic / share" asSpan /></span>
@@ -229,14 +354,17 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
             {priceRefusal && (
               <p className="text-xs text-white/55 leading-snug pt-1">{priceRefusal}</p>
             )}
-            <div className="pt-1 mt-3 space-y-2">
-              <BridgeRow label="EV/EBITDA exit cross-check / share" value={perShare(f.evEbitdaCrossCheckPerShare)} />
-              <BridgeRow label="P/FCF exit cross-check / share" value={perShare(f.exitCrossCheckPerShare)} />
-              <BridgeRow label="β = 1 intrinsic / share" value={perShare(f.betaOneIntrinsicPerShare)} />
-              {f.evEbitdaImpliedGrowth != null && (
-                <BridgeRow label="EV/EBITDA implied growth" value={rate(f.evEbitdaImpliedGrowth)} />
-              )}
-            </div>
+            {/* A story has one value per share, so no cross-check values. */}
+            {!storyChecks && (
+              <div className="pt-1 mt-3 space-y-2">
+                <BridgeRow label="EV/EBITDA exit cross-check / share" value={perShare(f.evEbitdaCrossCheckPerShare)} />
+                <BridgeRow label="P/FCF exit cross-check / share" value={perShare(f.exitCrossCheckPerShare)} />
+                <BridgeRow label="β = 1 intrinsic / share" value={perShare(f.betaOneIntrinsicPerShare)} />
+                {f.evEbitdaImpliedGrowth != null && (
+                  <BridgeRow label="EV/EBITDA implied growth" value={rate(f.evEbitdaImpliedGrowth)} />
+                )}
+              </div>
+            )}
           </dl>
         </div>
 
@@ -318,7 +446,8 @@ export function ForecastSection({ forecast: f, ticker = "", scopeKey, nextTwoYea
         </div>
       </div>
 
-      {showProjections && nextTwoYears?.applicable && (
+      {/* The next two years compare against the model's forecast, so a story view leaves them out. */}
+      {showProjections && !storyChecks && nextTwoYears?.applicable && (
         <NextTwoYearsSection
           key={scope}
           data={nextTwoYears}

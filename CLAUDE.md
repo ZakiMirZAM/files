@@ -89,11 +89,11 @@ Four scheduled tasks under `\IntrinsicFinEd\` (`remediation/jobs/`, `register_ta
 ## Frontend rules
 React 19 + Vite + Tailwind + Recharts. `lib/api.ts` → FastAPI (mock fallback); `lib/aiApi.ts` → RAG.
 - **Verbatim content:** metric definitions and reference copy are placed verbatim from the owner's source. Formatting-only changes; never paraphrase the financial substance.
-- **AI calls:** `askQuestion` on a button click only, never on page load, always with a JSON `dataContext`. **Do not add a one-click "AI analyzes this section" button.**
+- **AI calls:** `askQuestion` on a button click only, never on page load, always with a JSON `dataContext`. One-click AI features are allowed (owner removed the old ban 2026-09-27); question decks still keep their per-question "Explain using AI" tutor.
 - **Education-first contract** (every surface):
   1. Every metric label is clickable: `<MetricTerm metric={label} asSpan />`. A graph only if the metric is in `DISPLAY_METRICS` → `metric_history`.
   2. Every section has a "How this works" `<DefinitionLink number={N}>`.
-  3. Interpretive sections use a user-first question deck (`QualitativeBlock` + `QUALITATIVE_QUESTIONS.individual` in `lib/questions.ts`), never an AI dump.
+  3. Interpretive sections use a user-first question deck (`QualitativeBlock` + `QUALITATIVE_QUESTIONS.individual` in `lib/questions.ts`); AI-written answers are shown beside the user's own, never saved over them.
   4. **GOTCHA: every new `individual` question group MUST be added to the bottom deck's `excludeTitles` in `IndividualPage.tsx`**, or it renders twice. No Convex schema change needed (free-form keys).
   5. Teaching lives in the sidebar; section intros are one or two plain sentences.
 - **Definition sidebar:** every page with clickable metrics must mount its own `<DefinitionPanel />`. `anyDefByNumber` number ranges: individual 1–196 **and 500–599 / 800s**, comparative 201–299, industry 301–399, sector 401–499, economic 600+NN, credit 700+NN. **1–196 is full; never use 197–201** (a def at 201 shadows `comparative/201-Revenue.md`). New individual defs go in a registered `SECTION_RANGES` band (500s full; `capitalAllocation` 800-849, `leverageRoe` 850-869); an unbanded number is silently dropped. Label → number via `resolveDefNumber`; add `LABEL_ALIASES` only when normalization still misses.

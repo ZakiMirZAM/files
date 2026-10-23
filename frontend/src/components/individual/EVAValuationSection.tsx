@@ -1,4 +1,4 @@
-import type { IndividualForecast } from "../../lib/types";
+import type { EvNopat, IndividualForecast } from "../../lib/types";
 import { formatCurrency, formatPerShare } from "../../lib/format";
 import { formatMetricValue } from "../../lib/metricFormat";
 import { cn } from "../../lib/cn";
@@ -136,6 +136,8 @@ export function EVAValuationSection({ forecast: f, metricHistory }: EVAValuation
               Cross-check vs FCFF DCF: <span className="text-white/70">{perShare(f.intrinsicPerShare)}</span>
             </p>
           </div>
+
+          {eva.evNopat && <EvNopatCard ev={eva.evNopat} />}
         </div>
 
         {/* Projected EVA table */}
@@ -185,6 +187,25 @@ export function EVAValuationSection({ forecast: f, metricHistory }: EVAValuation
       </div>
 
     </article>
+  );
+}
+
+/** Actual EV/NOPAT against the multiple ROIC, WACC and g justify. */
+function EvNopatCard({ ev }: { ev: EvNopat }) {
+  const x = (v: number | null) => formatMetricValue(v, "x");
+  return (
+    <div className="panel-soft p-5">
+      <p className="eyebrow mb-3">EV / NOPAT · actual vs justified</p>
+      <dl className="space-y-2 text-sm">
+        <BridgeRow label="Actual EV / NOPAT" value={x(ev.actual)} />
+        <BridgeRow label="Justified EV / NOPAT" value={x(ev.justified)} />
+        <BridgeRow label="Actual ÷ justified" value={x(ev.actualToJustified)} strong />
+      </dl>
+      <p className="text-[0.75rem] font-mono text-white/40 mt-3 leading-relaxed">
+        (1 − {rate(ev.growth)} ÷ {rate(ev.roic)}) × (1 + {rate(ev.growth)}) ÷ ({rate(ev.wacc)} − {rate(ev.growth)})
+      </p>
+      <p className="text-[0.75rem] text-white/55 mt-1">Below 1 means cheap.</p>
+    </div>
   );
 }
 

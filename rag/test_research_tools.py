@@ -119,7 +119,7 @@ def test_allowed_tools_carries_the_curated_set_when_on():
 
 
 def test_options_register_the_servers_and_strip_the_rest():
-    opts = server.options_for(model="claude-haiku-4-5",
+    opts = server.options_for(model="claude-opus-5-5",
                               system_prompt=server.ASK_SYSTEM, max_turns=4)
     if research_tools.MODE == "on":
         for key in ("fetch", "arxiv", "papers"):
@@ -142,7 +142,7 @@ def test_system_prompt_still_byte_identical_with_research_on(monkeypatch):
         monkeypatch.setattr(research_tools, "MODE", mode)
         for name in ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM"):
             literal = getattr(server, name)
-            opts = server.options_for(model="claude-haiku-4-5",
+            opts = server.options_for(model="claude-opus-5-5",
                                       system_prompt=literal, max_turns=4)
             assert opts.system_prompt == literal
 

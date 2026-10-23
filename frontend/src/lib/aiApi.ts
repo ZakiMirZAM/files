@@ -2,8 +2,9 @@
 // Mirrors the fetch shape of lib/api.ts but POSTs and surfaces errors (the AI
 // panel shows them) instead of silently falling back. The server is the rag/
 // folder's server.py on port 3001.
-import type { SectionKey } from "./types";
+import type { SectionKey, StoryInputName } from "./types";
 import { budgetWaitMessage, canAsk, recordAsk, secondsUntilAllowed } from "./askBudget";
+import { STORY_INPUTS } from "./story";
 
 const AI_BASE = (import.meta.env.VITE_AI_BASE as string | undefined) ?? "http://localhost:3001";
 
@@ -342,4 +343,141 @@ export async function verifyAnswer(token: string, timeoutMs = 60_000): Promise<V
     revisedAnswer: optStr(data.revisedAnswer) ?? optStr(data.revised_answer),
     correctedCount: optNum(data.correctedCount) ?? optNum(data.corrected),
   };
+}
+
+// ── Story conversion (POST /story-inputs) ──────────────────────────────────
+
+export type StoryUnit = "currency" | "rate" | "fraction" | "ratio" | "count";
+export type StoryRowStatus = "verified" | "flagged" | "unchecked" | "unavailable";
+
+/** One row of the conversion table: the number the story implies and its proof. */
+export interface StoryRow {
+  input: StoryInputName;
+  storyQuote: string;
+  value: number | null;
+  unit: StoryUnit;
+  proof: string;
+  sources: string[];
+  verification: { status: StoryRowStatus; report?: VerificationReport };
+}
+
+export interface StoryConversion {
+  rows: StoryRow[];
+  riskFlags: string[];
+  weakestLink: string;
+  counterStory: string;
+}
+
+const STORY_STATUSES: readonly StoryRowStatus[] = ["verified", "flagged", "unchecked", "unavailable"];
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+/**
+ * Coerce the /story-inputs reply into the typed table. Null unless every one
+ * of the nine inputs appears exactly once: a partial table would price a
+ * story the reader never finished. Inside a row it is tolerant: a value that
+ * is not a finite number is null, an unknown status is "unavailable", and the
+ * unit is the input's canonical one.
+ */
+export function toStoryConversion(raw: unknown): StoryConversion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.rows)) return null;
+  const byInput = new Map<unknown, Record<string, unknown>>();
+  for (const x of r.rows as unknown[]) {
+    if (typeof x !== "object" || x === null) return null;
+    const row = x as Record<string, unknown>;
+    if (byInput.has(row.input)) return null;
+    byInput.set(row.input, row);
+  }
+  if (byInput.size !== STORY_INPUTS.length) return null;
+  const rows: StoryRow[] = [];
+  for (const { input, unit } of STORY_INPUTS) {
+    const x = byInput.get(input);
+    if (!x) return null;
+    const v = (typeof x.verification === "object" && x.verification !== null
+      ? x.verification
+      : {}) as Record<string, unknown>;
+    const status = STORY_STATUSES.find((s) => s === v.status) ?? "unavailable";
+    const report = toVerificationReport(v.report);
+    rows.push({
+      input,
+      storyQuote: str(x.storyQuote),
+      value: optNum(x.value) ?? null,
+      unit,
+      proof: str(x.proof),
+      sources: strings(x.sources),
+      verification: report ? { status, report } : { status },
+    });
+  }
+  return { rows, riskFlags: strings(r.riskFlags), weakestLink: str(r.weakestLink), counterStory: str(r.counterStory) };
+}
+
+/**
+ * Turn the reader's eight story answers into the proven table.
+ *
+ * Not counted against the ask budget, for the same reason as explainSelection:
+ * nginx meters /story-inputs in its own zone (story_zone). Through ai_proxy
+ * every reply is a 200, including the fallback it writes when the RAG server
+ * is down, which carries an `error` and no rows, so `error` is read first.
+ */
+export async function convertStory(p: {
+  ticker: string;
+  company: string;
+  answers: Record<string, string>;
+  dataBlock: string;
+}): Promise<StoryConversion> {
+  const data = await postAi(
+    "/story-inputs",
+    { ticker: p.ticker, company: p.company, answers: p.answers, data: p.dataBlock },
+    600_000,
+  );
+  const error = typeof data === "object" && data !== null ? (data as { error?: unknown }).error : undefined;
+  if (typeof error === "string" && error) throw new Error(error);
+  const conversion = toStoryConversion(data);
+  if (!conversion) throw new Error("The AI answer could not be read. Try again.");
+  return conversion;
+}
+
+// ── Story research (POST /story-answer) ────────────────────────────────────
+
+/** The AI's answer to one story question, built on the reader's when there was one. */
+export interface StoryAnswerReply {
+  answer: string;
+  sources: string[];
+  builtOnReader: boolean;
+}
+
+export interface StoryAnswerRequest {
+  questionId: string;
+  /** The ask, its numbered steps and its closing sentence, as plain text. */
+  question: string;
+  userAnswer: string;
+  /** The story being tested, for the synthesis and the two checks. */
+  otherAnswers?: Record<string, string>;
+}
+
+/**
+ * Answer one story question: the server always researches and writes the answer,
+ * keeping and building on the reader's points when there are any. Metered in its own
+ * nginx zone (story_answer_zone), not the ask budget. `error` is read first because
+ * ai_proxy's fallback body is a 200 with an error and no answer.
+ */
+export async function answerStoryQuestion(
+  p: StoryAnswerRequest & { ticker: string; company: string; dataBlock: string },
+): Promise<StoryAnswerReply> {
+  const data = await postAi(
+    "/story-answer",
+    { ticker: p.ticker, company: p.company, questionId: p.questionId, question: p.question,
+      userAnswer: p.userAnswer, otherAnswers: p.otherAnswers ?? {}, data: p.dataBlock },
+    600_000,
+  );
+  const r = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
+  if (typeof r.error === "string" && r.error) throw new Error(r.error);
+  if (typeof r.builtOnReader !== "boolean" || !str(r.answer).trim()) {
+    throw new Error("The AI answer could not be read. Try again.");
+  }
+  return { answer: str(r.answer).trim(), sources: strings(r.sources), builtOnReader: r.builtOnReader };
 }
