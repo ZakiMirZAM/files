@@ -22,7 +22,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Optional
 
-from industry_structure.peers import PeerSet
+from industry_structure.peers import PeerSet, load_peers_at_year
 from industry_structure.dimensions import (
     AXIS_REGISTRY,
     axis_value,
@@ -175,6 +175,29 @@ def _capex_to_depreciation(ratios: dict[str, Any]) -> Optional[float]:
     return abs(capex) / abs(dep)
 
 
+def _pos_div(a: Any, b: Any) -> Optional[float]:
+    """a / b, or None when either is missing or the denominator is <= 0.
+
+    Stricter than ``safe_div``: a negative equity or capital base flips the
+    sign of the ratio, so it is withheld rather than published."""
+    fb = safe_float(b)
+    if fb is None or fb <= 0:
+        return None
+    return safe_div(a, fb)
+
+
+def _return_on_capital(ratios: dict[str, Any]) -> Optional[float]:
+    """Operating Income / (Total Debt - Cash And Short Term Investments + Equity).
+
+    Missing debt or cash is missing data, not zero, so the figure is None."""
+    debt = safe_float(ratios.get("Total Debt"))
+    cash = safe_float(ratios.get("Cash And Short Term Investments"))
+    equity = safe_float(ratios.get("Total Stockholders Equity"))
+    if debt is None or cash is None or equity is None:
+        return None
+    return _pos_div(ratios.get("Operating Income"), debt - cash + equity)
+
+
 def _capability_row(
     peer: Any,
     dividends_paid: Optional[float] = None,
@@ -204,6 +227,17 @@ def _capability_row(
         "cashMonthsOfOpCosts": r6(_cash_months_of_operating_costs(r)),
         "capexToDepreciation": r6(_capex_to_depreciation(r)),
         "reportedCurrency": peer.reported_currency,
+        # Head to Head (DuPont legs + return on capital). Local over local,
+        # so currency-neutral; null when a denominator is not positive.
+        "netMargin": r6(_pos_div(r.get("Net Income"), r.get("Revenue"))),
+        "assetTurnover": r6(_pos_div(r.get("Revenue"), r.get("Total Assets"))),
+        "equityMultiplier": r6(_pos_div(
+            r.get("Total Assets"), r.get("Total Stockholders Equity"),
+        )),
+        "roe": r6(_pos_div(r.get("Net Income"), r.get("Total Stockholders Equity"))),
+        "returnOnCapital": r6(_return_on_capital(r)),
+        # An AMOUNT in USD (converted through fx_rates by the peer loader).
+        "revenueUsd": r6(getattr(peer, "revenue_usd", None)),
     }
 
 
@@ -280,14 +314,57 @@ def validate_rivals(
     return cleaned, None
 
 
+SHARE_YEAR_OFFSETS = (0, 5, 10)
+SHARE_BASIS = "total company revenue, not product-line revenue"
+
+
+def group_revenue_shares(
+    conn: Optional[sqlite3.Connection],
+    industry: str,
+    tickers: list[str],
+    fiscal_year: int,
+    now_peers: Optional[PeerSet] = None,
+) -> dict[str, Any]:
+    """Each selected firm's share of the SELECTED set's USD revenue, by year.
+
+    Years are ``fiscal_year``, -5 and -10. A share is only ever computed over
+    the same firm set: if any selected firm has no revenue in a year, every
+    share for that year is None and ``complete`` is False for it.
+    """
+    years = [fiscal_year - k for k in SHARE_YEAR_OFFSETS]
+    cols: list[list[Optional[float]]] = [[] for _ in tickers]
+    complete: list[bool] = []
+    for yr in years:
+        ps = now_peers if (yr == fiscal_year and now_peers is not None) else None
+        if ps is None and conn is not None:
+            ps = load_peers_at_year(conn, industry, yr)
+        rev = {p.ticker.upper(): p.revenue_usd for p in ps.peers} if ps else {}
+        vals = [rev.get(tk.upper()) for tk in tickers]
+        total = sum(v for v in vals if v is not None)
+        ok = all(v is not None and v > 0 for v in vals) and total > 0
+        complete.append(ok)
+        for i, v in enumerate(vals):
+            cols[i].append(r6(v / total) if ok else None)
+    return {
+        "years": years,
+        "rows": [{"ticker": tk, "shares": cols[i]} for i, tk in enumerate(tickers)],
+        "complete": complete,
+        "basis": SHARE_BASIS,
+    }
+
+
 def get_rival_capabilities(
     conn: Optional[sqlite3.Connection],
     ticker: str,
     rivals: list[str],
     now_peers: PeerSet,
     sector: Optional[str],
+    industry: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Capability table for the company and up to three rivals (plan 3.4)."""
+    """Capability table for the company and up to three rivals (plan 3.4).
+
+    ``industry`` defaults to ``now_peers.group_name``: ``load_peers`` builds
+    the set with ``group_name`` equal to the industry it was queried by."""
     ticker = ticker.upper()
     cleaned, error = validate_rivals(ticker, rivals, now_peers)
     if error is not None:
@@ -315,6 +392,14 @@ def get_rival_capabilities(
         cap["groupLabel"] = groups.get(p.ticker)
         capabilities.append(cap)
 
+    group_shares = group_revenue_shares(
+        conn,
+        industry or now_peers.group_name,
+        [c["ticker"] for c in capabilities],
+        now_peers.fiscal_year,
+        now_peers,
+    )
+
     return {
         "applicable": True,
         "ticker": ticker,
@@ -324,6 +409,7 @@ def get_rival_capabilities(
         "groupLabel": company_group,
         "groupFirmCount": group_firm_count,
         "dataNote": group_data_note(group_firm_count),
+        "groupShares": group_shares,
     }
 
 

@@ -420,6 +420,44 @@ class TestCapabilityRow:
         assert row["cashMonthsOfOpCosts"] is not None
         assert row["cogsAndSgaToRevenue"] is None
 
+    def test_head_to_head_fields_from_the_fixture(self, conn):
+        """CHIP1 FY2024: NI 150, rev 1000, TA 3000, eq 1500, debt 300,
+        cash+ST 300, op inc 200."""
+        from company_profile.rivals import _capability_row
+        chip1 = next(p for p in _load_chip_peers(conn).peers if p.ticker == "CHIP1")
+        row = _capability_row(chip1)
+        assert row["netMargin"] == 0.15
+        assert row["assetTurnover"] == round(1000 / 3000, 6)
+        assert row["equityMultiplier"] == 2.0
+        assert row["roe"] == 0.1
+        assert row["returnOnCapital"] == round(200 / (300 - 300 + 1500), 6)
+        assert row["revenueUsd"] == 1000.0
+        # ROE is the product of its three legs (up to rounding).
+        assert abs(row["netMargin"] * (1000 / 3000) * 2.0 - row["roe"]) < 1e-6
+
+    def test_head_to_head_nulls_on_missing_inputs(self):
+        from company_profile.rivals import _capability_row
+        row = _capability_row(_peer(**{
+            "Net Income": None, "Total Debt": None,
+        }))
+        assert row["netMargin"] is None and row["roe"] is None
+        assert row["returnOnCapital"] is None  # missing debt is not zero debt
+        assert row["assetTurnover"] == 0.5  # other legs unaffected
+        no_cash = _capability_row(_peer(**{"Cash And Short Term Investments": None}))
+        assert no_cash["returnOnCapital"] is None
+
+    def test_head_to_head_nulls_on_non_positive_denominators(self):
+        from company_profile.rivals import _capability_row
+        neg_eq = _capability_row(_peer(**{"Total Stockholders Equity": -100}))
+        assert neg_eq["roe"] is None and neg_eq["equityMultiplier"] is None
+        zero = _capability_row(_peer(**{"Revenue": 0, "Total Assets": 0}))
+        assert zero["netMargin"] is None and zero["assetTurnover"] is None
+        # debt 50 - cash 200 + equity 100 = -50: capital base not positive.
+        thin = _capability_row(_peer(**{"Cash And Short Term Investments": 200}))
+        assert thin["returnOnCapital"] is None
+        # debt 50 - cash 30 + equity 100 = 120 -> 20 / 120.
+        assert _capability_row(_peer())["returnOnCapital"] == round(20 / 120, 6)
+
     def test_capex_to_depreciation_is_a_magnitude(self):
         from company_profile.rivals import _capability_row
         assert _capability_row(_peer())["capexToDepreciation"] == 1.5
@@ -503,6 +541,42 @@ class TestRivalsPayload:
             }
             assert 0.0 <= r["revenueShare"] <= 1.0
         assert rivals == sorted(rivals, key=lambda r: r["revenueUsd"], reverse=True)
+
+    def test_group_shares_over_the_selected_set_only(self, conn):
+        """CHIP1+CHIP2: shares of 1800 in 2024 and of 1350 in 2019; no 2014."""
+        from company_profile.rivals import get_rival_capabilities
+        ps = _load_chip_peers(conn)
+        gs = get_rival_capabilities(
+            conn, "CHIP1", ["CHIP2"], ps, "Technology",
+        )["groupShares"]
+        assert gs["years"] == [2024, 2019, 2014]
+        assert gs["complete"] == [True, True, False]
+        assert gs["basis"] == "total company revenue, not product-line revenue"
+        rows = {r["ticker"]: r["shares"] for r in gs["rows"]}
+        assert [r["ticker"] for r in gs["rows"]] == ["CHIP1", "CHIP2"]
+        assert rows["CHIP1"] == [round(1000 / 1800, 6), round(700 / 1350, 6), None]
+        assert rows["CHIP2"] == [round(800 / 1800, 6), round(650 / 1350, 6), None]
+
+    def test_group_shares_year_is_all_null_when_a_firm_is_missing(self, conn):
+        """CHIP4 has no 2019 row, so 2019 is null for EVERY firm, never a
+        share of CHIP1+CHIP2 alone."""
+        from company_profile.rivals import get_rival_capabilities
+        ps = _load_chip_peers(conn)
+        gs = get_rival_capabilities(
+            conn, "CHIP1", ["CHIP2", "CHIP4"], ps, "Technology", "Chips",
+        )["groupShares"]
+        assert gs["complete"] == [True, False, False]
+        for r in gs["rows"]:
+            assert r["shares"][1] is None and r["shares"][2] is None
+        assert abs(sum(r["shares"][0] for r in gs["rows"]) - 1.0) < 1e-5
+
+    def test_group_shares_use_usd_revenue(self, conn):
+        """TWD filer: its share uses the fx-converted amount."""
+        from company_profile.rivals import group_revenue_shares
+        ps = _load_chip_peers(conn)
+        gs = group_revenue_shares(conn, "Chips", ["CHIP1", "TSM-TW"], 2024, ps)
+        tsm_usd = 30000 * 0.031
+        assert gs["rows"][1]["shares"][0] == round(tsm_usd / (1000 + tsm_usd), 6)
 
     def test_data_note_counts_a_small_group(self):
         from company_profile.common import group_data_note

@@ -6718,7 +6718,9 @@ def _rivals_payload(tk: str, rival_key: tuple[str, ...]) -> dict[str, Any]:
             return {"applicable": False, "reason": "No peer data available"}
         from company_profile.rivals import get_rival_capabilities, list_group_rivals
         if rival_key:
-            return get_rival_capabilities(conn, tk, list(rival_key), now_peers, sector)
+            return get_rival_capabilities(
+                conn, tk, list(rival_key), now_peers, sector, industry,
+            )
         return {
             "applicable": True,
             "ticker": tk,

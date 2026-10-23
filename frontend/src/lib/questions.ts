@@ -552,7 +552,7 @@ export const QUALITATIVE_QUESTIONS: Record<SectionKey, QualitativeGroup[]> = {
         { id: "comp2.relative_moat", text: "Which competitor has the widest moat, and is it widening or narrowing relative to the others?" },
         { id: "comp2.relative_capital", text: "Which management team has the best incremental-ROIC and buyback-at-a-discount record among the peers?" },
         { id: "comp2.relative_eq", text: "Whose earnings are the highest quality among the peers (operating cash flow versus net income, accruals)?" },
-        { id: "comp2.relative_balance", text: "Who survives a downturn best (net debt to EBITDA, covenant headroom, maturity wall) among the peers?" },
+        { id: "comp2.relative_balance", text: "Who survives a downturn best (net debt to EBITDA, covenant headroom, maturity wall) among the peers? These ratios only show survival as long as lenders keep trusting the company, so weigh them against how hard its customers cut back in past slumps, whether management paid debt down or borrowed more going into the last one, and whether lenders refinanced it then." },
         { id: "comp2.share_shift", text: "Who is gaining versus losing market share within the peer set, and is the shift accelerating?" },
       ],
     },
@@ -1003,6 +1003,89 @@ export const sellWithMotive: RuntimeGroup[] = [
         id: "final.sell.note",
         text: "Write the sell note you would want to read in two years. Start from the sell sentence in your synthesis above and the fact you named that would make {company} a value trap. Include the motive that would make you sell {company}, the figure and level that would trigger it, how long you will give the thesis, what you would do with the money, and what you would refuse to sell on. No length limit; pull together everything from the questions above.",
         guidance: "Build on the reader's earlier answers in the data block (their full account of the company and the value-trap fact) rather than re-deriving them. Each trigger should name a figure from the data block and the level at which it fires. Keep the time given to the thesis within the horizon in the Investment Policy line.",
+      },
+    ],
+  },
+];
+
+/** Head to Head (comparative page). Q1 text is the owner's, verbatim; Q2, Q3,
+ *  Q4 and Q8 were sharpened at the owner's request (2026-10-02) so each asks a
+ *  different decision from the overlapping questions lower on the page
+ *  (comp2.low_cost, comp2.relative_moat, comp2.relative_balance,
+ *  comp2.discount_reason, comp.connect.synthesis). Order: customer, structure,
+ *  behavior under stress, the other four forces, durability, then price last (form the view before
+ *  seeing the price). Ids keep their original numbers so saved answers survive.
+ *  `{company}` is the reader's chosen base company; the rendering component
+ *  substitutes it (same pattern as projectionsDeck.ts). Hints are separate
+ *  teaching text. Sources (code comment only):
+ *  Q1 hint: Mauboussin and Callahan, Measuring the Moat (2024), customer captivity.
+ *  Q2: Porter, Competitive Strategy ch.7 (structural vs implementation strengths);
+ *      Helmer, 7 Powers (counter-positioning).
+ *  Q3: Porter ch.3 (goals and response profile), ch.1 and ch.12 (exit barriers).
+ *  Q8: Helmer Part II (power fades when growth slows); Greenwald, Value Investing
+ *      ch.7 (new generations of customers); Klein pre-mortem.
+ *  Q4: Damodaran, Narrative and Numbers ch.7 (plausible alone, implausible in
+ *      aggregate); Penman, Accounting for Value ch.3 (challenge the price).
+ *  Q5-Q7 text is the owner's, verbatim. Hints: Q5 Porter ch.6 (buyers are not
+ *      uniform, unused power); Q6 Porter ch.1 (substitutes to watch); Q7 Helmer
+ *      (counter-positioning).
+ *  comp2.relative_balance add-on: Ziegel, Fundamentals of Credit ch.4 and ch.6;
+ *      S&P corporate methodology, financial policy. */
+export const HEAD_TO_HEAD_TITLE = "Head to Head";
+
+/** Asked before the comparison table is shown. */
+export const headToHeadBefore: QualitativeGroup[] = [
+  {
+    title: HEAD_TO_HEAD_TITLE,
+    questions: [
+      {
+        id: "comp.h2h.q1",
+        text: "Why do customers choose {company} over its competitors, or the reverse? Describe the decision a real customer faces: price, quality, switching costs, relationships, habit. Then open the table: does it show the pattern your explanation predicts? If not, what did you miss?",
+        hint: "Customers held by habit, search costs or switching costs accept price rises later; customers held only by price leave at the first cheaper offer.",
+      },
+    ],
+  },
+];
+
+/** Asked under the comparison table. */
+export const headToHeadAfter: QualitativeGroup[] = [
+  {
+    title: HEAD_TO_HEAD_TITLE,
+    questions: [
+      {
+        id: "comp.h2h.q2",
+        text: "The companies in this group earn their returns by different routes. What about how each one is built (its products, customers, operations, financing) makes its route possible, and does each route rest on something rivals cannot buy or build, or on how well today's managers run it? Whose route is hardest for the others to copy?",
+        hint: "A route built on scale, captive customers or a model rivals would hurt themselves copying lasts; one built on better execution is easier to learn.",
+      },
+      {
+        id: "comp.h2h.q3",
+        text: "If the industry had two bad years, what would each company in this group actually do: cut prices, cut research, close sites, keep losing sites open, or buy a weaker rival? What in each company's history, owners, and management's past behavior tells you that, and whose move would hurt {company}'s margins most in those years?",
+        hint: "A weak rival that cannot leave the industry fights hardest, and its price cuts set everyone's margins in a slump.",
+      },
+      {
+        id: "comp.h2h.q5",
+        text: "Taking {company}'s suppliers and customers as groups, who holds the power in the chain? Consider how many alternatives each side has, how costly switching is, and who needs whom more. Does the way profit is split along the chain match your answer, and is that balance shifting?",
+        hint: "Customers inside one group rarely hold equal power, and power they do not use today can be used once their own margins are squeezed.",
+      },
+      {
+        id: "comp.h2h.q6",
+        text: "List the categories of substitutes that meet the same customer need as {company}. As a group, how serious is the threat: how does their price-performance compare, how easy is switching, and how willing are customers to switch? Which category is closest to pulling customers away, and what is {company} doing about it?",
+        hint: "The substitutes to watch are the ones whose price-performance keeps improving or whose makers earn high profits and can afford to cut prices.",
+      },
+      {
+        id: "comp.h2h.q7",
+        text: "What stops a new company from entering {company}'s market: scale, brand, regulation, capital needed, access to customers or suppliers? Which of those barriers is weakening, and who is best placed to get through?",
+        hint: "The most dangerous entrant often uses a business model the leaders will not copy, because copying it would hurt their existing business.",
+      },
+      {
+        id: "comp.h2h.q8",
+        text: "Five years from now, will {company} stand ahead of or behind the rivals in this group, and why? Which of {company}'s advantages are built into how the business works, and which will fade once growth slows or the next generation of products and customers arrives? Suppose it is five years later and your answer was wrong: name the one piece of evidence most likely to have shown it first.",
+        hint: "Strong results during fast growth often fade once growth slows; an advantage lasts only if it also wins the next generation of customers.",
+      },
+      {
+        id: "comp.h2h.q4",
+        text: "The market values some of these companies more richly than others. What is it paying for that the numbers don't yet show, and can those beliefs all come true at once when these companies compete for the same customers? What would have to happen in the next two years to prove each belief right or wrong, and would you own {company} at today's price?",
+        hint: "Rich prices across rivals often assume each one wins the same customers; added together, those hopes can exceed the market they share.",
       },
     ],
   },

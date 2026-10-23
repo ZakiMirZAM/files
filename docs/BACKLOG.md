@@ -23,6 +23,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | Sell-with-a-motive deck (shipped 2026-10-02; indiv.sell_discipline retired into it) | lib/questions.ts `sellWithMotive`; ReportPage.tsx per-ticker block; lib/sellMotive.ts (+ test); `gatherContext` on QualitativeBlock, AI click logic in lib/useAskAi.ts |
 | ESG: what drives the company's ESG risk (shipped 2026-10-02; SASB map dropped for licensing, replaced by a valuation-input test in hidden AI guidance) | lib/esgRatingDeck.ts (+ test); EsgSection.tsx: dead score tiles removed, MSCI + Sustainalytics public links, 9-question runtime deck "What Drives {company}'s ESG Risk" |
 | Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
+| Head to Head, build step 1 (shipped 2026-10-22; competitors still from the industry peer panel, AI relationship map and Q5-Q7 tables not built) | company_profile/rivals.py ROE legs, return on capital, `groupShares`; HeadToHeadSection.tsx on the comparative page; lib/headToHead.ts (+ test); lib/questions.ts `headToHeadBefore` / `headToHeadAfter` |
 
 ## Small (S): quick wins, existing data
 
@@ -30,7 +31,6 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 |---|---|---|
 | Story-based DCF | "Narrative & Expectations" deck; valuation/engines.py | 3 questions → growth, margin, reinvestment overrides → recompute existing DCF (needs 1 small override endpoint, so S/M) |
 | Price / EVA per share, MV / EVA | EVA + MVA in individualanalysis.py | Two ratios added to EVAValuationSection |
-| Two-company head-to-head | rivals endpoint, PeerRankingTable | Pick 2 tickers → side-by-side table + one "why does this differ" deck |
 | Show company vs industry spread + supplier questions | /api/individual/{t}/spreads (only feeds AI today) | Render the spread table; add supplier questions to connect deck |
 | Earnings-call transcript links | EventsSection "Latest Filings" | Add transcript link rows to the documents list |
 | Matrix: EV/EBITDA, SG&A/Sales, metric picker | peRatio in matrices; EV/EBITDA only in some sector lenses | Add both columns everywhere + a column picker |

@@ -22,6 +22,7 @@ import { SectorMetricsPanel } from "../components/SectorMetricsPanel";
 import { LifecyclePanel } from "../components/industry/LifecyclePanel";
 import { CompanyScorecardTable } from "../components/CompanyScorecardTable";
 import { PeerRankingTable } from "../components/PeerRankingTable";
+import { HeadToHeadSection } from "../components/HeadToHeadSection";
 import { ScorecardSkeleton, MatrixSkeleton, PanelSkeleton } from "../components/Skeletons";
 import { DefinitionPanel } from "../components/individual/DefinitionPanel";
 import { resolveComparativeDef, resolveIndustryDef } from "../lib/surfaceDefinitions";
@@ -261,6 +262,12 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
     return tickers?.slice(0, 10).map((t) => ({ ticker: t, name: companyName(companyMetrics, t) }));
   }, [structureData, companyMetrics]);
 
+  // Head to Head picker options: the scorecard's companies, in its order.
+  const h2hCompanies = useMemo(
+    () => (companyMetrics?.sectors ?? []).map((t) => ({ ticker: t, name: companyName(companyMetrics, t) })),
+    [companyMetrics],
+  );
+
   // More companies are likely available only if the last fetch filled the limit.
   const loadedCount = companyMetrics?.sectors.length ?? 0;
   const canLoadMore = limit < SCORECARD_MAX && loadedCount >= limit;
@@ -454,6 +461,10 @@ export function IndustryDetail({ mode }: IndustryDetailProps) {
               </div>
             )}
           </div>
+        )}
+
+        {mode === "comparative" && h2hCompanies.length > 0 && (
+          <HeadToHeadSection industry={industry} companies={h2hCompanies} dataContext={sectionCtx} />
         )}
 
         <div className="mt-16">
