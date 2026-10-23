@@ -128,12 +128,16 @@ describe("row rules", () => {
       ["net_debt_ocf", "pe", "revenue_growth", "roic", "roic_wacc_spread", "sales_invested_capital"],
     );
   });
-  it("largest gap in percent of the benchmark, skipping near-zero medians", () => {
-    // roic_wacc_spread: (30-5)/5 = 5.0 ; roic: 25/15 = 1.67 ; net_debt_ocf: 1.3/0.8 = 1.6
-    expect(largestGapRow(payload())).toBe("roic_wacc_spread");
+  it("largest gap in percent of the benchmark, over business rows only", () => {
+    // roic_wacc_spread (5.0) and pe are excluded as derived/market rows;
+    // net_debt_ocf (-0.5 vs 0.8) is skipped for opposite signs.
+    // Left: roic 25/15 = 1.67, revenue_growth 18/12 = 1.5, ...
+    expect(largestGapRow(payload())).toBe("roic");
     const p = payload();
-    p.metrics!.roic_wacc_spread = m("ROIC − WACC Spread", "%", 30, 0.5, 0.5);
-    expect(largestGapRow(p)).toBe("roic");
+    p.metrics!.roic = m("ROIC", "%", 40, 0.5, 0.5); // near-zero benchmark
+    expect(largestGapRow(p)).toBe("revenue_growth");
+    p.metrics!.revenue_growth = m("Revenue Growth", "%", 3, -1, -1.5); // opposite sign
+    expect(largestGapRow(p)).not.toBe("revenue_growth");
   });
 });
 
