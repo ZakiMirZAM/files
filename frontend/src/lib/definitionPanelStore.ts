@@ -31,6 +31,16 @@ export interface OpenDefinition {
   /** When present, the panel renders the definition's Part 9 questions as an
    *  answerable deck saved under this scope. */
   scope?: DefinitionQuestionScope;
+  /** The company's own input values and result for this metric, shown above
+   *  the definition (the Company page comparison table). */
+  calculation?: DefinitionCalculation;
+}
+
+export interface DefinitionCalculation {
+  heading: string;
+  rows: { label: string; value: string }[];
+  result: { label: string; value: string };
+  note?: string;
 }
 
 let open: OpenDefinition | null = null;

@@ -224,7 +224,9 @@ const LABEL_ALIASES: Array<[string, number]> = [
   ["Cash / Share", 31], ["Tangible BV / Share", 32], ["Equity / Share", 33],
   ["Capex / Share", 34], ["Interest Debt / Share", 35],
   // Trends-grid labels that differ from titles
-  ["Net Margin", 5], ["Operating Margin", 39], ["Equity Multiplier", 40],
+  // Net Margin is Net Income / Revenue: comparative #204 Net Income Ratio, not
+  // #5 Return On Sales (Operating Income / Revenue).
+  ["Net Margin", 204], ["Operating Margin", 39], ["Equity Multiplier", 40],
   ["Sales / Invested Capital", 45], ["Capex / Depreciation", 46],
   ["FCF / Net Income", 49], ["Operating Leverage", 50],
   ["Liabilities / Equity", 51], ["Net Debt / OCF", 52],

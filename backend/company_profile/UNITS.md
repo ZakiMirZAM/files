@@ -145,3 +145,14 @@ medians and the ranks are computed over the same per-company columns as the
 | `fiscalYear` | year | The `industry_structure` peer set's year, which is what the group labels are built on |
 | `dataNote` | text | Present only when the group holds fewer than three firms |
 | `unitsNote` | text | Restates the display-unit rule for the reader |
+
+### spreads.py additions (2026-09-27, "How {company} differs")
+
+| Field | Unit | Notes |
+|---|---|---|
+| `inputs.values.{DB column}` | reporting currency / decimal | The stored lines `_company_metrics` reads for the company's latest row. `Revenue Growth`, `Net Income Growth` and `Payout Ratio` are decimals. |
+| `inputs.values.{taxRate,costOfEquity,costOfDebt,wacc,riskFreeRate}` | decimal | From `api.py#_metric_intermediates`, the same arithmetic `_company_metrics` uses. |
+| `inputs.values.{nopat,investedCapital,eva}` | reporting currency | Same source. |
+| `inputs.fiscalYear` / `inputs.currency` | year / ISO code | The company's own latest row (may differ from the peer set's `fiscalYear`). |
+| `metricInputs.{key}` | list | The `inputs.values` names each metric's formula reads, in order. |
+| `history.{key}[]` | display | `{year, company, industryMedian, groupMedian, industryCount, groupCount}` for the company's last 5 years. Same true-median rule, one year at a time, over today's peer set and group. A median over fewer than 3 reporting firms is `null`. |

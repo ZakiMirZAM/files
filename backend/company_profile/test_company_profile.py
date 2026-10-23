@@ -967,3 +967,41 @@ class TestFinancialGuardOnCompanyProfile:
             "LEND1", _lender_peers(), "Real Estate", "REIT - Office")
         assert reit["isFinancial"] is False
         assert reit["company"]["cogsToRevenue"] is not None
+
+
+class TestSpreadHistory:
+    """Per-year medians use the same true-median rule as the latest table."""
+
+    _HIST = {
+        "AAA": {"roic": {2022: 18.0, 2023: 20.0, 2024: 22.0}},
+        "BBB": {"roic": {2023: 10.0, 2024: 12.0}},
+        "CCC": {"roic": {2022: 4.0, 2023: 6.0, 2024: 8.0}},
+        "DDD": {"roic": {2024: 30.0}},
+    }
+
+    def test_medians_per_year(self):
+        from company_profile.spreads import build_spread_history
+        out = build_spread_history("aaa", self._HIST, {"AAA", "BBB"})
+        rows = {r["year"]: r for r in out["roic"]}
+        assert [r["year"] for r in out["roic"]] == [2022, 2023, 2024]
+        # 2022: two firms reported, below MIN_HISTORY_REPORTERS -> null medians.
+        assert rows[2022] == {"year": 2022, "company": 18.0,
+                              "industryMedian": None, "groupMedian": None,
+                              "industryCount": 2, "groupCount": 1}
+        assert rows[2023]["industryMedian"] == 10.0   # 20, 10, 6
+        assert rows[2023]["groupMedian"] is None      # 2 group firms only
+        assert rows[2024]["industryMedian"] == 17.0   # 22, 12, 8, 30
+        assert rows[2024]["industryCount"] == 4
+
+    def test_group_median_with_enough_firms(self):
+        from company_profile.spreads import build_spread_history
+        out = build_spread_history("AAA", self._HIST, {"AAA", "BBB", "CCC"})
+        rows = {r["year"]: r for r in out["roic"]}
+        assert rows[2024]["groupMedian"] == 12.0      # 22, 12, 8
+        assert rows[2023]["groupMedian"] == 10.0      # 20, 10, 6
+
+    def test_limited_to_last_years_and_company_metrics_only(self):
+        from company_profile.spreads import build_spread_history
+        out = build_spread_history("AAA", self._HIST, {"AAA"}, max_years=2)
+        assert [r["year"] for r in out["roic"]] == [2023, 2024]
+        assert build_spread_history("NOPE", self._HIST, set()) == {}

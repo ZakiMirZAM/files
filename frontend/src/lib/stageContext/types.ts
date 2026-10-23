@@ -136,6 +136,32 @@ export interface SpreadsData {
   fiscalYear?: number | null;
   dataNote?: string | null;
   unitsNote?: string | null;
+  /** The company's own input lines and derived terms behind each metric.
+   *  Stored columns keep their DB names and are reporting-currency amounts
+   *  (growth columns and Payout Ratio are decimals); derived terms (taxRate,
+   *  nopat, investedCapital, costOfEquity, costOfDebt, wacc, eva, riskFreeRate)
+   *  are decimals or amounts as named. */
+  inputs?: {
+    fiscalYear: number | null;
+    currency: string;
+    values: Record<string, number | null>;
+  };
+  /** metric key -> the `inputs.values` names its formula reads, in order. */
+  metricInputs?: Record<string, string[]>;
+  /** metric key -> the company's last years with the industry and group medians,
+   *  same display units and same median rule as the latest table. */
+  history?: Record<string, SpreadHistoryPoint[]>;
+  historyNote?: string;
+}
+
+export interface SpreadHistoryPoint {
+  year: number;
+  company: number | null;
+  /** Null when fewer than three firms reported that year. */
+  industryMedian: number | null;
+  groupMedian: number | null;
+  industryCount?: number;
+  groupCount?: number;
 }
 
 // The market quote is no longer fetched on its own. /api/individual carries

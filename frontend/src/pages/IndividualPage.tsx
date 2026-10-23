@@ -48,6 +48,7 @@ import { StageGoalPanel } from "../components/StageGoalPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { NextStagePanel } from "../components/connections/NextStagePanel";
 import { PeerRankingTable } from "../components/PeerRankingTable";
+import { ComparisonSection } from "../components/individual/ComparisonSection";
 import { PEER_RANKING } from "../lib/connectionsCopy";
 import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
 import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
@@ -223,6 +224,23 @@ export function IndividualPage() {
               heading={PEER_RANKING.heading}
               highlightTicker={resolvedTicker}
               collapsible
+            />
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {result?.status === "ok" && analysis?.industry && ticker && resolvedTicker && (
+        <div className="mb-6">
+          <ErrorBoundary compact>
+            <ComparisonSection
+              ticker={ticker}
+              resolvedTicker={resolvedTicker}
+              companyName={companyName ?? ticker}
+              events={analysis.events}
+              hasSegments={Boolean(
+                (analysis as { businessProfile?: { segments?: unknown[] | null } }).businessProfile
+                  ?.segments?.length,
+              )}
             />
           </ErrorBoundary>
         </div>
