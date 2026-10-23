@@ -5,7 +5,8 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { QualitativeBlock } from "./QualitativeBlock";
 import { RelationshipMapPanel } from "./RelationshipMapPanel";
-import { mapRivalOptions, type RelationshipMapResponse } from "../lib/relationshipMap";
+import { ValueChainTable } from "./ValueChainTable";
+import { mapRivalOptions, mapStamp, type RelationshipMapResponse } from "../lib/relationshipMap";
 import { MetricTerm } from "./individual/DefinitionsBlock";
 import { MatrixSkeleton } from "./Skeletons";
 import { PanelLoadError } from "./DataStatusBanner";
@@ -20,6 +21,7 @@ import {
   ROE_TEACHING,
   defaultRivals,
   formatFigure,
+  reasonsCheckQuestion,
   formatGap,
   gapToBase,
   roeBreakdown,
@@ -43,10 +45,16 @@ interface HeadToHeadSectionProps {
 const MAX_RIVALS = 3;
 const YEAR_LABELS = ["now", "5 years ago", "10 years ago"];
 
-const fetchRivals = (ticker: string, rivals: string[] | null) => (signal: AbortSignal) =>
+/** rivals: a list for the pickers, "map" for the whole competitor group, or
+ *  null for the strategic group defaults. */
+const fetchRivals = (ticker: string, rivals: string[] | "map" | null) => (signal: AbortSignal) =>
   getJson<HeadToHeadPayload>(
     `${API_BASE}/api/individual/${encodeURIComponent(ticker)}/rivals` +
-      (rivals ? `?rivals=${rivals.map(encodeURIComponent).join(",")}` : ""),
+      (rivals === "map"
+        ? "?group=map"
+        : rivals
+          ? `?rivals=${rivals.map(encodeURIComponent).join(",")}`
+          : ""),
     "head to head figures",
     signal,
   );
@@ -58,6 +66,7 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
   const [showTable, setShowTable] = useState(false);
   // The base company's map, kept only while it is ready.
   const [readyMap, setReadyMap] = useState<{ base: string; map: RelationshipMapResponse } | null>(null);
+  const [useWholeGroup, setUseWholeGroup] = useState(false);
 
   const base = baseChoice ?? companies[0]?.ticker ?? "";
   const baseName = companies.find((c) => c.ticker === base)?.name ?? base;
@@ -69,10 +78,19 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
     { timeoutMs: SLOW_ROUTE_TIMEOUT_MS, what: "strategic group" },
   );
   const rivals = rivalChoice ?? defaultRivals(groupRes.data, MAX_RIVALS);
+  const baseMap = readyMap?.base === base ? readyMap.map : null;
+  const stamp = mapStamp(baseMap);
+  // The whole map group applies only while the base company's map is ready.
+  const wholeGroup = useWholeGroup && baseMap != null;
+  const canShow = wholeGroup || rivals.length > 0;
 
   const tableRes = useResource<HeadToHeadPayload>(
-    showTable && base && rivals.length > 0 ? `h2h|${base}|${rivals.join(",")}` : null,
-    fetchRivals(base, rivals),
+    !showTable || !base || !canShow
+      ? null
+      : wholeGroup
+        ? `h2h|${base}|group=map|${stamp}`
+        : `h2h|${base}|${rivals.join(",")}`,
+    fetchRivals(base, wholeGroup ? "map" : rivals),
     { timeoutMs: SLOW_ROUTE_TIMEOUT_MS, what: "head to head figures" },
   );
 
@@ -82,8 +100,7 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
   const options = useMemo(() => {
     const seen = new Set(companies.map((c) => c.ticker));
     const out: { ticker: string; name?: string; fromMap?: boolean }[] = [...companies];
-    const map = readyMap?.base === base ? readyMap.map : null;
-    for (const o of mapRivalOptions(map, base)) {
+    for (const o of mapRivalOptions(baseMap, base)) {
       if (seen.has(o.ticker)) continue;
       seen.add(o.ticker);
       out.push({ ...o, fromMap: true });
@@ -94,7 +111,7 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
       out.push({ ticker: t });
     }
     return out;
-  }, [companies, rivals, readyMap, base]);
+  }, [companies, rivals, baseMap, base]);
   const onMap = useCallback(
     (m: RelationshipMapResponse | null) => setReadyMap(m ? { base, map: m } : null),
     [base],
@@ -176,29 +193,43 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
         defaultOpen
         hideHeader
         dataContext={dataContext}
+        reasonsCheck={reasonsCheckQuestion}
       />
 
-      <div className="my-5">
+      <div className="my-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
           className="btn-outline text-sm"
           onClick={() => setShowTable((v) => !v)}
-          disabled={rivals.length === 0}
+          disabled={!canShow}
         >
           {showTable ? "Hide the table" : "Show the table"}
         </button>
-        {rivals.length === 0 && (
-          <span className="ml-3 text-xs text-white/45">Pick at least one rival first.</span>
+        {baseMap && (
+          <label className="inline-flex items-center gap-2 text-sm text-white/70">
+            <input
+              type="checkbox"
+              checked={useWholeGroup}
+              onChange={(e) => setUseWholeGroup(e.target.checked)}
+            />
+            Use the whole competitor group
+          </label>
         )}
+        {!canShow && <span className="text-xs text-white/45">Pick at least one rival first.</span>}
       </div>
 
       {showTable && tableRes.state === "loading" && (
-        <MatrixSkeleton rows={12} cols={rivals.length + 2} label="Loading the head to head figures…" />
+        <MatrixSkeleton
+          rows={12}
+          cols={(wholeGroup ? 8 : rivals.length) + 2}
+          label="Loading the head to head figures…"
+        />
       )}
       {showTable && tableRes.state === "error" && (
         <PanelLoadError what="head to head figures" message={tableRes.error ?? undefined} onRetry={tableRes.retry} />
       )}
       {showTable && tableRes.data && <HeadToHeadTable payload={tableRes.data} />}
+      {showTable && baseMap && <ValueChainTable key={base} ticker={base} mapStamp={stamp} />}
 
       {showTable && tableRes.data?.applicable && (
         <div className="mt-6">
@@ -210,6 +241,7 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
             defaultOpen
             hideHeader
             dataContext={JSON.stringify({ headToHead: tableRes.data })}
+            reasonsCheck={reasonsCheckQuestion}
           />
         </div>
       )}

@@ -638,6 +638,21 @@ class TestCrossIndustryRivals:
         assert soft["sustainableGrowthFactors"]["retention"] == round(1 - 6 / 24, 6)
         assert out["fiscalYear"] == 2024
 
+    def test_whole_map_group_raises_the_cap_only_when_asked(self, conn):
+        """group=map passes max_rivals=8; a typed list stays capped at 3."""
+        from company_profile.rivals import MAX_RIVALS, validate_rivals
+        ps = _load_chip_peers(conn)
+        many = ["CHIP2", "CHIP3", "CHIP4", "CHIP5", "TSM-TW", "BANK1", "BANK2"]
+        _c, err = validate_rivals("CHIP1", many, ps, frozenset({"BANK1", "BANK2"}))
+        assert MAX_RIVALS == 3 and err["reason"] == "Maximum 3 rivals allowed"
+        cleaned, err = validate_rivals("CHIP1", many, ps, frozenset({"BANK1", "BANK2"}), 8)
+        assert err is None and cleaned == many
+        _c, err = validate_rivals("CHIP1", many + ["X1", "X2"], ps,
+                                  frozenset({"BANK1", "BANK2", "X1", "X2"}), 8)
+        assert err["reason"] == "Maximum 8 rivals allowed"
+        out = self._caps(conn, ["CHIP2", "CHIP3", "CHIP4", "CHIP5"], set())
+        assert out["status"] == 400  # default cap still applies to get_rival_capabilities
+
     def test_in_panel_only_is_not_cross_industry(self, conn):
         out = self._caps(conn, ["CHIP2"], set())
         assert out["crossIndustry"] is False

@@ -13,12 +13,13 @@ import re
 import urllib.parse
 from typing import Any, Optional
 
-from relationship_map.prompt import GROUP_KEYS, SUGGESTION_GROUPS
+from relationship_map.prompt import GROUP_FIELDS, GROUP_KEYS, SUGGESTION_GROUPS
 
 MAX_CATEGORIES = 8
 MAX_LINKS = 4
 MAX_SOURCES = 30
 MAX_ANSWER_CHARS = 400_000
+FIELD_MAX = 200
 
 _FENCE = re.compile(r"```json\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 _TAG = re.compile(r"<[^>]*>")
@@ -81,8 +82,17 @@ def clean_ticker(v: Any) -> Optional[str]:
     return t if _TICKER.match(t) else None
 
 
-def _clean_link(raw: Any) -> tuple[Optional[dict], bool]:
-    """``(link_or_None, dropped_for_no_source)``."""
+def clean_field(v: Any) -> Optional[str]:
+    """A v2 per-link field: plain text up to ``FIELD_MAX``. A list of
+    strings (an answer giving strategy as a list) is joined with "; "."""
+    if isinstance(v, list):
+        v = "; ".join(x for x in v if isinstance(x, str))
+    return clean_text(v, FIELD_MAX)
+
+
+def _clean_link(raw: Any, group: str) -> tuple[Optional[dict], bool]:
+    """``(link_or_None, dropped_for_no_source)``. Only ``group``'s own v2
+    fields are kept; any other key is dropped."""
     if not isinstance(raw, dict):
         return None, False
     name = clean_text(raw.get("name"), 120)
@@ -94,7 +104,7 @@ def _clean_link(raw: Any) -> tuple[Optional[dict], bool]:
     if url is None:
         return None, True
     title = clean_text(src.get("title"), 200) or urllib.parse.urlparse(url).netloc
-    return {
+    link = {
         "name": name,
         "ticker": clean_ticker(raw.get("ticker")),
         "product": product,
@@ -104,7 +114,10 @@ def _clean_link(raw: Any) -> tuple[Optional[dict], bool]:
         "source": {"title": title, "url": url},
         "resolvedTicker": None,
         "inDatabase": False,
-    }, False
+    }
+    for field in GROUP_FIELDS.get(group, ()):
+        link[field] = clean_field(raw.get(field))
+    return link, False
 
 
 def validate_map(obj: Any) -> dict[str, Any]:
@@ -140,7 +153,7 @@ def validate_map(obj: Any) -> dict[str, Any]:
             for raw_link in raw_links:
                 if len(links) >= MAX_LINKS:
                     break
-                link, no_source = _clean_link(raw_link)
+                link, no_source = _clean_link(raw_link, key)
                 dropped += no_source
                 if link is not None:
                     links.append(link)

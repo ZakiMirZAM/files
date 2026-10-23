@@ -12,6 +12,7 @@ import datetime as dt
 import json
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -20,12 +21,20 @@ STALE_AFTER = dt.timedelta(minutes=20)
 REBUILD_AFTER = dt.timedelta(hours=24)
 RETRY_FAILED_AFTER = dt.timedelta(hours=1)
 STALE_ERROR = "The build did not finish."
+SUGGEST_STALE_AFTER = dt.timedelta(minutes=15)
+SUGGEST_STALE_ERROR = "The check did not finish."
+MAX_MAP_RIVALS = 8
 
 _SCHEMA = (
     "CREATE TABLE IF NOT EXISTS relationship_maps ("
     " ticker TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT,"
     " built_at TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 0,"
     " started_at TEXT)"
+)
+_SUGGEST_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS relationship_suggestions ("
+    " id TEXT PRIMARY KEY, ticker TEXT NOT NULL, grp TEXT NOT NULL, name TEXT NOT NULL,"
+    " status TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL)"
 )
 
 
@@ -40,6 +49,7 @@ def _connect() -> Iterator[sqlite3.Connection]:
     conn.row_factory = sqlite3.Row
     try:
         conn.execute(_SCHEMA)
+        conn.execute(_SUGGEST_SCHEMA)
         yield conn
         conn.commit()
     finally:
@@ -104,6 +114,31 @@ def mark_failed(ticker: str, error: str, now: dt.datetime) -> None:
         )
 
 
+def save_payload(ticker: str, payload: dict[str, Any]) -> None:
+    """Replace a READY map's payload in place (a reader's added link).
+    ``built_at`` and the status are left as they are."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE relationship_maps SET payload = ? WHERE ticker = ? AND status = 'ready'",
+            (json.dumps(payload), ticker),
+        )
+
+
+def map_version(v: dict[str, Any]) -> Optional[str]:
+    """The stamp that changes whenever a ready map's content changes: an
+    added link sets ``updatedAt``, a rebuild sets a new ``builtAt``."""
+    return v.get("updatedAt") or v.get("builtAt")
+
+
+def ready_view(ticker: str) -> Optional[dict[str, Any]]:
+    """The READY map view, or None (no map, not ready, or store unreadable)."""
+    try:
+        v = view(get_row(ticker), dt.datetime.now(dt.timezone.utc))
+    except sqlite3.Error:
+        return None
+    return v if v.get("status") == "ready" else None
+
+
 def ready_competitors(ticker: str) -> tuple[Optional[str], tuple[str, ...]]:
     """``(builtAt, sorted in-database competitor tickers)`` of a READY map.
 
@@ -123,7 +158,70 @@ def ready_competitors(ticker: str) -> tuple[Optional[str], tuple[str, ...]]:
         for link in cat.get("links") or []
         if link.get("inDatabase") and link.get("resolvedTicker")
     }
-    return v.get("builtAt"), tuple(sorted(found))
+    return map_version(v), tuple(sorted(found))
+
+
+def map_rivals(v: Optional[dict[str, Any]], ticker: str,
+               cap: int = MAX_MAP_RIVALS) -> tuple[str, ...]:
+    """Every in-database competitor of a ready map view, in map order, once
+    each, the company itself excluded, at most ``cap``. Pure."""
+    out: list[str] = []
+    comp = ((v or {}).get("groups") or {}).get("competitors") or {}
+    for cat in comp.get("categories") or []:
+        for link in cat.get("links") or []:
+            tk = link.get("resolvedTicker")
+            if link.get("inDatabase") and tk and tk != ticker.upper() and tk not in out:
+                out.append(tk)
+    return tuple(out[:cap])
+
+
+# -- Suggestions: a reader asks for one company to be checked and added --
+
+def create_suggestion(ticker: str, group: str, name: str, now: dt.datetime,
+                      status: str = "checking",
+                      result: Optional[dict[str, Any]] = None) -> str:
+    sid = uuid.uuid4().hex
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO relationship_suggestions (id, ticker, grp, name, status, result,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sid, ticker, group, name, status,
+             json.dumps(result) if result is not None else None, iso(now)),
+        )
+    return sid
+
+
+def finish_suggestion(sid: str, status: str, result: dict[str, Any]) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE relationship_suggestions SET status = ?, result = ? WHERE id = ?",
+            (status, json.dumps(result), sid),
+        )
+
+
+def get_suggestion(sid: str) -> Optional[dict[str, Any]]:
+    with _connect() as conn:
+        r = conn.execute(
+            "SELECT * FROM relationship_suggestions WHERE id = ?", (sid,),
+        ).fetchone()
+    return dict(r) if r else None
+
+
+def suggestion_view(row: Optional[dict[str, Any]], now: dt.datetime) -> Optional[dict[str, Any]]:
+    """What GET returns for a suggestion row. A "checking" row older than
+    ``SUGGEST_STALE_AFTER`` reads as failed. Pure."""
+    if row is None:
+        return None
+    if row.get("status") == "checking":
+        created = _parse_iso(row.get("created_at"))
+        if created is not None and now - created <= SUGGEST_STALE_AFTER:
+            return {"status": "checking"}
+        return {"status": "failed", "error": SUGGEST_STALE_ERROR}
+    try:
+        result = json.loads(row.get("result") or "{}")
+    except ValueError:
+        result = {}
+    return {**(result if isinstance(result, dict) else {}), "status": row.get("status")}
 
 
 # ── Pure status rules ───────────────────────────────────────────────────────
@@ -163,9 +261,35 @@ def view(row: Optional[dict[str, Any]], now: dt.datetime) -> dict[str, Any]:
             "builtAt": row.get("built_at")}
 
 
-def decide_build(now: dt.datetime, row: Optional[dict[str, Any]], refresh: bool) -> bool:
+def rebuild_reason(v: dict[str, Any], current_filing_year: Optional[int],
+                   prompt_version: int) -> Optional[str]:
+    """Why a READY map may be rebuilt before the cooldown, or None.
+
+    "new prompt" when the map was built from an older question (a payload
+    with no ``promptVersion`` is version 1); "new annual filing" when the
+    ticker now has a fiscal year later than the map's ``latestFilingYear``.
+    """
+    if v.get("status") != "ready":
+        return None
+    try:
+        built_version = int(v.get("promptVersion") or 1)
+    except (TypeError, ValueError):
+        built_version = 1
+    if built_version < prompt_version:
+        return "new prompt"
+    built_year = v.get("latestFilingYear")
+    if (isinstance(built_year, int) and isinstance(current_filing_year, int)
+            and current_filing_year > built_year):
+        return "new annual filing"
+    return None
+
+
+def decide_build(now: dt.datetime, row: Optional[dict[str, Any]], refresh: bool,
+                 current_filing_year: Optional[int] = None,
+                 prompt_version: int = 1) -> bool:
     """Start a build when there is no map or the last one failed, or when a
-    refresh is asked for and the ready map is older than ``REBUILD_AFTER``.
+    refresh is asked for and the ready map is older than ``REBUILD_AFTER``
+    or has a ``rebuild_reason`` (new prompt, new annual filing).
     A build in progress is never restarted."""
     v = view(row, now)
     if v["status"] == "none":
@@ -176,5 +300,7 @@ def decide_build(now: dt.datetime, row: Optional[dict[str, Any]], refresh: bool)
         return failed is None or now - failed > RETRY_FAILED_AFTER
     if v["status"] == "ready" and refresh:
         built = _parse_iso(v.get("builtAt"))
-        return built is None or now - built > REBUILD_AFTER
+        if built is None or now - built > REBUILD_AFTER:
+            return True
+        return rebuild_reason(v, current_filing_year, prompt_version) is not None
     return False

@@ -7,6 +7,8 @@ import type { PageAiContext } from "../lib/aiContextStore";
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/cn";
 import { QuestionField } from "./QuestionField";
+import { Markdown } from "./Markdown";
+import { askQuestion } from "../lib/aiApi";
 
 interface QualitativeBlockProps {
   section: SectionKey;
@@ -34,13 +36,17 @@ interface QualitativeBlockProps {
   /** Gather this page context's block for the AI answer instead of the page in
    *  view (the Final Review's sell deck gathers the reviewed company). */
   gatherContext?: PageAiContext;
+  /** Optional "Check my reasons" button per question: builds the AI question
+   *  from the question and the reader's saved answer. Off by default, so no
+   *  other deck changes. The reply is shown under the answer, never saved. */
+  reasonsCheck?: (question: string, answer: string) => string;
 }
 
 function groupSlug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups, defaultOpen = false, gatherContext }: QualitativeBlockProps) {
+export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataContext, onlyTitles, excludeTitles, storageSuffix, groups: runtimeGroups, defaultOpen = false, gatherContext, reasonsCheck }: QualitativeBlockProps) {
   const groups: RuntimeGroup[] = runtimeGroups
     ? runtimeGroups
     : QUALITATIVE_QUESTIONS[section].filter((g) =>
@@ -196,8 +202,8 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
                     // Keyed by the scope too: the page decks stay mounted while
                     // the route's subject changes (one company to the next), and
                     // a reused field would keep the previous subject's text.
+                    <div key={`${scopeKey}:${q.id}`}>
                     <QuestionField
-                      key={`${scopeKey}:${q.id}`}
                       questionId={q.id}
                       question={q.text}
                       hint={q.hint}
@@ -220,6 +226,16 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
                         })
                       }
                     />
+                    {reasonsCheck && (
+                      <ReasonsCheck
+                        question={q.text}
+                        answer={savedMap.get(q.id) ?? ""}
+                        build={reasonsCheck}
+                        section={section}
+                        dataContext={q.dataContext ?? dataContext}
+                      />
+                    )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -228,6 +244,61 @@ export function QualitativeBlock({ section, scopeKey, hideHeader = false, dataCo
         })}
       </div>
     </section>
+  );
+}
+
+function ReasonsCheck({
+  question,
+  answer,
+  build,
+  section,
+  dataContext,
+}: {
+  question: string;
+  answer: string;
+  build: (question: string, answer: string) => string;
+  section: SectionKey;
+  dataContext?: string;
+}) {
+  const [reply, setReply] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const empty = answer.trim() === "";
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await askQuestion({ question: build(question, answer.trim()), section, dataContext });
+      setReply(res.text);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 pl-5">
+      <button
+        type="button"
+        onClick={run}
+        disabled={empty || busy}
+        title={empty ? "Write an answer first." : undefined}
+        className="inline-flex items-center gap-1.5 text-[0.7rem] font-mono uppercase tracking-wider text-gold/70 hover:text-gold transition-colors disabled:opacity-50 disabled:hover:text-gold/70"
+      >
+        {busy ? "Checking..." : "Check my reasons"}
+      </button>
+      {error && <p className="mt-1 text-xs text-white/50">{error}</p>}
+      {reply && (
+        <div className="mt-2 panel-soft p-4 text-sm text-white/75 leading-relaxed">
+          <p className="text-[0.7rem] font-mono uppercase tracking-wider text-white/45 mb-2">
+            Ask AI on your reasons (your answer is unchanged)
+          </p>
+          <Markdown content={reply} />
+        </div>
+      )}
+    </div>
   );
 }
 

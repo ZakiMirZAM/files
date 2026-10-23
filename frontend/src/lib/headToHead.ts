@@ -20,6 +20,17 @@ export function withCompany(groups: QualitativeGroup[], company: string): Qualit
   }));
 }
 
+/** "Check my reasons": the question sent with the reader's own saved answer.
+ *  It points out reasons that are only numbers; it never grades. */
+export function reasonsCheckQuestion(question: string, answer: string): string {
+  return (
+    "Read the reader's answer below to this Head to Head question. Point out any reason that is only another number, " +
+    "forecast or guidance figure rather than something about customers, products, competitors, management or the " +
+    "industry, and for each one suggest the business reason the reader could look for instead. Do not grade the " +
+    `answer or say whether it is right. Question: ${question}. Answer: ${answer}`
+  );
+}
+
 /** One firm's figures, base company first. All ratios are decimals; a null is
  *  a missing input or a denominator at or below zero. */
 export interface HeadToHeadFirm {

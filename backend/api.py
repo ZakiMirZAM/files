@@ -6849,6 +6849,7 @@ def _rivals_payload(
     rival_key: tuple[str, ...],
     map_built_at: str | None = None,
     map_competitors: tuple[str, ...] = (),
+    max_rivals: int = 3,
 ) -> dict[str, Any]:
     """Cached body of the rivals route.
 
@@ -6870,7 +6871,7 @@ def _rivals_payload(
         if rival_key:
             return get_rival_capabilities(
                 conn, tk, list(rival_key), now_peers, sector, industry,
-                map_competitors=frozenset(map_competitors),
+                map_competitors=frozenset(map_competitors), max_rivals=max_rivals,
             )
         return {
             "applicable": True,
@@ -6889,9 +6890,26 @@ def individual_rivals_endpoint(
     request: Request,
     ticker: str = PathParam(pattern=TICKER_PATTERN),
     rivals: str = Query(default="", max_length=60),
+    group: str = Query(default="", pattern="^(map)?$"),
 ) -> dict[str, Any]:
-    """Capability table for the company + up to three rivals (plan 3.4)."""
+    """Capability table for the company + up to three rivals (plan 3.4).
+
+    ``group=map`` takes every in-database competitor of the READY
+    relationship map instead (map order, at most ``MAX_MAP_RIVALS``) and
+    ignores ``rivals``."""
     tk = _resolve_symbol(ticker)
+    if group == "map":
+        v = _relmap_store.ready_view(tk)
+        if v is None:
+            return {"applicable": False, "reason": "Build the relationship map first."}
+        map_rivals = _relmap_store.map_rivals(v, tk)
+        if not map_rivals:
+            return {"applicable": False,
+                    "reason": "The map has no competitors with figures in this database."}
+        return _guarded_block("rivals", tk, lambda: _rivals_payload(
+            tk, map_rivals, _relmap_store.map_version(v), tuple(sorted(map_rivals)),
+            _relmap_store.MAX_MAP_RIVALS,
+        ))
     # Every rival goes through _resolve_symbol too: a reader typing BRK.B must
     # match the primary listing that carries the financials, exactly as the
     # company ticker does.
@@ -6914,6 +6932,9 @@ def individual_rivals_endpoint(
 
 from relationship_map import build as _relmap_build  # noqa: E402
 from relationship_map import store as _relmap_store  # noqa: E402
+from relationship_map import suggest as _relmap_suggest  # noqa: E402
+from relationship_map.prompt import GROUP_KEYS as _RELMAP_GROUPS  # noqa: E402
+from relationship_map.prompt import PROMPT_VERSION as _RELMAP_PROMPT_VERSION  # noqa: E402
 
 
 def _relmap_company(tk: str) -> sqlite3.Row | None:
@@ -6922,6 +6943,11 @@ def _relmap_company(tk: str) -> sqlite3.Row | None:
             "SELECT ticker, name, sector, industry FROM tickers WHERE UPPER(ticker) = ?",
             (tk,),
         ).fetchone()
+
+
+def _relmap_filing_year(tk: str) -> int | None:
+    with db_conn() as conn:
+        return _relmap_build.latest_filing_year(conn, tk)
 
 
 @app.get("/api/individual/{ticker}/relationship-map")
@@ -6934,7 +6960,11 @@ def relationship_map_get(
     if _relmap_company(tk) is None:
         return {"status": "none", "reason": "Ticker not found"}
     now = datetime.datetime.now(datetime.timezone.utc)
-    return _relmap_store.view(_relmap_store.get_row(tk), now)
+    v = _relmap_store.view(_relmap_store.get_row(tk), now)
+    if v.get("status") == "ready":
+        v["rebuildReason"] = _relmap_store.rebuild_reason(
+            v, _relmap_filing_year(tk), _RELMAP_PROMPT_VERSION)
+    return v
 
 
 @app.post("/api/individual/{ticker}/relationship-map")
@@ -6951,14 +6981,93 @@ def relationship_map_post(
     if meta is None:
         return {"status": "none", "reason": "Ticker not found"}
     now = datetime.datetime.now(datetime.timezone.utc)
-    if _relmap_store.decide_build(now, _relmap_store.get_row(tk), bool(refresh)):
+    filing_year = _relmap_filing_year(tk)
+    if _relmap_store.decide_build(now, _relmap_store.get_row(tk), bool(refresh),
+                                  filing_year, _RELMAP_PROMPT_VERSION):
         outcome = _relmap_build.start_build(
             tk, meta["name"] or tk, meta["sector"], meta["industry"],
             refresh=bool(refresh), conn_factory=db_conn, resolve=_resolve_symbol,
+            current_filing_year=filing_year,
         )
         if outcome == "busy":
             return {"status": "busy"}
     return _relmap_store.view(_relmap_store.get_row(tk), now)
+
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _value_chain_payload(tk: str, map_version: str | None) -> dict[str, Any]:
+    """Cached value chain. ``map_version`` (builtAt or updatedAt) is in the
+    key, so a rebuilt or extended map is seen at once."""
+    from relationship_map.value_chain import build_value_chain  # noqa: PLC0415
+    with db_conn() as conn:
+        return build_value_chain(conn, tk, _relmap_store.ready_view(tk))
+
+
+@app.get("/api/individual/{ticker}/value-chain")
+@limiter.limit("30/minute")
+def value_chain_endpoint(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+) -> dict[str, Any]:
+    """Margins and working-capital days of the company, its in-database
+    suppliers and customers, and substitute operating margins (B3)."""
+    tk = _resolve_symbol(ticker)
+    v = _relmap_store.ready_view(tk)
+    if v is None:
+        return {"applicable": False, "reason": "Build the relationship map first."}
+    return _guarded_block("value-chain", tk, lambda: _value_chain_payload(
+        tk, _relmap_store.map_version(v)))
+
+
+# A reader asks Ask AI to check one company and add it to the shared map.
+# Public and paid, so: 5/hour per IP, one check at a time process-wide (its
+# own lock), the shared daily cap, a READY map, and a small strict body.
+SUGGEST_MAX_BODY = 1024
+_SUGGEST_ID = "^[0-9a-f]{32}$"
+
+
+class RelmapSuggestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: str = Field(min_length=1, max_length=120)
+    group: str = Field(pattern="^(" + "|".join(_RELMAP_GROUPS) + ")$")
+
+
+@app.post("/api/individual/{ticker}/relationship-map/suggest")
+@limiter.limit("5/hour")
+def relationship_map_suggest_post(
+    request: Request,
+    body: RelmapSuggestBody,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+) -> dict[str, Any]:
+    if int(request.headers.get("content-length") or 0) > SUGGEST_MAX_BODY:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    from relationship_map.prompt import clean_name  # noqa: PLC0415
+    if not clean_name(body.name):
+        raise HTTPException(status_code=422, detail="name is empty")
+    tk = _resolve_symbol(ticker)
+    meta = _relmap_company(tk)
+    if meta is None:
+        return {"status": "none", "reason": "Ticker not found"}
+    return _relmap_suggest.start_check(
+        tk, meta["name"] or tk, body.group, body.name,
+        conn_factory=db_conn, resolve=_resolve_symbol,
+    )
+
+
+@app.get("/api/individual/{ticker}/relationship-map/suggest/{sid}")
+@limiter.limit("30/minute")
+def relationship_map_suggest_get(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+    sid: str = PathParam(pattern=_SUGGEST_ID),
+) -> dict[str, Any]:
+    tk = _resolve_symbol(ticker)
+    row = _relmap_store.get_suggestion(sid)
+    if row is None or row.get("ticker") != tk:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return _relmap_store.suggestion_view(row, now)
 
 
 # How many of the industry's companies the spread table ranks against. Every

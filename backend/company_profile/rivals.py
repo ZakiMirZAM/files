@@ -271,6 +271,7 @@ def validate_rivals(
     rivals: list[str],
     now_peers: PeerSet,
     map_competitors: frozenset[str] = frozenset(),
+    max_rivals: int = MAX_RIVALS,
 ) -> tuple[list[str], Optional[dict[str, Any]]]:
     """Normalize and check the rival list. Returns ``(rivals, error_or_None)``.
 
@@ -282,7 +283,9 @@ def validate_rivals(
 
     ``map_competitors`` holds the in-database competitors of the company's
     READY relationship map. A rival outside the industry panel is accepted
-    only when it is one of them.
+    only when it is one of them. ``max_rivals`` is raised only for the
+    whole map competitor group (``store.MAX_MAP_RIVALS``), never for a
+    reader-typed list.
     """
     ticker = ticker.upper()
     peer_tickers = {p.ticker.upper() for p in now_peers.peers}
@@ -304,10 +307,10 @@ def validate_rivals(
         seen.add(rv)
         cleaned.append(rv)
 
-    if len(cleaned) > MAX_RIVALS:
+    if len(cleaned) > max_rivals:
         return [], {
             "applicable": False,
-            "reason": f"Maximum {MAX_RIVALS} rivals allowed",
+            "reason": f"Maximum {max_rivals} rivals allowed",
             "status": 400,
         }
 
@@ -395,6 +398,7 @@ def get_rival_capabilities(
     industry: Optional[str] = None,
     map_competitors: frozenset[str] = frozenset(),
     peer_set_for: Optional[Callable[[str], Optional[PeerSet]]] = None,
+    max_rivals: int = MAX_RIVALS,
 ) -> dict[str, Any]:
     """Capability table for the company and up to three rivals (plan 3.4).
 
@@ -410,7 +414,7 @@ def get_rival_capabilities(
     and its median is a different industry's."""
     ticker = ticker.upper()
     industry = industry or now_peers.group_name
-    cleaned, error = validate_rivals(ticker, rivals, now_peers, map_competitors)
+    cleaned, error = validate_rivals(ticker, rivals, now_peers, map_competitors, max_rivals)
     if error is not None:
         return error
     if peer_set_for is None:

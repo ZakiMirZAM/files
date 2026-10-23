@@ -25,6 +25,23 @@ export interface MapLink {
   routeIn?: string | null;
   note?: string | null;
   source?: { title?: string | null; url?: string | null } | null;
+  /** True when a reader asked Ask AI to check and add it. */
+  addedOnRequest?: boolean;
+  // Per-group fields (map prompt v2). Each is a short sourced string or null.
+  pricePerformance?: string | null;
+  switchingCost?: string | null;
+  trend?: string | null;
+  shareOfCosts?: string | null;
+  alternatives?: string | null;
+  shareOfSupplierRevenue?: string | null;
+  integratesForward?: string | null;
+  shareOfRevenue?: string | null;
+  makesInHouse?: string | null;
+  barrierResource?: string | null;
+  modelDifference?: string | null;
+  costOfCopying?: string | null;
+  strategy?: string | null;
+  reportedAs?: string | null;
 }
 
 export interface MapCategory {
@@ -46,6 +63,10 @@ export interface RelationshipMapResponse {
   ticker?: string;
   name?: string;
   builtAt?: string;
+  updatedAt?: string;
+  promptVersion?: number;
+  latestFilingYear?: number | null;
+  rebuildReason?: "new prompt" | "new annual filing" | null;
   groups?: Partial<Record<GroupKey, RawGroup>>;
   linkCount?: number;
   droppedNoSource?: number;
@@ -133,4 +154,155 @@ export async function requestRelationshipMap(
   if (res.status === 429) throw new Error("Too many build requests. Try again in an hour.");
   if (!res.ok) throw new Error(`The relationship map did not load (server said ${res.status}).`);
   return (await res.json()) as RelationshipMapResponse;
+}
+
+/** A stamp that changes whenever the stored map changes (a rebuild or an
+ *  added company), for cache keys. */
+export function mapStamp(map: RelationshipMapResponse | null | undefined): string {
+  return map?.updatedAt ?? map?.builtAt ?? "";
+}
+
+type LinkField = Exclude<
+  keyof MapLink,
+  "name" | "ticker" | "resolvedTicker" | "inDatabase" | "product" | "geography" | "note" | "source" | "addedOnRequest"
+>;
+
+/** The labeled per-link fields of each group, in display order. `{company}` in
+ *  a label is the base company's name. */
+export const LINK_FIELDS: Record<GroupKey, { key: LinkField; label: string }[]> = {
+  competitors: [
+    { key: "strategy", label: "Strategy" },
+    { key: "reportedAs", label: "Reported as" },
+  ],
+  substitutes: [
+    { key: "pricePerformance", label: "Price-performance" },
+    { key: "switchingCost", label: "Switching cost" },
+    { key: "trend", label: "Trend" },
+  ],
+  suppliers: [
+    { key: "shareOfCosts", label: "Share of costs" },
+    { key: "alternatives", label: "Alternatives" },
+    { key: "switchingCost", label: "Switching cost" },
+    { key: "shareOfSupplierRevenue", label: "Its share of the supplier's revenue" },
+    { key: "integratesForward", label: "Could integrate forward" },
+  ],
+  customers: [
+    { key: "shareOfRevenue", label: "Share of revenue" },
+    { key: "alternatives", label: "Alternatives" },
+    { key: "switchingCost", label: "Switching cost" },
+    { key: "makesInHouse", label: "Makes some in-house" },
+  ],
+  entrants: [
+    { key: "routeIn", label: "Route in" },
+    { key: "barrierResource", label: "What gets it past the barriers" },
+    { key: "modelDifference", label: "How its model differs" },
+    { key: "costOfCopying", label: "What {company} would lose by copying it" },
+  ],
+};
+
+/** The labeled lines under a link: only its own group's fields, only those
+ *  with text. */
+export function linkFieldLines(
+  link: MapLink,
+  group: GroupKey,
+  company: string,
+): { label: string; text: string }[] {
+  const out: { label: string; text: string }[] = [];
+  for (const f of LINK_FIELDS[group]) {
+    const v = link[f.key];
+    if (typeof v === "string" && v.trim()) {
+      out.push({ label: f.label.split("{company}").join(company), text: v.trim() });
+    }
+  }
+  return out;
+}
+
+export const ADDED_ON_REQUEST = "added at a reader's request";
+
+/** The one-line note beside Rebuild when an early rebuild is allowed. */
+export function rebuildReasonText(reason: RelationshipMapResponse["rebuildReason"]): string | null {
+  if (reason === "new annual filing") return "A new annual filing is available.";
+  if (reason === "new prompt") return "The map can be rebuilt with fuller questions.";
+  return null;
+}
+
+// ---- Add a company through Ask AI ----
+
+export type SuggestionResult =
+  | { status: "checking"; id?: string }
+  | { status: "added"; link?: MapLink; group?: GroupKey; category?: string }
+  | { status: "not-added"; reason?: string; name?: string; group?: GroupKey }
+  | { status: "failed"; error?: string };
+
+export const SUGGEST_POLL_MS = 10_000;
+export const SUGGEST_MAX_POLLS = 30;
+export const SUGGEST_BUTTON = "Ask AI to check and add";
+export const FALLBACK_LABEL = "Ask AI's full answer (not added to the map)";
+export const SUGGEST_GAVE_UP = "Ask AI is still checking. Come back to this page later.";
+
+/** After `pollsDone` reads: keep polling, stop on a result, or give up at the cap. */
+export function suggestionNext(
+  status: SuggestionResult["status"],
+  pollsDone: number,
+): "poll" | "done" | "give-up" {
+  if (status !== "checking") return "done";
+  return pollsDone >= SUGGEST_MAX_POLLS ? "give-up" : "poll";
+}
+
+export function groupLabel(key: GroupKey): string {
+  return GROUP_ORDER.find((g) => g.key === key)?.label ?? key;
+}
+
+export function addedText(group: GroupKey, category: string | undefined): string {
+  return `Added under ${groupLabel(group)}: ${category || "a new category"}.`;
+}
+
+/** The full Ask AI question run after a not-added or failed check. */
+export function suggestFallbackQuestion(name: string, company: string): string {
+  return (
+    `Where, if anywhere, does ${name} fit in ${company}'s competitors, substitutes, suppliers, customers ` +
+    `or potential entrants? Explain the business relationship and cite sources.`
+  );
+}
+
+/** The reader's input as sent: control characters out, trimmed, at most 120. */
+export function cleanSuggestName(raw: string): string {
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120);
+}
+
+const suggestUrl = (ticker: string) =>
+  `${API_BASE}/api/individual/${encodeURIComponent(ticker)}/relationship-map/suggest`;
+
+async function readSuggestion(res: Response): Promise<SuggestionResult> {
+  if (res.status === 429) throw new Error("Too many requests to add a company. Try again in an hour.");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // body was not JSON
+    }
+    throw new Error(detail || `The check did not run (server said ${res.status}).`);
+  }
+  return (await res.json()) as SuggestionResult;
+}
+
+export async function postSuggestion(ticker: string, name: string, group: GroupKey): Promise<SuggestionResult> {
+  const res = await fetch(suggestUrl(ticker), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ name, group }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  return readSuggestion(res);
+}
+
+export async function getSuggestion(ticker: string, id: string, signal?: AbortSignal): Promise<SuggestionResult> {
+  const res = await fetch(`${suggestUrl(ticker)}/${encodeURIComponent(id)}`, {
+    headers: { Accept: "application/json" },
+    signal: signal ?? AbortSignal.timeout(30_000),
+  });
+  return readSuggestion(res);
 }

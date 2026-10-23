@@ -18,7 +18,7 @@ import urllib.request
 from typing import Any, Callable, ContextManager, Optional
 
 from relationship_map import parse, store
-from relationship_map.prompt import build_question
+from relationship_map.prompt import PROMPT_VERSION, build_question
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +60,29 @@ def rag_ask(question: str, context: str, data: str) -> dict:
 
 def is_busy() -> bool:
     return _LOCK.locked()
+
+
+def take_daily_slot(now: dt.datetime) -> bool:
+    """Count one paid Ask AI call against ``MAX_BUILDS_PER_DAY``; False (and
+    nothing counted) when today's cap is spent. Shared by map builds and
+    suggestion checks. Callers hold their own lock, and the GIL makes this
+    small read-modify-write safe enough for the two of them."""
+    day = now.date().isoformat()
+    if day not in _BUILDS_TODAY:
+        _BUILDS_TODAY.clear()
+    if _BUILDS_TODAY.get(day, 0) >= MAX_BUILDS_PER_DAY:
+        return False
+    _BUILDS_TODAY[day] = _BUILDS_TODAY.get(day, 0) + 1
+    return True
+
+
+def latest_filing_year(conn: Any, ticker: str) -> Optional[int]:
+    """The ticker's latest annual ``Calendar Year`` in ``financials``, or None."""
+    r = conn.execute(
+        'SELECT MAX(CAST("Calendar Year" AS INTEGER)) FROM financials WHERE Ticker = ?',
+        (ticker,),
+    ).fetchone()
+    return int(r[0]) if r and r[0] is not None else None
 
 
 def context_data(conn: Any, ticker: str, name: str, sector: Optional[str],
@@ -129,11 +152,14 @@ def run_build(ticker: str, name: str, sector: Optional[str], industry: Optional[
             return
         with conn_factory() as conn:
             resolve_links(conn, result["groups"], resolve)
+            filing_year = latest_filing_year(conn, ticker)
         now = now_fn()
         store.mark_ready(ticker, {
             "ticker": ticker,
             "name": name,
             "builtAt": store.iso(now),
+            "promptVersion": PROMPT_VERSION,
+            "latestFilingYear": filing_year,
             "groups": result["groups"],
             "linkCount": result["linkCount"],
             "droppedNoSource": result["droppedNoSource"],
@@ -147,22 +173,19 @@ def run_build(ticker: str, name: str, sector: Optional[str], industry: Optional[
 def start_build(ticker: str, name: str, sector: Optional[str], industry: Optional[str], *,
                 refresh: bool, conn_factory: ConnFactory, resolve: Callable[[str], str],
                 ask: Optional[AskFn] = None, now_fn: Callable[[], dt.datetime] = _utcnow,
-                ) -> str:
+                current_filing_year: Optional[int] = None) -> str:
     """``"started"``, ``"busy"`` (another build holds the lock) or
     ``"skipped"`` (the cooldown rule, re-checked under the lock, says no)."""
     if not _LOCK.acquire(blocking=False):
         return "busy"
     try:
-        if not store.decide_build(now_fn(), store.get_row(ticker), refresh):
+        if not store.decide_build(now_fn(), store.get_row(ticker), refresh,
+                                  current_filing_year, PROMPT_VERSION):
             _LOCK.release()
             return "skipped"
-        day = now_fn().date().isoformat()
-        if day not in _BUILDS_TODAY:
-            _BUILDS_TODAY.clear()
-        if _BUILDS_TODAY.get(day, 0) >= MAX_BUILDS_PER_DAY:
+        if not take_daily_slot(now_fn()):
             _LOCK.release()
             return "busy"
-        _BUILDS_TODAY[day] = _BUILDS_TODAY.get(day, 0) + 1
         store.mark_building(ticker, now_fn())
     except Exception:
         _LOCK.release()

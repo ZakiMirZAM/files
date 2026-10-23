@@ -110,3 +110,13 @@ describe("copy", () => {
     expect(all).not.toContain(String.fromCharCode(0x2014));
   });
 });
+
+describe("reasonsCheckQuestion", () => {
+  it("carries the owner's wording, the question and the answer", async () => {
+    const { reasonsCheckQuestion } = await import("./headToHead");
+    const q = reasonsCheckQuestion("Why do customers choose Acme?", "Guidance says 10% growth.");
+    expect(q.startsWith("Read the reader's answer below to this Head to Head question.")).toBe(true);
+    expect(q).toContain("Do not grade the answer or say whether it is right.");
+    expect(q.endsWith("Question: Why do customers choose Acme?. Answer: Guidance says 10% growth.")).toBe(true);
+  });
+});
