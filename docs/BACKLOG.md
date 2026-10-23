@@ -24,6 +24,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | ESG: what drives the company's ESG risk (shipped 2026-10-02; SASB map dropped for licensing, replaced by a valuation-input test in hidden AI guidance) | lib/esgRatingDeck.ts (+ test); EsgSection.tsx: dead score tiles removed, MSCI + Sustainalytics public links, 9-question runtime deck "What Drives {company}'s ESG Risk" |
 | Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
 | Head to Head, build step 1 (shipped 2026-10-22; competitors still from the industry peer panel, AI relationship map and Q5-Q7 tables not built) | company_profile/rivals.py ROE legs, return on capital, `groupShares`; HeadToHeadSection.tsx on the comparative page; lib/headToHead.ts (+ test); lib/questions.ts `headToHeadBefore` / `headToHeadAfter` |
+| Bubble / recession / fraud / debt-crisis question framework (shipped 2026-10-22; overlaps with older decks kept on purpose, owner picks; bottom-bank decks only, no new data or panels) | lib/questions.ts: individual `indiv.frag.*` (9 decks: pillars A-G, pre-revenue, judgment); economic `econ.bubble.*` / `econ.debtcrisis.*` / `econ.fragility.*` / `econ.judgment.*` (5 decks); credit `credit.forces.*` (1 deck) |
 
 ## Small (S): quick wins, existing data
 
