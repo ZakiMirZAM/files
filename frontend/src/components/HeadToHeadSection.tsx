@@ -2,8 +2,10 @@
 // three rivals, answers the before-question, opens the table on request, then
 // answers the after-questions under it. Raw figures and exact differences only.
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { QualitativeBlock } from "./QualitativeBlock";
+import { RelationshipMapPanel } from "./RelationshipMapPanel";
+import { mapRivalOptions, type RelationshipMapResponse } from "../lib/relationshipMap";
 import { MetricTerm } from "./individual/DefinitionsBlock";
 import { MatrixSkeleton } from "./Skeletons";
 import { PanelLoadError } from "./DataStatusBanner";
@@ -54,6 +56,8 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
   // null = the reader has not changed the rivals, so the group defaults apply.
   const [rivalChoice, setRivalChoice] = useState<string[] | null>(null);
   const [showTable, setShowTable] = useState(false);
+  // The base company's map, kept only while it is ready.
+  const [readyMap, setReadyMap] = useState<{ base: string; map: RelationshipMapResponse } | null>(null);
 
   const base = baseChoice ?? companies[0]?.ticker ?? "";
   const baseName = companies.find((c) => c.ticker === base)?.name ?? base;
@@ -72,12 +76,29 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
     { timeoutMs: SLOW_ROUTE_TIMEOUT_MS, what: "head to head figures" },
   );
 
-  // Picker options: the page's companies plus any default rival not among them.
+  // Picker options: the page's companies, then competitors from a READY
+  // relationship map (they may sit in another industry), then any default
+  // rival not among them.
   const options = useMemo(() => {
     const seen = new Set(companies.map((c) => c.ticker));
-    const extra = rivals.filter((t) => !seen.has(t)).map((t) => ({ ticker: t }));
-    return [...companies, ...extra];
-  }, [companies, rivals]);
+    const out: { ticker: string; name?: string; fromMap?: boolean }[] = [...companies];
+    const map = readyMap?.base === base ? readyMap.map : null;
+    for (const o of mapRivalOptions(map, base)) {
+      if (seen.has(o.ticker)) continue;
+      seen.add(o.ticker);
+      out.push({ ...o, fromMap: true });
+    }
+    for (const t of rivals) {
+      if (seen.has(t)) continue;
+      seen.add(t);
+      out.push({ ticker: t });
+    }
+    return out;
+  }, [companies, rivals, readyMap, base]);
+  const onMap = useCallback(
+    (m: RelationshipMapResponse | null) => setReadyMap(m ? { base, map: m } : null),
+    [base],
+  );
 
   const before = useMemo(() => withCompany(headToHeadBefore, baseName), [baseName]);
   const after = useMemo(() => withCompany(headToHeadAfter, baseName), [baseName]);
@@ -136,13 +157,16 @@ export function HeadToHeadSection({ industry, companies, dataContext }: HeadToHe
                 .filter((c) => c.ticker !== base)
                 .map((c) => (
                   <option key={c.ticker} value={c.ticker}>
-                    {"name" in c && c.name ? `${c.name} (${c.ticker})` : c.ticker}
+                    {(c.name ? `${c.name} (${c.ticker})` : c.ticker) +
+                      (c.fromMap ? " (from relationship map)" : "")}
                   </option>
                 ))}
             </select>
           </label>
         ))}
       </div>
+
+      {base && <RelationshipMapPanel key={base} ticker={base} companyName={baseName} onMap={onMap} />}
 
       <QualitativeBlock
         section="comparative"
@@ -215,6 +239,9 @@ function HeadToHeadTable({ payload }: { payload: HeadToHeadPayload }) {
       <p className="text-xs text-white/50 mb-3">
         {payload.fiscalYear != null && <>Fiscal year {payload.fiscalYear}. </>}
         {payload.dataNote}
+        {payload.crossIndustry && (
+          <> A rival from another industry shows its own fiscal year and industry under its ticker.</>
+        )}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -224,6 +251,11 @@ function HeadToHeadTable({ payload }: { payload: HeadToHeadPayload }) {
               {firms.map((f) => (
                 <th key={f.ticker} className="px-3 py-2 text-right font-mono font-normal" title={f.name ?? undefined}>
                   {f.ticker}
+                  {f.fromRelationshipMap && (f.fiscalYear != null || f.industry) && (
+                    <span className="block text-[11px] font-sans text-white/45 whitespace-nowrap">
+                      {[f.fiscalYear != null ? `FY ${f.fiscalYear}` : null, f.industry].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
