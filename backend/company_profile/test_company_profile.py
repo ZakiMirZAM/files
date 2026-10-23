@@ -588,6 +588,72 @@ class TestRivalsPayload:
             assert word not in note.lower()
 
 
+class TestCrossIndustryRivals:
+    """Rivals taken from the company's ready relationship map (step 2)."""
+
+    @staticmethod
+    def _add_software(conn):
+        fixture_db.add_ticker(conn, "SOFT1", "SoftCo A", "Technology", "Software")
+        fixture_db.add_ticker(conn, "SOFT2", "SoftCo B", "Technology", "Software")
+        fixture_db.insert_row(conn, "SOFT1", 2023, rev=300, **{"Dividends Paid": -6})
+        fixture_db.insert_row(conn, "SOFT1", 2019, rev=450)
+        fixture_db.insert_row(conn, "SOFT2", 2023, rev=100)
+        conn.commit()
+
+    @staticmethod
+    def _caps(conn, rivals, map_competitors):
+        from company_profile.rivals import get_rival_capabilities
+        from industry_structure.peers import load_peers
+        return get_rival_capabilities(
+            conn, "CHIP1", rivals, _load_chip_peers(conn), "Technology", "Chips",
+            map_competitors=frozenset(map_competitors),
+            peer_set_for=lambda ind: load_peers(conn, ind),
+        )
+
+    def test_outside_rival_needs_the_map(self, conn):
+        from company_profile.rivals import validate_rivals
+        ps = _load_chip_peers(conn)
+        _c, err = validate_rivals("CHIP1", ["BANK1"], ps)
+        assert err["reason"] == "Rivals not in this industry: BANK1"
+        cleaned, err = validate_rivals("CHIP1", ["BANK1", "BANK2"], ps, frozenset({"BANK1"}))
+        assert err["reason"] == "Rivals not in this industry: BANK2"
+        cleaned, err = validate_rivals("CHIP1", ["BANK1"], ps, frozenset({"BANK1"}))
+        assert err is None and cleaned == ["BANK1"]
+
+    def test_outside_row_uses_its_own_industry_year(self, conn):
+        self._add_software(conn)
+        out = self._caps(conn, ["CHIP2", "SOFT1"], {"SOFT1"})
+        assert out["applicable"] is True and out["crossIndustry"] is True
+        rows = {c["ticker"]: c for c in out["capabilities"]}
+        assert list(rows) == ["CHIP1", "CHIP2", "SOFT1"]
+        assert rows["CHIP2"]["fiscalYear"] == 2024 and rows["CHIP2"]["industry"] == "Chips"
+        assert rows["CHIP2"]["fromRelationshipMap"] is False
+        assert rows["CHIP2"]["axisValues"] is not None
+        soft = rows["SOFT1"]
+        assert soft["fiscalYear"] == 2023 and soft["industry"] == "Software"
+        assert soft["fromRelationshipMap"] is True
+        assert soft["axisValues"] is None and soft["groupLabel"] is None
+        assert soft["revenueUsd"] == 300.0
+        # Retention read off SOFT1's 2023 row (ni 24, dividends 6).
+        assert soft["sustainableGrowthFactors"]["retention"] == round(1 - 6 / 24, 6)
+        assert out["fiscalYear"] == 2024
+
+    def test_in_panel_only_is_not_cross_industry(self, conn):
+        out = self._caps(conn, ["CHIP2"], set())
+        assert out["crossIndustry"] is False
+
+    def test_group_shares_across_two_industries(self, conn):
+        """2024: SOFT1 has no 2024 row in Software, so the year is null.
+        2019: CHIP1 700 (Chips 2019) and SOFT1 450 (Software 2019)."""
+        self._add_software(conn)
+        gs = self._caps(conn, ["SOFT1"], {"SOFT1"})["groupShares"]
+        assert gs["years"] == [2024, 2019, 2014]
+        assert gs["complete"] == [False, True, False]
+        rows = {r["ticker"]: r["shares"] for r in gs["rows"]}
+        assert rows["CHIP1"] == [None, round(700 / 1150, 6), None]
+        assert rows["SOFT1"] == [None, round(450 / 1150, 6), None]
+
+
 # ==============================================================================
 # 5. Strategic group identity with connections/
 # ==============================================================================

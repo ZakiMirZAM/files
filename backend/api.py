@@ -6703,13 +6703,22 @@ def _guarded_block(what: str, tk: str, build: Callable[[], dict[str, Any]]) -> d
 
 
 @cached(ttl_seconds=30 * 60, key_prefix="db")
-def _rivals_payload(tk: str, rival_key: tuple[str, ...]) -> dict[str, Any]:
+def _rivals_payload(
+    tk: str,
+    rival_key: tuple[str, ...],
+    map_built_at: str | None = None,
+    map_competitors: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """Cached body of the rivals route.
 
     ``rival_key`` is the SORTED tuple of resolved rival tickers, so ``A,B``
     and ``B,A`` are one cache entry rather than two, and the capability rows
     come back in a stable order. The company itself is always first in the
-    table regardless."""
+    table regardless.
+
+    ``map_built_at`` / ``map_competitors`` come from the company's READY
+    relationship map. They are part of the cache key, so a rebuilt map is
+    seen at once rather than after the 30-minute TTL."""
     with db_conn() as conn:
         sector, industry, now_peers = _ticker_group(conn, tk)
         if industry is None:
@@ -6720,6 +6729,7 @@ def _rivals_payload(tk: str, rival_key: tuple[str, ...]) -> dict[str, Any]:
         if rival_key:
             return get_rival_capabilities(
                 conn, tk, list(rival_key), now_peers, sector, industry,
+                map_competitors=frozenset(map_competitors),
             )
         return {
             "applicable": True,
@@ -6747,7 +6757,67 @@ def individual_rivals_endpoint(
     rival_list = sorted({
         _resolve_symbol(r.strip()) for r in rivals.split(",") if r.strip()
     } - {tk})
-    return _guarded_block("rivals", tk, lambda: _rivals_payload(tk, tuple(rival_list)))
+    map_built_at, map_competitors = (
+        _relmap_store.ready_competitors(tk) if rival_list else (None, ())
+    )
+    return _guarded_block("rivals", tk, lambda: _rivals_payload(
+        tk, tuple(rival_list), map_built_at, map_competitors,
+    ))
+
+
+# ── Relationship map (Head to Head step 2) ───────────────────────────────────
+# Built by Ask AI on a button click only (POST), never on page load. GET only
+# reads the saved map. The POST is public and starts paid AI work, so it is
+# limited three ways: 3/hour per IP, one build at a time process-wide, and the
+# rebuild cooldown in relationship_map/store.py#decide_build.
+
+from relationship_map import build as _relmap_build  # noqa: E402
+from relationship_map import store as _relmap_store  # noqa: E402
+
+
+def _relmap_company(tk: str) -> sqlite3.Row | None:
+    with db_conn() as conn:
+        return conn.execute(
+            "SELECT ticker, name, sector, industry FROM tickers WHERE UPPER(ticker) = ?",
+            (tk,),
+        ).fetchone()
+
+
+@app.get("/api/individual/{ticker}/relationship-map")
+@limiter.limit("30/minute")
+def relationship_map_get(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+) -> dict[str, Any]:
+    tk = _resolve_symbol(ticker)
+    if _relmap_company(tk) is None:
+        return {"status": "none", "reason": "Ticker not found"}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return _relmap_store.view(_relmap_store.get_row(tk), now)
+
+
+@app.post("/api/individual/{ticker}/relationship-map")
+@limiter.limit("3/hour")
+def relationship_map_post(
+    request: Request,
+    ticker: str = PathParam(pattern=TICKER_PATTERN),
+    refresh: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    """Start a build when the rules allow it, else answer the current status.
+    Returns at once: the build itself runs on a background thread."""
+    tk = _resolve_symbol(ticker)
+    meta = _relmap_company(tk)
+    if meta is None:
+        return {"status": "none", "reason": "Ticker not found"}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if _relmap_store.decide_build(now, _relmap_store.get_row(tk), bool(refresh)):
+        outcome = _relmap_build.start_build(
+            tk, meta["name"] or tk, meta["sector"], meta["industry"],
+            refresh=bool(refresh), conn_factory=db_conn, resolve=_resolve_symbol,
+        )
+        if outcome == "busy":
+            return {"status": "busy"}
+    return _relmap_store.view(_relmap_store.get_row(tk), now)
 
 
 # How many of the industry's companies the spread table ranks against. Every

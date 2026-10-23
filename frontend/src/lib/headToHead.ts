@@ -39,6 +39,11 @@ export interface HeadToHeadFirm {
   fcfToRevenue?: number | null;
   sustainableGrowth?: number | null;
   revenueUsd?: number | null;
+  /** The firm's own fiscal year and industry for its figures. */
+  fiscalYear?: number | null;
+  industry?: string | null;
+  /** True for a rival accepted from the base company's relationship map. */
+  fromRelationshipMap?: boolean;
 }
 
 export interface GroupShares {
@@ -57,6 +62,8 @@ export interface HeadToHeadPayload {
   groupRivals?: { ticker: string; groupLabel?: string | null }[] | null;
   capabilities?: HeadToHeadFirm[];
   groupShares?: GroupShares | null;
+  /** True when any rival came from the relationship map. */
+  crossIndustry?: boolean;
 }
 
 /** How a figure is printed: a percent (gap in percentage points), a multiple

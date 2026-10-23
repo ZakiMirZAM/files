@@ -20,7 +20,7 @@ peer set is one year for every firm, so the table never mixes years.
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from industry_structure.peers import PeerSet, load_peers_at_year
 from industry_structure.dimensions import (
@@ -33,6 +33,7 @@ from company_profile.common import (
     cogs_plus_sga as _cogs_plus_sga,
     company_groups,
     group_data_note,
+    industry_peer_set,
     r6,
     safe_div,
     safe_float,
@@ -269,6 +270,7 @@ def validate_rivals(
     ticker: str,
     rivals: list[str],
     now_peers: PeerSet,
+    map_competitors: frozenset[str] = frozenset(),
 ) -> tuple[list[str], Optional[dict[str, Any]]]:
     """Normalize and check the rival list. Returns ``(rivals, error_or_None)``.
 
@@ -277,9 +279,14 @@ def validate_rivals(
     not a rejection. Callers are expected to have run each ticker through
     ``api.py#_resolve_symbol`` already, so an alias (``BRK.B``) arrives as its
     primary listing and matches the peer panel.
+
+    ``map_competitors`` holds the in-database competitors of the company's
+    READY relationship map. A rival outside the industry panel is accepted
+    only when it is one of them.
     """
     ticker = ticker.upper()
     peer_tickers = {p.ticker.upper() for p in now_peers.peers}
+    peer_tickers |= {t.upper() for t in map_competitors}
 
     if ticker not in peer_tickers:
         return [], {
@@ -314,6 +321,21 @@ def validate_rivals(
     return cleaned, None
 
 
+def _industries_of(
+    conn: Optional[sqlite3.Connection],
+    tickers: list[str],
+) -> dict[str, str]:
+    """{ticker: industry} from ``tickers`` for the given symbols."""
+    if conn is None or not tickers:
+        return {}
+    placeholders = ",".join("?" for _ in tickers)
+    rows = conn.execute(
+        f"SELECT ticker, industry FROM tickers WHERE UPPER(ticker) IN ({placeholders})",
+        [t.upper() for t in tickers],
+    ).fetchall()
+    return {str(r[0]).upper(): r[1] for r in rows if r[1]}
+
+
 SHARE_YEAR_OFFSETS = (0, 5, 10)
 SHARE_BASIS = "total company revenue, not product-line revenue"
 
@@ -324,22 +346,33 @@ def group_revenue_shares(
     tickers: list[str],
     fiscal_year: int,
     now_peers: Optional[PeerSet] = None,
+    firm_industry: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     """Each selected firm's share of the SELECTED set's USD revenue, by year.
 
     Years are ``fiscal_year``, -5 and -10. A share is only ever computed over
     the same firm set: if any selected firm has no revenue in a year, every
     share for that year is None and ``complete`` is False for it.
+
+    ``firm_industry`` names a different industry for a firm (a rival taken
+    from the relationship map); that firm's revenue in each year comes from
+    ITS industry's panel at that year. Every other firm uses ``industry``.
     """
     years = [fiscal_year - k for k in SHARE_YEAR_OFFSETS]
+    firm_industry = {k.upper(): v for k, v in (firm_industry or {}).items()}
     cols: list[list[Optional[float]]] = [[] for _ in tickers]
     complete: list[bool] = []
     for yr in years:
-        ps = now_peers if (yr == fiscal_year and now_peers is not None) else None
-        if ps is None and conn is not None:
-            ps = load_peers_at_year(conn, industry, yr)
-        rev = {p.ticker.upper(): p.revenue_usd for p in ps.peers} if ps else {}
-        vals = [rev.get(tk.upper()) for tk in tickers]
+        rev_by_ind: dict[str, dict[str, float]] = {}
+        for ind in {industry, *firm_industry.values()}:
+            ps = now_peers if (ind == industry and yr == fiscal_year) else None
+            if ps is None and conn is not None:
+                ps = load_peers_at_year(conn, ind, yr)
+            rev_by_ind[ind] = {p.ticker.upper(): p.revenue_usd for p in ps.peers} if ps else {}
+        vals = [
+            rev_by_ind[firm_industry.get(tk.upper(), industry)].get(tk.upper())
+            for tk in tickers
+        ]
         total = sum(v for v in vals if v is not None)
         ok = all(v is not None and v > 0 for v in vals) and total > 0
         complete.append(ok)
@@ -360,15 +393,29 @@ def get_rival_capabilities(
     now_peers: PeerSet,
     sector: Optional[str],
     industry: Optional[str] = None,
+    map_competitors: frozenset[str] = frozenset(),
+    peer_set_for: Optional[Callable[[str], Optional[PeerSet]]] = None,
 ) -> dict[str, Any]:
     """Capability table for the company and up to three rivals (plan 3.4).
 
     ``industry`` defaults to ``now_peers.group_name``: ``load_peers`` builds
-    the set with ``group_name`` equal to the industry it was queried by."""
+    the set with ``group_name`` equal to the industry it was queried by.
+
+    A rival outside the panel is allowed when it is in ``map_competitors``
+    (see ``validate_rivals``). Its row comes from ITS OWN industry's latest
+    peer set (``peer_set_for(industry)``, default the shared cached panel),
+    at that set's fiscal year, so its figures are never read off a year or
+    a median of the company's industry. Its ``axisValues`` and
+    ``groupLabel`` are null: those are measured against an industry median,
+    and its median is a different industry's."""
     ticker = ticker.upper()
-    cleaned, error = validate_rivals(ticker, rivals, now_peers)
+    industry = industry or now_peers.group_name
+    cleaned, error = validate_rivals(ticker, rivals, now_peers, map_competitors)
     if error is not None:
         return error
+    if peer_set_for is None:
+        def peer_set_for(ind: str) -> Optional[PeerSet]:
+            return industry_peer_set(conn, ind) if conn is not None else None
 
     industry_medians = _industry_axis_medians(now_peers)
     groups = company_groups(now_peers, sector)
@@ -378,31 +425,54 @@ def get_rival_capabilities(
     ) or None
 
     all_tickers = [ticker] + cleaned
-    dividends = dividends_and_earnings(conn, all_tickers, now_peers.fiscal_year)
     peer_map = {p.ticker.upper(): p for p in now_peers.peers}
+    inside = [tk for tk in all_tickers if tk in peer_map]
+    dividends = dividends_and_earnings(conn, inside, now_peers.fiscal_year)
+
+    # Rivals from the relationship map that sit in another industry.
+    outside_industry = _industries_of(conn, [tk for tk in all_tickers if tk not in peer_map])
+    outside_rows: dict[str, dict[str, Any]] = {}
+    for ind in set(outside_industry.values()):
+        ps = peer_set_for(ind)
+        if ps is None:
+            continue
+        own = {p.ticker.upper(): p for p in ps.peers}
+        members = [tk for tk, i in outside_industry.items() if i == ind and tk in own]
+        own_div = dividends_and_earnings(conn, members, ps.fiscal_year)
+        for tk in members:
+            cap = _capability_row(own[tk], (own_div.get(tk) or {}).get("dividendsPaid"))
+            cap.update(axisValues=None, groupLabel=None, fiscalYear=ps.fiscal_year,
+                       industry=ind, fromRelationshipMap=True)
+            outside_rows[tk] = cap
 
     capabilities = []
     for tk in all_tickers:
         p = peer_map.get(tk)
         if p is None:
+            if tk in outside_rows:
+                capabilities.append(outside_rows[tk])
             continue
         div = (dividends.get(tk) or {}).get("dividendsPaid")
         cap = _capability_row(p, div)
         cap["axisValues"] = _axis_values_row(p, industry_medians)
         cap["groupLabel"] = groups.get(p.ticker)
+        cap.update(fiscalYear=now_peers.fiscal_year, industry=industry,
+                   fromRelationshipMap=False)
         capabilities.append(cap)
 
     group_shares = group_revenue_shares(
         conn,
-        industry or now_peers.group_name,
+        industry,
         [c["ticker"] for c in capabilities],
         now_peers.fiscal_year,
         now_peers,
+        firm_industry={tk: outside_industry[tk] for tk in outside_rows},
     )
 
     return {
         "applicable": True,
         "ticker": ticker,
+        "crossIndustry": bool(outside_rows),
         "capabilities": capabilities,
         "fiscalYear": now_peers.fiscal_year,
         "peerCount": len(now_peers.peers),

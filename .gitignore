@@ -5,6 +5,7 @@ financials.db
 financials.db.backup-*
 backend/financials.db
 backend/market_data.db
+backend/relationship_maps.db
 rag/vault.db
 rag/vault.db.*
 rag/vault_rebuild.db
