@@ -8,7 +8,12 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Sparkles } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
-import { API_BASE, SLOW_ROUTE_TIMEOUT_MS, getJson, useResource } from "../../lib/useResource";
+import { API_BASE, getJson, useResource } from "../../lib/useResource";
+
+/** A cold industry costs one _company_metrics run and one live market-cap quote
+ *  per peer: measured 118 s for Semiconductors from a restarted backend, past
+ *  the shared 90 s slow-route wait. Warm it answers in under a second. */
+const SPREADS_TIMEOUT_MS = 180_000;
 import { KEYS } from "../../lib/stageContext/sources";
 import type { SpreadsData } from "../../lib/stageContext/types";
 import type { CompanyEvent } from "../../lib/types";
@@ -263,8 +268,12 @@ function DeckQuestionField({
     const next = attempts + 1;
     setAttempts(next);
     onTutor(q, value, next, next >= READING_AFTER_ATTEMPTS);
-    await save(q.id, value);
-    await save(`${q.id}.attempts`, String(next));
+    try {
+      await save(q.id, value);
+      await save(`${q.id}.attempts`, String(next));
+    } catch {
+      // Signed out or offline: the tutor still answers; the count is not kept.
+    }
   };
 
   return (
@@ -351,6 +360,13 @@ function DeckBlock({
   );
 }
 
+/** Short stable key for an answer's text (djb2), for the AI-answer cache. */
+function textKey(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 // ── Section ─────────────────────────────────────────────────────────────────
 
 export function ComparisonSection({ ticker, resolvedTicker, companyName, events, hasSegments }: Props) {
@@ -361,9 +377,9 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
         `${API_BASE}/api/individual/${encodeURIComponent(resolvedTicker)}/spreads`,
         `${resolvedTicker} comparison table`,
         s,
-        SLOW_ROUTE_TIMEOUT_MS,
+        SPREADS_TIMEOUT_MS,
       ),
-    { what: `${resolvedTicker} comparison table`, timeoutMs: SLOW_ROUTE_TIMEOUT_MS },
+    { what: `${resolvedTicker} comparison table`, timeoutMs: SPREADS_TIMEOUT_MS },
   );
   const saved = useQuery(api.qualitative.getAnswersForScope, { section: "individual", scopeKey: ticker });
   const saveAnswer = useMutation(api.qualitative.saveAnswer);
@@ -416,7 +432,9 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
         giveReading,
       }),
       // One cached AI answer per attempt, so each submission gets its own reply.
-      questionId: `${q.id}.${giveReading ? "reading" : "tutor"}.${attempt}`,
+      // One cached AI reply per attempt and per answer text, so a rewritten
+      // answer never gets the reading of an earlier one.
+      questionId: `${q.id}.${giveReading ? "reading" : "tutor"}.${attempt}.${textKey(answer)}`,
       section: "individual",
       scopeKey: ticker,
       dataContext: comparisonContext(p, companyName, q.rowKeys, events),
@@ -433,6 +451,15 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
           <p className="mt-1 text-xs font-mono text-white/50">
             Industry, N={p.peerCount ?? "n/a"} · Group, N={p.groupFirmCount ?? "n/a"}
           </p>
+        )}
+        {p && (
+          <div className="mt-2 space-y-0.5 text-[0.7rem] leading-relaxed text-white/40">
+            <p>
+              Peers are {companyName} and the {Math.max(0, (p.peerCount ?? 1) - 1)} largest other companies in the industry that report in US dollars. Both medians count {companyName} as one of the firms.
+            </p>
+            <p>The group is today's split of those peers, used for past years too, and each company counts once whatever its size.</p>
+            <p>Companies close their books in different months and make different accounting choices, so read small gaps with care.</p>
+          </div>
         )}
       </header>
 
@@ -465,7 +492,7 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
             />
           </div>
 
-          <DeckBlock
+          {saved !== undefined && <DeckBlock
             deck={DECK_A}
             questions={deckA.filter((q): q is BoundDeckQuestion => !isHidden(q))}
             ticker={ticker}
@@ -475,8 +502,8 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
             onTutor={tutor}
             allowed={allowed}
             seconds={seconds}
-          />
-          <DeckBlock
+          />}
+          {saved !== undefined && <DeckBlock
             deck={DECK_B}
             questions={deckB.filter((q): q is BoundDeckQuestion => !isHidden(q))}
             ticker={ticker}
@@ -486,7 +513,7 @@ export function ComparisonSection({ ticker, resolvedTicker, companyName, events,
             onTutor={tutor}
             allowed={allowed}
             seconds={seconds}
-          />
+          />}
         </>
       )}
     </section>

@@ -7161,7 +7161,20 @@ def _spreads_payload(tk: str) -> dict[str, Any]:
             table["metricInputs"] = {
                 k: list(v) for k, v in _SPREAD_METRIC_INPUTS.items() if k in table["metrics"]
             }
-        table["history"] = build_spread_history(tk, peer_history, group_members)
+        history = build_spread_history(tk, peer_history, group_members)
+        # The table's latest values use live market caps (and the TTM overlay
+        # when on); the history re-runs stored rows. For the company's latest
+        # year, show the table's own figures so the two never disagree.
+        latest_yr = int(latest["yr"]) if latest is not None else None
+        for key, pts in history.items():
+            row = table["metrics"].get(key)
+            if row and pts and pts[-1]["year"] == latest_yr:
+                pts[-1].update(
+                    company=row["company"],
+                    industryMedian=row["industryMedian"],
+                    groupMedian=row["groupMedian"],
+                )
+        table["history"] = history
         table["historyNote"] = (
             "Past years use each firm's stored figures for that year. The peers "
             "and the strategic group are today's."

@@ -44,6 +44,9 @@ export const CONTEXT_MARKER_KEYS = new Set([
   "equity_multiplier",
   "sales_invested_capital",
   "asset_turnover",
+  // Above 1 can be growth investment or overbuilding; below 1 can be
+  // efficiency or under-investment.
+  "capex_depreciation",
 ]);
 
 export function groupedRows(p: SpreadsData | null | undefined): { heading: string; keys: string[] }[] {
@@ -163,12 +166,30 @@ export const NEAR_ZERO_MEDIAN = { "%": 1, x: 0.05 } as const;
 /** The row furthest from its benchmark, measured as the gap in percent of the
  *  benchmark so percent and ratio rows compare. Rows whose benchmark is near
  *  zero are skipped. */
+/** Rows that may not be "the row furthest from the group": derived spreads
+ *  restate another row's gap (ROIC - WACC restates ROIC), and cost-of-capital
+ *  and market multiples describe the market, not what the company does. */
+export const LARGEST_GAP_EXCLUDED = new Set([
+  "roic_wacc_spread",
+  "excess_return",
+  "eva_margin",
+  "wacc",
+  "cost_of_equity",
+  "pb",
+  "pe",
+  "justified_pb",
+]);
+
 export function largestGapRow(p: SpreadsData): string | null {
   let best: string | null = null;
   let bestScore = -1;
   for (const [k, m] of Object.entries(p.metrics ?? {})) {
+    if (LARGEST_GAP_EXCLUDED.has(k)) continue;
     const b = benchmarkOf(p, m);
     if (!finite(m.company) || b == null) continue;
+    // Opposite signs (net cash against net debt, growth against decline)
+    // make a ratio to the benchmark meaningless.
+    if (Math.sign(m.company) !== Math.sign(b)) continue;
     const floor = m.unit === "%" ? NEAR_ZERO_MEDIAN["%"] : NEAR_ZERO_MEDIAN.x;
     if (Math.abs(b) < floor) continue;
     const score = Math.abs(m.company - b) / Math.abs(b);
@@ -335,6 +356,7 @@ function num(v: number | null | undefined, unit: string): string {
   if (!finite(v)) return "n/a";
   const s = Math.abs(v).toFixed(2);
   const sign = v < 0 ? "-" : "";
+  if (unit === "pts") return `${sign}${s} pts`;
   return unit === "%" ? `${sign}${s}%` : `${sign}${s}x`;
 }
 
@@ -353,6 +375,13 @@ export function comparisonContext(
     `Industry peers N=${p.peerCount ?? "n/a"}; strategic group "${p.groupLabel ?? "not reported"}" N=${p.groupFirmCount ?? "n/a"}; fiscal year ${p.fiscalYear ?? "n/a"}. Direction is read against the ${basis}.`,
   );
   lines.push("Values in display units (% already multiplied by 100). Gap = company minus benchmark. Rank 1 = highest value, not best.");
+  lines.push(
+    `READING THE MEDIANS: peers are the top 20 US-dollar filers in the industry by market cap plus ${company}, not the whole industry. Both medians include ${company}. Each firm counts once, whatever its size. The group median rests on ${p.groupFirmCount ?? "n/a"} firms.`,
+    "The strategic group is today's median split on two axes, applied unchanged to past years.",
+    "Firms differ in fiscal year end and accounting (leases, R&D, acquisitions, IFRS or US GAAP). Treat small gaps as noise. Before reading a large gap as a business difference, say which accounting difference could produce it.",
+    "Leverage and capital intensity have no good direction without the business model.",
+    "Explain a row by what the business does, not by another row. Say whether the reason belongs to the whole group (what rivals inside it share and what keeps outsiders out: scale, brand, channels, technology, contracts) or to this firm alone (scale within the group, timing of entry, execution).",
+  );
   if (flagged.length) lines.push("Rows this question draws on are marked [ASKED].");
   lines.push("Metric | company | industry median | group median | gap to industry | gap to group | rank");
   for (const g of groupedRows(p)) {
@@ -361,7 +390,7 @@ export function comparisonContext(
       const m = p.metrics![k];
       const u = m.unit === "%" ? "%" : "x";
       lines.push(
-        `${flagged.includes(k) ? "[ASKED] " : ""}${m.label} | ${num(m.company, u)} | ${num(m.industryMedian, u)} | ${num(m.groupMedian, u)} | ${num(m.gapIndustry, u)} | ${num(m.gapGroup, u)} | ${m.rank ?? "n/a"} of ${m.count ?? "n/a"}`,
+        `${flagged.includes(k) ? "[ASKED] " : ""}${m.label} | ${num(m.company, u)} | ${num(m.industryMedian, u)} | ${num(m.groupMedian, u)} | ${num(m.gapIndustry, u === "%" ? "pts" : u)} | ${num(m.gapGroup, u === "%" ? "pts" : u)} | ${m.rank ?? "n/a"} of ${m.count ?? "n/a"}`,
       );
     }
   }
@@ -402,14 +431,16 @@ export function tutorGuidance(opts: {
     ? opts.followUps.map((f) => `- ${f}`).join("\n")
     : "- (none listed)";
   const reading = opts.giveReading
-    ? "After the follow-up, give your own reading of the question in under 300 words, using the comparison table and the filings."
-    : "Do not give your own answer, reading or conclusion to the question. Only the follow-up.";
+    ? "After the follow-up, give your own reading in under 300 words, from the comparison table and the filings. Open with one sentence on what the reader's answer already gets right, then show the step it was missing, then name one thing in the filings to check next."
+    : "Do not give your own answer, reading or conclusion, and no hint that contains it. Do not confirm or reject the reader's claim. Ask only.";
   return [
-    "TUTOR MODE for this one question. The reader has written an answer; it is below.",
-    "1. Find the single weakest point of the answer: the claim with the least evidence, a financial number used to explain another number, a reason that would apply equally to the rivals, or a missing step.",
-    "2. Reply with exactly ONE follow-up question aimed at that point, and one sentence saying which point it targets.",
-    "3. If one of the listed follow-ups fits that point, use it word for word. Otherwise write your own.",
-    `4. ${reading}`,
+    "TUTOR MODE for this one question. The goal: a business reason for the difference, meaning something the company does, owns, sells or contracts differently, that rivals cannot easily copy. Another number is not yet a reason.",
+    "1. Find the single weakest point of the answer: the claim with the least evidence, a number used to explain another number, a reason that would apply equally to the rivals, or a missing step between what the company does and the row.",
+    "2. Name that point in one neutral sentence. No praise, no score, no comparison with other readers.",
+    "3. Ask exactly ONE follow-up aimed at it. If a listed follow-up fits, use it word for word. Otherwise write one open question that offers no options and cannot be answered yes or no.",
+    "4. On a revised answer, target what is still weakest, not a point already fixed.",
+    "5. If the answer is empty or off the question, ask the reader to try the question first.",
+    `6. ${reading}`,
     "LISTED FOLLOW-UPS:",
     listed,
     `READER'S ANSWER (attempt ${opts.attempt}):`,
