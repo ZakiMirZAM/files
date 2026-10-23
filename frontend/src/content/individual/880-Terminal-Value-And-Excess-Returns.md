@@ -16,15 +16,16 @@ The result falls straight out of the engine's terminal formula. The terminal val
 
 ## How this section works
 
-The engine builds every terminal value with the reinvestment rate forced to growth divided by the stable return, which is what makes the theorem hold exactly rather than approximately. The final explicit forecast year already reinvests at the stable pair, so the hand-off into the perpetuity carries no seam. The stable return itself is anchored to the industry median where one exists, otherwise moved halfway toward the cost of capital, and set equal to the cost of capital when nothing better is known.
+The engine builds every terminal value with the reinvestment rate forced to growth divided by the stable return, which is what makes the theorem hold exactly rather than approximately. The final explicit forecast year already reinvests at the stable pair, so the hand-off into the perpetuity carries no seam. The stable return itself is the return on new capital: the cost of capital plus a share of the company's own excess return, capped at 3 points above the cost of capital (6 points when the excess held in every one of the last five years), and set equal to the cost of capital when nothing better is known.
 
 That last fallback is the theorem applied as policy. With no evidence about perpetual advantage, the engine assumes excess returns of zero, and the terminal value then simply capitalizes the profit stream with growth having no effect on it. An analyst who wants the terminal value to reward growth must first justify a stable return above the cost of capital.
 
 | Stable return anchor | When the engine uses it | Effect on the theorem |
 |---|---|---|
-| Industry median return | An industry benchmark exists | Excess returns persist at the industry's level, so growth can add or destroy value |
-| Halfway to the cost of capital | No industry anchor, but the company's own return is positive | Excess returns fade partway, so growth adds muted value |
-| The cost of capital itself | No usable information | Excess returns are zero and the terminal value ignores growth entirely |
+| Cost of capital plus a share of the company's excess, capped at 3 points (6 when the excess held in all five years) | The company's return beat the cost of capital in at least four of the last five years | Part of the excess persists, so growth adds value |
+| The company's own return | The company's own median return sits below the cost of capital | Excess returns stay negative, so growth destroys value |
+| Raised to fund growth | The stable return is too low to fund stable growth with under 90 percent reinvested | The return is lifted to the cost of capital or higher, and a warning says so |
+| The cost of capital itself | No lasting excess on record, or no return history | Excess returns are zero and the terminal value ignores growth entirely |
 
 The valuation labels which anchor was used, so the reader can see how much theorem sits inside the terminal value before trusting it.
 
@@ -32,7 +33,7 @@ The valuation labels which anchor was used, so the reader can see how much theor
 
 The theorem redirects the entire growth argument. The instinctive question about a growth story is how fast the company will grow, but the value-relevant question is what the company will earn on capital while growing. A company reinvesting at its cost of capital can double its size and leave its owners no richer. The scale changes; the value does not.
 
-The theorem is also the strongest available defense against terminal-value manipulation. In an undisciplined model the terminal growth input is the easiest dial for reaching any desired value. Once reinvestment is tied to growth through the stable return, that dial only works if the excess-return assumption works, and excess returns are something evidence can be demanded for. Whole industries do hold excess returns for long periods, which is why the engine anchors to industry medians rather than forcing every firm to zero advantage. But the burden of proof sits where it belongs.
+The theorem is also the strongest available defense against terminal-value manipulation. In an undisciplined model the terminal growth input is the easiest dial for reaching any desired value. Once reinvestment is tied to growth through the stable return, that dial only works if the excess-return assumption works, and excess returns are something evidence can be demanded for. Whole industries do hold excess returns for long periods, which is why the engine lets a company with a lasting record keep part of its excess rather than forcing every firm to zero advantage. But the burden of proof sits where it belongs.
 
 For a growth company trading at a rich price, the theorem gives the exact question due diligence must answer: what protects this company's returns from competition forever? Brands, network effects, switching costs, and regulation are the usual candidates. Without one of them, the honest stable return is the cost of capital and the honest terminal value ignores the growth.
 

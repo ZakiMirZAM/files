@@ -11,7 +11,7 @@ The engine is built around one principle: growth is a measured output, not a typ
 | Decision | What the engine does | Where it is explained |
 |---|---|---|
 | Measure growth | Growth per track: reinvestment rate times return on capital for the firm model, equity reinvestment times noncash ROE for the equity model, retention times ROE for the dividend model | Fundamental Growth, Equity Reinvestment Rate, Augmented Payout Ratio |
-| Pick the model | Dividends for financial companies, a revenue-driven path for loss-makers, free cash flow to the firm otherwise | Model Selection Rules |
+| Pick the model | Dividends for lenders and insurers, a revenue-driven path for loss-makers, free cash flow to the firm otherwise, fee-based financials included | Model Selection Rules |
 | Set the stage count | One stage for an already-stable firm, two for a moderate grower, three for a very fast grower whose inputs must descend gradually | High Growth Period Length, Why Stage Count Changes The Value |
 | Enforce stable-phase discipline | Terminal growth capped at the risk-free rate, reinvestment forced to growth divided by return, beta pulled toward the market, discounting at the cumulated rate | Stable Reinvestment Rate, Stable Period Beta, Cumulated Cost Of Equity |
 
@@ -29,7 +29,7 @@ The Forecast section shows the growth rate the engine measured, the model it sel
 
 The engine never silently clamps a measured number. When a growth rate looks extreme for the company's life-cycle stage, or implies an implausible market share, or rests on reinvestment that looks too light, the engine shows a warning instead of quietly changing the input. The warnings appear beside the projection so the reader can weigh them.
 
-The stable phase is where discipline is hardest and matters most. Terminal growth can never exceed the risk-free rate, which stands in for the growth of the whole economy. A firm growing at the stable rate forever must keep reinvesting a share of its profit equal to that growth divided by its stable return, because growth is never free. The stable return itself anchors to the industry median when one exists, since whole industries hold above-normal returns for long periods.
+The stable phase is where discipline is hardest and matters most. Terminal growth can never exceed the risk-free rate, which stands in for the growth of the whole economy. A firm growing at the stable rate forever must keep reinvesting a share of its profit equal to that growth divided by its stable return, because growth is never free. The stable return is the return on new capital: the cost of capital plus a share of the company's own excess return, capped at 3 points above the cost of capital (6 points when the excess held in every one of the last five years), and kept below the cost of capital for a company whose own return sits there (definition 822).
 
 ## Why it matters
 

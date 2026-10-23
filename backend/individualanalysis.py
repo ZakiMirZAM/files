@@ -57,6 +57,7 @@ from valuation import stages as _vstages  # noqa: E402
 from valuation import selector as _vselector  # noqa: E402
 from valuation import engines as _vengines  # noqa: E402
 from valuation import diagnostics as _vdiag  # noqa: E402
+from valuation import policy as _vpolicy  # noqa: E402
 
 # Uses of cash. Self-contained and imports nothing from this module, so there is
 # no cycle. It owns the cash-flow sign convention, which is not uniform in this
@@ -521,6 +522,9 @@ class IndividualSnapshot:
     implied_price: Optional[float] = None
     margin_of_safety: Optional[float] = None
     avg_fcf_growth: Optional[float] = None
+    # What avg_fcf_growth actually holds (it is not always FCF growth):
+    # revenueGrowth | fcfPerShareHistory | dividendGrowth | legacyFcfPerShare.
+    growth_used_kind: Optional[str] = None
 
     # Horizontal analysis: {metric: {year: yoy_pct}}
     horizontal_income: dict[str, dict[int, Optional[float]]] = field(default_factory=dict)
@@ -809,10 +813,55 @@ _FCFF_NA_REASON = (
 )
 
 
+# Fee-based "financials" whose debt is NOT raw material: payment networks and
+# processors, ratings/data firms, exchanges. Their sector label moved to
+# Financials (GICS 2023) but the business did not (Damodaran finfirm09: the
+# equity-model case is debt as raw material plus regulatory capital). A firm in
+# these industries still earning a spread (card lenders: AXP 32%, COF 85% of
+# revenue from interest) stays on the equity path.
+_FEE_FINANCIAL_INDUSTRY_KEYWORDS = ("credit services", "data & stock exchanges",
+                                    "data and stock exchanges")
+# The vendor books a lender's loan interest inside Revenue, so "interest income"
+# cannot tell a lender apart. What can: funding cost (interest expense /
+# revenue: V 1.5%, MA 2.2%, SPGI 1.9% vs NAVI 83%, AXP 10.2%) and a loan book on
+# the balance sheet (receivables / assets: V 7%, MA 9% vs ENVA 85%, SEZL 64%,
+# ORIX 34%). A firm reporting zero interest expense is unmeasured, not fee-based.
+FEE_FINANCIAL_FUNDING_MAX = 0.10    # interest expense / revenue
+FEE_FINANCIAL_LOANBOOK_MAX = 0.30   # net receivables / total assets (credit services)
+# A large receivables balance only marks a lender when it is FUNDED like one:
+# PayPal carries 59% receivables (customer balances, merchant loans) on a 1.3%
+# funding cost; SEZL 3.1%, ENVA 5.4%, ORIX 5.9%, Aeon 8% pay to fund theirs.
+FEE_FINANCIAL_LENDER_FUNDING = 0.02
+
+
+def _is_fee_based_financial(latest: sqlite3.Row) -> bool:
+    industry = (_row_str(latest, "t_industry") or "").lower()
+    if not any(k in industry for k in _FEE_FINANCIAL_INDUSTRY_KEYWORDS):
+        return False
+    rev = _row_val(latest, "Revenue")
+    ta = _row_val(latest, "Total Assets")
+    if not rev or rev <= 0 or not ta or ta <= 0:
+        return False
+    ie = _row_val(latest, "Interest Expense")
+    if "exchanges" in industry:   # exchanges and data firms do not lend
+        return ie is None or ie / rev < FEE_FINANCIAL_FUNDING_MAX
+    if ie is None or ie <= 0:
+        return False
+    funding = ie / rev
+    loans = (_row_val(latest, "Net Receivables") or 0.0) / ta
+    return funding < FEE_FINANCIAL_FUNDING_MAX and (
+        loans < FEE_FINANCIAL_LOANBOOK_MAX or funding < FEE_FINANCIAL_LENDER_FUNDING)
+
+
 def fcff_applicable(latest: sqlite3.Row) -> tuple[bool, Optional[str]]:
-    """Whether an FCFF/EVA valuation is appropriate for this company."""
+    """Whether an FCFF/EVA valuation is appropriate for this company. Under the
+    damodaran engine fee-based financials (networks, data firms, exchanges)
+    are valued on FCFF; legacy keeps the sector-wide guard, byte-identical."""
     sector = (_row_str(latest, "t_sector") or "").strip()
     industry = (_row_str(latest, "t_industry") or "").lower()
+    if (sector == "Financial Services" and valuation_engine() != "legacy"
+            and _is_fee_based_financial(latest)):
+        return True, None
     if sector in _FCFF_GUARD_SECTORS:
         return False, _FCFF_NA_REASON
     if any(k in industry for k in _FCFF_GUARD_INDUSTRY_KEYWORDS):
@@ -1227,18 +1276,6 @@ def _effective_tax_rate(row: sqlite3.Row) -> float:
     return rate
 
 
-def _revenue_cagr(rows: list[sqlite3.Row]) -> Optional[float]:
-    """Compound annual revenue growth across all years on file (financials.db)."""
-    points = [(int(r["Calendar Year"]), _row_val(r, "Revenue")) for r in rows]
-    points = [(y, v) for y, v in points if v is not None and v > 0]
-    if len(points) < 2:
-        return None
-    first_v = points[0][1]
-    last_v = points[-1][1]
-    span = points[-1][0] - points[0][0]
-    if first_v <= 0 or span <= 0:
-        return None
-    return (last_v / first_v) ** (1.0 / span) - 1.0
 
 
 def _invested_capital(row: sqlite3.Row) -> Optional[float]:
@@ -1344,24 +1381,93 @@ def _forward_sales_to_capital(latest: sqlite3.Row) -> Optional[float]:
     return sales_to_capital(latest)
 
 
-def _forward_reinvestment_rate(latest: sqlite3.Row) -> Optional[float]:
-    """(Capex - Depreciation + change in non-cash working capital) / NOPAT.
 
-    Damodaran's reinvestment rate: the share of after-tax operating profit the
-    company puts back into the business. Mirrors the display metric computed in
-    `_compute_one_metric`, recomputed here because the forecast runs before it."""
-    capex = _row_val(latest, "Capital Expenditure")
-    dep = _row_val(latest, "Depreciation and Amortization Cashflow")
-    if dep is None:
-        dep = _row_val(latest, "Depreciation And Amortization")
-    d_nwc = _row_val(latest, "Change In Working Capital")
-    nopat = _nopat_for_row(latest)
-    if capex is None or dep is None or d_nwc is None or nopat in (None, 0):
+
+# ── Valuation inputs (DCF accuracy plan, damodaran engine only) ──────────────
+
+def _rd_newest_first(rows: list[sqlite3.Row], i: int) -> list[Optional[float]]:
+    """R&D for the year at index i and each calendar year before it, newest
+    first, keyed by YEAR: a missing fiscal year is a None slot, never a shift
+    of older spending into a newer year (same rule as _rnd_capitalization)."""
+    by_year = {int(r["Calendar Year"]): _row_val(r, "Research And Development Expenses")
+               for r in rows[:i + 1]}
+    y0 = int(rows[i]["Calendar Year"])
+    return [by_year.get(y0 - k) for k in range(0, 12)]
+
+
+def _valuation_capital(row: sqlite3.Row) -> Optional[float]:
+    """Invested capital inside the valuation: equity + debt - cash and
+    short-term investments (the capital actually at work; the same base as
+    sales_to_capital). Falls back to equity + debt when cash exceeds it, and
+    None when even that is not positive."""
+    eq = _row_val(row, "Total Stockholders Equity")
+    if eq is None:
+        eq = _row_val(row, "Total Equity")
+    if eq is None:
         return None
-    return (abs(capex) - dep - d_nwc) / nopat
+    debt = _row_val(row, "Total Debt") or 0.0
+    cash = _row_val(row, "Cash And Short Term Investments")
+    if cash is None:
+        cash = _row_val(row, "Cash And Cash Equivalents") or 0.0
+    for capital in (eq + debt - cash, eq + debt):
+        if capital > 0:
+            return capital
+    return None
 
 
-def _fundamental_growth(rows: list[sqlite3.Row], roic: Optional[float]) -> Optional[dict]:
+def _valuation_roic(rows: list[sqlite3.Row], i: int, rnd_life: Optional[int]) -> Optional[float]:
+    """One ROIC definition for the valuation: NOPAT / valuation capital for the
+    year at index i, with R&D capitalized when ``rnd_life`` is given (operating
+    income gains this year's R&D less amortization; capital gains the research
+    asset). The vendor ROIC column is never used here."""
+    row = rows[i]
+    op = _row_val(row, "Operating Income")
+    capital = _valuation_capital(row)
+    if op is None or capital is None:
+        return None
+    if rnd_life:
+        rd_newest = _rd_newest_first(rows, i)
+        if rd_newest[0] is not None and rd_newest[0] > 0:
+            op = op + rd_newest[0] - _research_amortization(rd_newest, rnd_life)
+            capital = capital + _research_asset(rd_newest, rnd_life)
+    return op * (1.0 - _effective_tax_rate(row)) / capital
+
+
+def _clean_reinvestment_rate(rows: list[sqlite3.Row], rnd_life: Optional[int],
+                             years: int = 3) -> Optional[float]:
+    """Reinvestment rate the way Damodaran Ch.10 defines it, aggregated over
+    ``years`` so one lumpy year cannot speak for the firm:
+    sum(net capex + change in noncash working capital + net R&D + acquisitions)
+    / sum(NOPAT), R&D treated as capital when ``rnd_life`` is given."""
+    num = den = 0.0
+    used = 0
+    for i in range(max(1, len(rows) - years), len(rows)):
+        r = rows[i]
+        capex = _row_val(r, "Capital Expenditure")
+        dep = _row_val(r, "Depreciation and Amortization Cashflow")
+        if dep is None:
+            dep = _row_val(r, "Depreciation And Amortization")
+        d_nwc = _row_val(r, "Change In Working Capital")
+        op = _row_val(r, "Operating Income")
+        if None in (capex, dep, d_nwc, op):
+            continue
+        net_rd = 0.0
+        if rnd_life:
+            rd_newest = _rd_newest_first(rows, i)
+            if rd_newest[0] is not None and rd_newest[0] > 0:
+                net_rd = rd_newest[0] - _research_amortization(rd_newest, rnd_life)
+        acq = _row_val(r, "Acquisitions Net")
+        acq = -acq if (acq is not None and acq < 0) else 0.0
+        num += abs(capex) - dep - d_nwc + net_rd + acq
+        den += (op + net_rd) * (1.0 - _effective_tax_rate(r))
+        used += 1
+    return (num / den) if (used and den > 0) else None
+
+
+def _fundamental_growth(rows: list[sqlite3.Row], roic: Optional[float], *,
+                        prev_override: Optional[float] = None,
+                        prev2_override: Optional[float] = None,
+                        use_overrides: bool = False) -> Optional[dict]:
     """Damodaran Ch.11 fundamental growth: reinvestment rate x return on capital,
     plus the second-order term for a return that is improving on the assets the
     company already owns.
@@ -1378,10 +1484,13 @@ def _fundamental_growth(rows: list[sqlite3.Row], roic: Optional[float]) -> Optio
         return None
     prev_roic = None
     prev2_roic = None
-    if len(rows) >= 2:
-        prev_roic = _compute_return_ratios(rows[-2]).get("Return On Invested Capital")
-    if len(rows) >= 3:
-        prev2_roic = _compute_return_ratios(rows[-3]).get("Return On Invested Capital")
+    if use_overrides:
+        prev_roic, prev2_roic = prev_override, prev2_override
+    else:
+        if len(rows) >= 2:
+            prev_roic = _compute_return_ratios(rows[-2]).get("Return On Invested Capital")
+        if len(rows) >= 3:
+            prev2_roic = _compute_return_ratios(rows[-3]).get("Return On Invested Capital")
     return _vgrowth.fcff_growth(rows, roic, prev_roic=prev_roic,
                                 prev2_roic=prev2_roic,
                                 legacy_caps=(valuation_engine() == "legacy"))
@@ -1741,7 +1850,8 @@ def _reverse_dcf_scan(
     steps = int(round((g_hi - g_lo) * 100)) + 1
 
     def _intrinsic(g: float) -> Optional[float]:
-        # Terminal growth re-derived per trial, exactly as the forward model does.
+        # Legacy re-derives terminal growth per trial; the damodaran valuer
+        # ignores it and keeps the forward model's decoupled g_term.
         g_term = min(rf_eff, max(0.0, g))
         if valuer is not None:
             return valuer(g, g_term)
@@ -1979,6 +2089,77 @@ def compute_forecast(
     g_fund = fund["growth"] if fund else None
     g_reconciled, reconcile_note = _reconcile_growth(g_raw, g_fund, stage)
 
+    # ── DCF accuracy plan inputs (damodaran only; legacy untouched) ─────────
+    # One ROIC definition (NOPAT / cash-subtracted capital, R&D capitalized for
+    # research-heavy firms), a recent-window margin target, and the organic
+    # revenue trend. Each is measured here once and reused below.
+    g_policy: Optional[dict] = None
+    g_clean: Optional[float] = None
+    clean_rr: Optional[float] = None
+    rnd_life: Optional[int] = None
+    rnd_margin_shift = 0.0
+    roic_history: list[Optional[float]] = []
+    if _engine != "legacy":
+        try:
+            _rnd = _rnd_capitalization(rows, industry=_row_str(latest, "t_industry"))
+        except Exception:  # noqa: BLE001 — R&D restatement is a refinement, never a blocker
+            _rnd = {"applicable": False}
+        if _rnd.get("applicable"):
+            rnd_life = int(_rnd["life"])
+            _rd_newest = _rd_newest_first(rows, len(rows) - 1)
+            if base_revenue and _rd_newest[0]:
+                rnd_margin_shift = (_rd_newest[0] - _research_amortization(_rd_newest, rnd_life)) / base_revenue
+        # One ROIC definition inside the valuation, never the vendor column: a
+        # None (no usable capital base) routes the firm to sales-to-capital.
+        roic = _valuation_roic(rows, len(rows) - 1, rnd_life)
+        # The displayed fundamental rate and its efficiency term use the SAME
+        # definition for the prior years, or the term measures the switch of
+        # definition instead of a change in returns.
+        fund = _fundamental_growth(
+            rows, roic,
+            prev_override=(_valuation_roic(rows, len(rows) - 2, rnd_life) if len(rows) >= 2 else None),
+            prev2_override=(_valuation_roic(rows, len(rows) - 3, rnd_life) if len(rows) >= 3 else None),
+            use_overrides=True)
+        g_fund = fund["growth"] if fund else None
+        g_reconciled, _ = _reconcile_growth(g_raw, g_fund, stage)
+        roic_history = [_valuation_roic(rows, i, rnd_life)
+                        for i in range(max(0, len(rows) - 5), len(rows))]
+        # ponytail: the life-cycle growth-swing flag decides "cyclical". It
+        # also tags hypergrowth (Apple, Nvidia) and so fades their margins to
+        # a 10-year median; a margin-swing test kept those margins but scored
+        # worse in the backtest (2.72% vs 2.39% median error), so the flag stays.
+        _mt = _vpolicy.margin_target(margins, cyclical=(
+            bool(life.get("cyclicalSwings"))
+            and _vpolicy.margin_is_cyclical([_row_val(r, "Revenue") for r in rows], margins)))
+        _tgt_is_industry = False
+        if _mt is not None:
+            if _mt["value"] > 0 or not (_ind_margin and _ind_margin > 0):
+                margin_tgt, margin_target_source = _mt["value"], _mt["source"]
+            else:
+                margin_tgt = _ind_margin
+                _tgt_is_industry = True
+                margin_target_source = "industry margin (the company's recent margins are loss-making)"
+        if _tgt_is_industry:
+            rnd_margin_shift = 0.0   # an industry margin carries no R&D restatement
+        if rnd_margin_shift and margin_cur is not None and margin_tgt is not None:
+            # Consistency (Penman): R&D treated as capital in ROIC is treated
+            # as capital in the margin too. ponytail: the latest year's shift
+            # is applied to the target as well; per-year shifts if it matters.
+            margin_cur += rnd_margin_shift
+            margin_tgt += rnd_margin_shift
+            margin_target_source += ", with research and development treated as an investment"
+        _revs = [_row_val(r, "Revenue") for r in rows]
+        _acq = []
+        for _i in range(len(rows)):
+            try:
+                _acq.append(_acquired_revenue(rows, _i))
+            except Exception:  # noqa: BLE001
+                _acq.append(None)
+        g_policy = _vpolicy.growth_driver(_revs, _acq)
+        clean_rr = _clean_reinvestment_rate(rows, rnd_life)
+        if clean_rr is not None and roic is not None and roic > 0:
+            g_clean = clean_rr * roic
+
     # ── Reinvestment bridge (Figure 11.6) ────────────────────────────────────
     # A company that earns a real return reinvests out of earnings (g / ROIC). A
     # young or loss-making one cannot, so its reinvestment is tied to the revenue
@@ -2029,16 +2210,43 @@ def compute_forecast(
         # The historical regression stays visible as a cross-check. When
         # nothing is derivable the forecast says so — there is no fabricated
         # fallback rate anywhere in this path.
+        # Revenue drives revenue: the 5-year ORGANIC revenue trend, shrunk 30%
+        # toward a base rate, leads (backtest: 4.3% median error vs 7.2% for
+        # reinvestment x ROIC, which measures PROFIT growth and was being
+        # applied to revenue). Reinvestment x ROIC becomes the consistency
+        # check, except where it IS the growth engine: regulated utilities and
+        # telecoms grow with their capital base, and research-heavy firms
+        # blend the two (the backtest's best estimators by sector).
+        _sector = (_row_str(latest, "t_sector") or "").strip()
+        _industry_l = (_row_str(latest, "t_industry") or "").lower()
+        _capital_led = _sector == "Utilities" or "telecom" in _industry_l
+        _trend = g_policy["growth"] if g_policy else None
         if reinvest_method == "salesToCapital":
-            g_drive = g_raw if g_raw is not None else norms.get("revenueGrowth")
-            reconcile_note = ("the revenue trend drives the projection, with "
+            g_drive = (_trend if _trend is not None
+                       else (g_raw if g_raw is not None else norms.get("revenueGrowth")))
+            reconcile_note = ("the organic revenue trend drives the projection, with "
                               "reinvestment tied to added revenue through the "
                               "sales-to-capital ratio (young-company path)")
+        elif _capital_led and g_clean is not None:
+            g_drive = g_clean
+            reconcile_note = ("growth follows the capital the company puts to work "
+                              "(reinvestment rate x return on capital), because a "
+                              "regulated or network business grows with its asset base")
+        elif rnd_life and _trend is not None and g_clean is not None:
+            g_drive = 0.5 * _trend + 0.5 * g_clean
+            reconcile_note = ("half the organic revenue trend and half the growth its "
+                              "reinvestment (research included) supports")
+        elif _trend is not None:
+            g_drive = _trend
+            reconcile_note = ("the organic revenue trend of the last five years drives "
+                              "the projection, pulled 30% toward the growth listed "
+                              "companies sustain; reinvestment x return on capital "
+                              "is shown as a consistency check")
         else:
-            g_drive = g_fund
-            reconcile_note = ("fundamental growth (reinvestment rate x return "
-                              "on capital) drives the projection; the revenue "
-                              "trend is shown as a cross-check")
+            g_drive = g_clean if g_clean is not None else g_fund
+            reconcile_note = ("fundamental growth (reinvestment rate x return on "
+                              "capital) stands in, because fewer than three years of "
+                              "revenue are on file")
             if g_drive is None:
                 g_drive = g_raw if g_raw is not None else norms.get("revenueGrowth")
                 reconcile_note = ("the revenue trend stands in (the company's "
@@ -2055,7 +2263,20 @@ def compute_forecast(
         g_init = g_drive
         lo, hi = _stage_bounds(stage)
     # Stable growth can never exceed the risk-free rate (Damodaran Ch.12).
-    g_term = min(rf_eff, max(0.0, g_init))
+    stable_growth_info: Optional[dict] = None
+    if _engine == "legacy":
+        g_term = min(rf_eff, max(0.0, g_init))
+    else:
+        # Decoupled from the noisy high-growth rate: min(rf, long-run nominal
+        # growth), so a one-year dip cannot set growth forever (owner choice,
+        # 2026-10-22). Only a declining firm keeps a lower, possibly negative,
+        # perpetual rate.
+        _nominal = _vpolicy.long_run_nominal_growth(norms.get("expectedInflation"))
+        stable_growth_info = _vpolicy.stable_growth(
+            rf_eff, _nominal, g_init, declining=(stage == "declining"))
+        stable_growth_info["longRunNominalGrowth"] = round(_nominal, 4)
+        stable_growth_info["riskFreeRate"] = round(rf_eff, 4)
+        g_term = stable_growth_info["value"]
 
     growth_reconciliation = {
         "historical": round(g_raw, 4) if g_raw is not None else None,
@@ -2079,6 +2300,27 @@ def compute_forecast(
         "marginTarget": round(margin_tgt, 4) if margin_tgt is not None else None,
         "mode": mode,
     }
+    if _engine != "legacy":
+        growth_reconciliation.update({
+            "organicTrend": round(g_policy["organicTrend"], 4) if g_policy else None,
+            "baseRate": g_policy["baseRate"] if g_policy else None,
+            "cleanReinvestmentRate": round(clean_rr, 4) if clean_rr is not None else None,
+            "cleanFundamental": round(g_clean, 4) if g_clean is not None else None,
+            "roicUsed": round(roic, 4) if roic is not None else None,
+            "rndCapitalized": bool(rnd_life),
+            "rndLife": rnd_life,
+            # Margin points added by treating R&D as an investment (target and
+            # current both carry it); subtract it to compare with reported margins.
+            "rndMarginShift": round(rnd_margin_shift, 4),
+            "stableGrowth": stable_growth_info,
+            # The efficiency term is growth from repricing EXISTING assets; it
+            # is a one-off, so it is shown here and never projected.
+            "efficiencyExcluded": True,
+            "consistencyGap": (round(g_init - g_clean, 4)
+                               if g_clean is not None else None),
+            "consistencyFlag": bool(g_clean is not None
+                                    and abs(g_init - g_clean) > GROWTH_DIVERGENCE_FLAG),
+        })
 
     # Gross-debt equity bridge (Damodaran Ch.15): equity = firm + cash − gross
     # debt − minority interest.  equity_adjust collapses the latter three.
@@ -2135,8 +2377,21 @@ def compute_forecast(
                 return w
         wacc_stable_probe = _wacc_of_beta(
             _vstages.stable_beta(beta, from_high_growth=True))
-        roic_stable, roic_stable_source = _vstages.stable_return(
-            roic, norms.get("roic"), wacc_stable_probe)
+        # Return on NEW capital in perpetuity (owner choice, 2026-10-22): WACC
+        # plus a durability-scaled share of the firm's own excess, capped at
+        # WACC + 3 pts; a firm earning below WACC keeps its own return. The
+        # equal-weight industry median (5.0% for Consumer Electronics) is no
+        # longer the target: it sat below WACC and below stable growth, which
+        # is what produced Apple's negative terminal value.
+        stable_return_info = _vpolicy.stable_return(
+            roic_history, wacc_stable_probe,
+            industry_aggregate=norms.get("roicAggregate"))
+        roic_stable = stable_return_info["value"]
+        roic_stable_source = stable_return_info["source"]
+        roic_stable, _sr_guard = _vpolicy.guard_stable_return(
+            roic_stable, g_term, wacc_stable_probe)
+        if _sr_guard:
+            roic_stable_source = "raisedToFundStableGrowth"
         try:
             _ddm_info = _vgrowth.ddm_growth(rows)
         except Exception:  # noqa: BLE001 — payout is selector garnish, never a blocker
@@ -2169,11 +2424,11 @@ def compute_forecast(
                 }
             reinvest_method = "salesToCapital"
             # The revenue trend leads on this path (Figure 11.6).
-            _g_rev = g_raw if g_raw is not None else norms.get("revenueGrowth")
+            _g_rev = (g_policy["growth"] if g_policy
+                      else (g_raw if g_raw is not None else norms.get("revenueGrowth")))
             if _g_rev is not None:
                 g_init = _g_rev
-                g_term = min(rf_eff, max(0.0, g_init))
-                reconcile_note = ("the revenue trend drives the projection, "
+                reconcile_note = ("the organic revenue trend drives the projection, "
                                   "with reinvestment tied to added revenue "
                                   "through the sales-to-capital ratio "
                                   "(young-company path)")
@@ -2191,7 +2446,7 @@ def compute_forecast(
             g_high=g_init, g_stable=g_term,
             wacc_of_beta=_wacc_of_beta, beta_high=beta,
             roic_high=roic if (roic is not None and roic > 0) else None,
-            roic_stable=(roic_stable if reinvest_method == "earnings" else None),
+            roic_stable=roic_stable,
             roic_stable_source=roic_stable_source,
             reinvest_method=reinvest_method, sales_to_capital=s2c_used,
             # None when the quote cannot be compared with a per-ordinary-share
@@ -2229,12 +2484,43 @@ def compute_forecast(
             dam_diags.append(share_warn)
         try:
             dam_diags.extend(_vdiag.imputed_roic_warnings(
-                base["rows"], _invested_capital(latest),
-                norms.get("roic"), wacc))
+                base["rows"], _valuation_capital(latest),
+                norms.get("roicAggregate", norms.get("roic")), wacc))
         except Exception:  # noqa: BLE001
             pass
         if fund and fund.get("diagnostics"):
             dam_diags.extend(fund["diagnostics"])
+        if _sr_guard:
+            dam_diags.append(_sr_guard)
+        if growth_reconciliation.get("consistencyFlag"):
+            dam_diags.append({
+                "id": "growth_consistency",
+                "severity": "info",
+                "detail": (f"The growth used ({g_init:.1%}) and the growth the company's "
+                           f"reinvestment supports ({g_clean:.1%}) differ by more than "
+                           "5 points. Either reinvestment has to rise, returns on new "
+                           "capital have to beat today's, or the revenue trend slows."),
+            })
+        # The stable-growth toggle: the same chosen structure with stable growth
+        # at the risk-free rate (Damodaran's consistency rule) instead of the
+        # lower of rf and long-run nominal growth.
+        stable_alternatives: dict = {"min": {"stableGrowth": round(g_term, 4),
+                                             "intrinsicPerShare": base["intrinsicPerShare"]}}
+        if (stable_growth_info and abs(rf_eff - g_term) > 1e-9 and track != "nstage"
+                and stage != "declining"):
+            _rs_rf, _ = _vpolicy.guard_stable_return(roic_stable, rf_eff, wacc_stable_probe)
+            _alt = _vengines.run_fcff_revenue(
+                base_revenue=base_revenue, margin_cur=margin_cur, margin_tgt=margin_tgt,
+                tax=tax, g_high=g_init, g_stable=rf_eff,
+                n_high=dam_shape[0], n_transition=dam_shape[1],
+                wacc_of_beta=_wacc_of_beta, beta_high=beta,
+                roic_high=roic if (roic is not None and roic > 0) else None,
+                roic_stable=_rs_rf,
+                reinvest_method=reinvest_method, sales_to_capital=s2c_used,
+                equity_adjust=equity_adjust, shares=shares)
+            stable_alternatives["rf"] = {
+                "stableGrowth": round(rf_eff, 4),
+                "intrinsicPerShare": _alt["intrinsicPerShare"] if _alt else None}
         dam_selection = {
             "track": track,
             "recommendedStages": int(chosen_key),
@@ -2245,6 +2531,17 @@ def compute_forecast(
             "hModelApplicable": choice.h_model_applicable,
             "roicStable": round(roic_stable, 4) if roic_stable is not None else None,
             "roicStableSource": roic_stable_source,
+            "stableReturnPolicy": {
+                "share": stable_return_info["share"],
+                "shareReason": stable_return_info["shareReason"],
+                "ownNormalized": (round(stable_return_info["ownNormalized"], 4)
+                                  if stable_return_info["ownNormalized"] is not None else None),
+                "cap": (round(stable_return_info["cap"], 4)
+                        if stable_return_info["cap"] is not None else None),
+                "costOfCapital": round(wacc_stable_probe, 4),
+                "industryAggregate": norms.get("roicAggregate"),
+            },
+            "stableGrowthAlternatives": stable_alternatives,
             "diagnostics": dam_diags,
             "stageVariants": {
                 k: {kk: vv for kk, vv in v.items() if kk != "raw"}
@@ -2282,15 +2579,17 @@ def compute_forecast(
                 # Trial valuations use the SAME stage structure as the chosen
                 # variant, and the scan band is wide open — an implied growth
                 # is a measurement, not something to clip at a model cap.
-                def _rev_valuer(g, gt, _shape=dam_shape):
+                def _rev_valuer(g, _gt, _shape=dam_shape):
+                    # Stable growth is decoupled from the high-growth rate, so
+                    # every trial keeps the forward model's g_term.
                     out = _vengines.run_fcff_revenue(
                         base_revenue=base_revenue, margin_cur=margin_cur,
                         margin_tgt=margin_tgt, tax=tax,
-                        g_high=g, g_stable=gt,
+                        g_high=g, g_stable=g_term,
                         n_high=_shape[0], n_transition=_shape[1],
                         wacc_of_beta=_wacc_of_beta, beta_high=beta,
                         roic_high=roic if (roic is not None and roic > 0) else None,
-                        roic_stable=(roic_stable if reinvest_method == "earnings" else None),
+                        roic_stable=roic_stable,
                         reinvest_method=reinvest_method,
                         sales_to_capital=s2c_used,
                         equity_adjust=equity_adjust, shares=shares)
@@ -2324,7 +2623,7 @@ def compute_forecast(
             n_high=dam_shape[0], n_transition=dam_shape[1],
             wacc_of_beta=lambda b: wacc_b1, beta_high=1.0,
             roic_high=roic if (roic is not None and roic > 0) else None,
-            roic_stable=(roic_stable if reinvest_method == "earnings" else None),
+            roic_stable=roic_stable,
             reinvest_method=reinvest_method, sales_to_capital=s2c_used,
             equity_adjust=equity_adjust, shares=shares,
         )
@@ -2404,7 +2703,7 @@ def compute_forecast(
     for w in wacc_axis:
         cells: list[Optional[float]] = []
         for g in growth_axis:
-            gt = min(rf_eff, max(0.0, g))
+            gt = min(rf_eff, max(0.0, g)) if _engine == "legacy" else g_term
             if _engine == "legacy":
                 proj = _run_fcff_projection(
                     base_revenue=base_revenue, margin_cur=margin_cur, margin_tgt=margin_tgt,
@@ -2420,7 +2719,7 @@ def compute_forecast(
                     n_high=dam_shape[0], n_transition=dam_shape[1],
                     wacc_of_beta=lambda b, _w=w: _w, beta_high=beta,
                     roic_high=roic if (roic is not None and roic > 0) else None,
-                    roic_stable=(roic_stable if reinvest_method == "earnings" else None),
+                    roic_stable=roic_stable,
                     reinvest_method=reinvest_method, sales_to_capital=s2c_used,
                     equity_adjust=equity_adjust, shares=shares,
                 )
@@ -2484,6 +2783,10 @@ def compute_forecast(
         "betaOneIntrinsicPerShare": beta_one_intrinsic,
         "eva": eva,
         "waccBuild": wacc_build,
+        # Where the discount-rate inputs came from (damodaran engine): the
+        # currency's risk-free rate and the country's risk premium.
+        **({"locationRates": norms["locationRates"]}
+           if _engine != "legacy" and norms.get("locationRates") else {}),
         # Reverse DCF (Penman): the growth today's price implies, same engine inverted.
         "reverseDcf": reverse_dcf,
         "applicable": True,
@@ -2648,6 +2951,12 @@ def _compute_one_metric(
     pb = pb_col if pb_col is not None else _safe_div(market_cap, equity)
     roe_col = _row_val(row, "ROE")
     roe_val = roe_col if roe_col is not None else _safe_div(ni, equity)
+    if equity is not None and equity <= 0 and valuation_engine() != "legacy":
+        # Negative book equity (usually years of buybacks: MCD, ORLY, AZO, PM)
+        # makes ROE "a meaningless number" (Damodaran 2007); it is not a loss,
+        # so it must not trip the comparative score's loss cap. The group engine
+        # already drops it the same way. ROIC carries the return instead.
+        roe_val = None
     # Extended (5-factor) DuPont levers — ROE = tax × interest × EBIT-margin × turnover × leverage.
     # The first three decompose net margin: (NI/EBT)(EBT/EBIT)(EBIT/Rev) = NI/Rev. EBIT = Operating Income.
     dupont_tax_burden = _safe_div(ni, ibt)            # NI / EBT
@@ -4026,6 +4335,17 @@ def _residual_income(
         div = _row_val(latest, "Dividends Paid")
         ni = _row_val(latest, "Net Income")
         payout = _safe_div(abs(div) if div is not None else None, ni)
+    if valuation_engine() != "legacy":
+        # Buybacks are payout too (Damodaran Ch.13.3): the same 5-year
+        # augmented payout the dividend model uses, so the residual-income and
+        # dividend models no longer disagree about how much a company retains
+        # (Visa: 77% retained here vs 4% in the dividend model before).
+        try:
+            _aug = _vgrowth.ddm_growth(rows)
+        except Exception:  # noqa: BLE001
+            _aug = None
+        if _aug and _aug.get("buybacksIncluded"):
+            payout = _aug["payoutUsed"]
     payout = min(max(payout if payout is not None else 0.0, 0.0), 1.0)
     retention = 1.0 - payout
 
@@ -6180,10 +6500,12 @@ def build_individual_snapshot(
         intrinsic, implied_price, mos, growth_used = _compute_dcf(
             rows, beta=beta, rf=rf, erp=erp, price=live_price,
             price_unusable=price_unusable)
+        growth_used_kind = "legacyFcfPerShare"
     else:
         # The damodaran engine fills these from the chosen model below; the
         # legacy clamped per-share DCF no longer runs at all.
         intrinsic = implied_price = mos = growth_used = None
+        growth_used_kind = None
 
     horizontal_income = _horizontal(rows, INCOME_STATEMENT_LINES)
     horizontal_balance = _horizontal(rows, BALANCE_SHEET_LINES)
@@ -6234,11 +6556,13 @@ def build_individual_snapshot(
             implied_price = forecast.get("currentPrice")
             mos = forecast.get("marginOfSafety")
             growth_used = (forecast.get("assumptions") or {}).get("revenueGrowthInitial")
+            growth_used_kind = "revenueGrowth" if growth_used is not None else None
         else:
             intrinsic = implied_price = mos = None
             growth_used = None
         if growth_used is None:
             growth_used = _historical_fcf_growth_unclamped(rows)
+            growth_used_kind = "fcfPerShareHistory" if growth_used is not None else None
     # Surface the resolver's provenance through the existing waccBuild dict so
     # the API response carries method/confidence/components next to the beta.
     if beta_meta and forecast is not None and isinstance(forecast.get("waccBuild"), dict):
@@ -6339,6 +6663,7 @@ def build_individual_snapshot(
         mos = dividend_discount.get("marginOfSafety")
         if dividend_discount.get("growthInitial") is not None:
             growth_used = dividend_discount.get("growthInitial")
+            growth_used_kind = "dividendGrowth"
     try:
         bank_profitability = _bank_profitability(rows)
     except Exception as exc:  # noqa: BLE001
@@ -6583,6 +6908,7 @@ def build_individual_snapshot(
         implied_price=implied_price,
         margin_of_safety=mos,
         avg_fcf_growth=growth_used,
+        growth_used_kind=growth_used_kind,
         horizontal_income=horizontal_income,
         horizontal_balance=horizontal_balance,
         horizontal_cashflow=horizontal_cashflow,

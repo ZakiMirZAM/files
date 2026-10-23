@@ -4,7 +4,7 @@
 
 Efficiency growth is the part of a company's expected growth that comes from earning a better return on the assets the company already owns. Return on invested capital, shortened to ROIC, is the after-tax operating profit the company earns for every dollar of capital tied up in the business. Most growth calculations count only the growth that new investment buys. A company that raises the return on the asset base it already owns grows without spending a single new dollar, and efficiency growth is that second source.
 
-The term answers one question: how much of the forecast growth is coming from a rising return rather than from new spending? One point must be stated at the start. Efficiency growth is temporary by construction. A return on capital cannot keep rising forever, so once the return stops improving the term falls to zero and only the growth bought with new investment remains.
+The term answers one question: how much of the company's fundamental growth is coming from a rising return rather than from new spending? In this app the term is shown beside the growth estimate and is never projected into the valuation. One point must be stated at the start. Efficiency growth is temporary by construction. A return on capital cannot keep rising forever, so once the return stops improving the term falls to zero and only the growth bought with new investment remains.
 
 Common readings of the term:
 
@@ -52,7 +52,7 @@ Anything that moves the return on capital moves the term, because the term is no
 
 The denominator of the return can move on its own, and the effects are easy to mistake for real improvement. An asset write-off removes book value from invested capital, so the same profit is now divided by a smaller base and the return jumps. Selling a division, running down inventory, or letting the asset base age without replacement all shrink invested capital the same way. A one-time gain sitting inside operating income lifts the return for a single year and then disappears.
 
-Watch the denominator of the metric itself, which is last year's return. When last year's return was very small, the percentage improvement is enormous even when the improvement in the actual return is tiny. A return that moves from 1 percent to 2 percent is an improvement of only one percentage point, and yet the arithmetic reports a doubling. The cap at 0.10 is what keeps that arithmetic from wrecking the growth forecast.
+Watch the denominator of the metric itself, which is last year's return. When last year's return was very small, the percentage improvement is enormous even when the improvement in the actual return is tiny. A return that moves from 1 percent to 2 percent is an improvement of only one percentage point, and yet the arithmetic reports a doubling. Showing the term without projecting it is what keeps that arithmetic out of the growth forecast.
 
 ## Part 5: How to analyze it by industry and sector
 
@@ -75,7 +75,7 @@ A line that sits at zero in most years and spikes once is the normal pattern for
 
 A line that stays positive for several consecutive years means the return has been climbing year after year. Such a run is worth investigating rather than celebrating. Either the company is genuinely closing a gap against better-run competitors, which is real but finite, or the capital base is shrinking through write-offs and asset sales while profit holds steady. The second case produces the same chart and none of the value.
 
-A line pinned at the 0.10 cap in the latest year means the raw improvement was larger than the cap allowed. Read that reading as a flag rather than as a number. Check whether last year's return was unusually small, because a small base inflates the percentage change without much real improvement behind it. Compare the term against the ROIC chart directly. A ROIC line that climbs smoothly supports the term, and a ROIC line that jumps once after a collapse does not.
+A line that spikes far above its usual level in the latest year means the raw improvement was unusually large. Read that reading as a flag rather than as a number. Check whether last year's return was unusually small, because a small base inflates the percentage change without much real improvement behind it. Compare the term against the ROIC chart directly. A ROIC line that climbs smoothly supports the term, and a ROIC line that jumps once after a collapse does not.
 
 ## Part 7: Metrics to read alongside it
 
@@ -107,7 +107,7 @@ A line pinned at the 0.10 cap in the latest year means the raw improvement was l
 
 The term is temporary by construction, and treating the term as permanent is the single largest error a reader can make with it. A return on capital that keeps rising every year forever would eventually reach an impossible level, so the improvement must stop. A forecast that leans on efficiency growth for most of its growth is describing a few good years and calling them the long run. Read the term as a contribution that decays to zero rather than as a growth rate the company can hold.
 
-The arithmetic is fragile in ways the number itself does not show. A small denominator, meaning a very low return last year, produces an enormous percentage improvement from a tiny real gain, and the cap at 0.10 exists only because that distortion is so common. The term also cannot tell a real operating improvement apart from a shrinking capital base, because a write-off and a genuine efficiency gain raise the return in exactly the same way. The app counts only improvements and never subtracts a falling return, so the term is a one-sided adjustment by design and gives no warning when the return is deteriorating. Companies with a zero or negative return on capital get no term at all, since a percentage change from a base of zero has no meaning.
+The arithmetic is fragile in ways the number itself does not show. A small denominator, meaning a very low return last year, produces an enormous percentage improvement from a tiny real gain, and that distortion is common enough that the app shows the term without projecting it. The term also cannot tell a real operating improvement apart from a shrinking capital base, because a write-off and a genuine efficiency gain raise the return in exactly the same way. The app counts only improvements and never subtracts a falling return, so the term is a one-sided adjustment by design and gives no warning when the return is deteriorating. Companies with a zero or negative return on capital get no term at all, since a percentage change from a base of zero has no meaning.
 
 ## Part 9: Precise qualitative questions
 

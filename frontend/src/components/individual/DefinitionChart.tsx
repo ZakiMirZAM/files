@@ -58,8 +58,10 @@ export function DefinitionChart({ series, title }: DefinitionChartProps) {
 
   const latest = series.points[series.points.length - 1]?.value;
   const first = series.points[0]?.value;
+  // N yearly points span N - 1 years.
+  const spanYears = series.points.length - 1;
   const totalChange =
-    first != null && latest != null && first !== 0
+    first != null && latest != null && first !== 0 && spanYears >= 1
       ? ((latest - first) / Math.abs(first)) * 100
       : null;
 
@@ -81,7 +83,7 @@ export function DefinitionChart({ series, title }: DefinitionChartProps) {
               )}
             >
               {totalChange >= 0 ? "+" : ""}
-              {totalChange.toFixed(0)}% over {series.points.length} yrs
+              {totalChange.toFixed(0)}% over {spanYears} {spanYears === 1 ? "yr" : "yrs"}
             </span>
           )}
         </div>

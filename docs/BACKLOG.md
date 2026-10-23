@@ -24,6 +24,7 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 | ESG: what drives the company's ESG risk (shipped 2026-10-02; SASB map dropped for licensing, replaced by a valuation-input test in hidden AI guidance) | lib/esgRatingDeck.ts (+ test); EsgSection.tsx: dead score tiles removed, MSCI + Sustainalytics public links, 9-question runtime deck "What Drives {company}'s ESG Risk" |
 | Moat direction + growth sustainability (shipped 2026-10-02) | individualanalysis.py `_moat_direction`; MoatDirectionSection.tsx; lib/moatDirectionDeck.ts |
 | Head to Head, build step 1 (shipped 2026-10-22; competitors still from the industry peer panel, AI relationship map and Q5-Q7 tables not built) | company_profile/rivals.py ROE legs, return on capital, `groupShares`; HeadToHeadSection.tsx on the comparative page; lib/headToHead.ts (+ test); lib/questions.ts `headToHeadBefore` / `headToHeadAfter` |
+| DCF accuracy, Phase 1+2 + location-specific rates (shipped 2026-10-23; plan docs/plans/2026-09-27-dcf-accuracy-plan.md; story DCF Phase 3 not merged) | valuation/policy.py (+ test_dcf_policy.py); marketdata/country_rates.py + country_rates.json (Damodaran CRP Jul 2026, IMF WEO Oct 2026; refresh with remediation/country_rates/build_country_rates.py); remediation/backtest/dcf_backtest.py + dcf_snapshot.py; defs 820-825 |
 
 ## Small (S): quick wins, existing data
 

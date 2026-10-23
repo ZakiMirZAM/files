@@ -59,6 +59,9 @@ function orderedPoints(history: Record<string, number>): SeriesPoint[] {
 
 const yearOf = (period: string) => period.slice(0, 4);
 
+/** Keys whose series is already a growth rate (revenue_growth, net_income_growth, ...). */
+export const isGrowthRateKey = (key: string): boolean => /_growth$/i.test(key);
+
 /** Build the definition-number -> series map for the current ticker's data. */
 export function buildSeriesIndex(data: SectionData | null | undefined): Map<number, DefinitionSeries> {
   const index = new Map<number, DefinitionSeries>();
@@ -101,7 +104,8 @@ export function buildSeriesIndex(data: SectionData | null | undefined): Map<numb
       label: meta?.label ?? key,
       points: orderedPoints(history),
       format: (v) => formatMetricValue(v, unit),
-      isRateOfChange: false,
+      // A *_growth series is already a rate; a YoY of it would be a growth of a growth.
+      isRateOfChange: isGrowthRateKey(key),
     });
   }
 

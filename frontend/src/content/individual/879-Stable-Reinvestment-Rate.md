@@ -19,7 +19,7 @@ The formula is:
 
 `Stable Reinvestment Rate = Stable Growth ÷ Stable Return On Capital`
 
-Stable growth is the perpetual growth rate, which the engine caps at the risk-free rate. The stable return on capital is the return the company is allowed to keep earning forever, anchored to the industry median where one exists. The division follows from arithmetic: growth equals reinvestment times return, so the reinvestment needed for a given growth is growth divided by return. A company earning 10 percent that wants to grow 3 percent forever must reinvest 30 percent of its after-tax operating profit forever.
+Stable growth is the perpetual growth rate, which the engine sets at the lower of the risk-free rate and long-run nominal growth (definition 821). The stable return on capital is the return the company is allowed to earn forever on new capital: the cost of capital plus a share of its own excess return, capped at 3 points above the cost of capital (6 points when the excess held in every one of the last five years) (definition 822). The division follows from arithmetic: growth equals reinvestment times return, so the reinvestment needed for a given growth is growth divided by return. A company earning 10 percent that wants to grow 3 percent forever must reinvest 30 percent of its after-tax operating profit forever.
 
 The equity-side models use the mirror of the same rule:
 
@@ -37,7 +37,7 @@ The mirror form does the same policing on the dividend side. A terminal payout o
 
 ## Part 4: What influences the output
 
-Only two inputs move the rate. A higher stable growth assumption raises it in direct proportion, and a higher stable return lowers it. The stable return is the subtler input: the engine anchors it to the industry median return when one is available, otherwise moves the company's own return halfway toward the cost of capital, and with no information at all sets it to the cost of capital exactly.
+Only two inputs move the rate. A higher stable growth assumption raises it in direct proportion, and a higher stable return lowers it. The stable return is the subtler input: the engine starts from the cost of capital, adds half, a quarter, or none of the company's own five-year median excess return depending on how long that excess has held, and caps the result at 3 points above the cost of capital, or 6 points when the excess held in every one of the last five years. A company whose own return sits below the cost of capital keeps that lower return, and with no history at all the return is the cost of capital exactly. A guard raises the return whenever the stable rate would reach 90 percent.
 
 That last case has a famous consequence. When the stable return equals the cost of capital the terminal value stops responding to growth at all, because each extra unit of growth costs exactly what it earns. The Terminal Value And Excess Returns page walks through that result.
 
@@ -57,7 +57,7 @@ Comparing stable rates across sectors mostly compares industry return levels. Th
 
 The stable rate is a single terminal assumption, so read it against the company's historical reinvestment rate series. A history of reinvesting 50 percent that feeds a terminal assumption of 15 percent implies the company will need far less investment in maturity than it ever has, which is possible but must be argued. A terminal rate close to the historical range needs no special defense.
 
-Also watch how the rate changes between app refreshes. The rate moves only when stable growth or the stable return anchor moves, so a shift usually traces to a change in the risk-free rate or in the industry median. That traceability is a feature: terminal assumptions should never drift silently.
+Also watch how the rate changes between app refreshes. The rate moves only when stable growth or the stable return anchor moves, so a shift usually traces to a change in the risk-free rate, in expected inflation, or in the company's own five-year return record. That traceability is a feature: terminal assumptions should never drift silently.
 
 ## Part 7: Metrics to read alongside it
 
@@ -69,9 +69,9 @@ Also watch how the rate changes between app refreshes. The rate moves only when 
 
 ### ROIC
 
-**Why read the two together.** The return on invested capital is the denominator's real-world counterpart, since the stable return is anchored to the industry's median ROIC where possible. The company's own ROIC shows how far the anchor moves it from its demonstrated profitability. The stable rate is only sensible if its return input is.
+**Why read the two together.** The return on invested capital is the denominator's real-world counterpart, since the stable return is built from the company's own five-year median ROIC. The company's own ROIC shows how far the share kept and the cap move the stable return from its demonstrated profitability. The stable rate is only sensible if its return input is.
 
-**What the combination tells you.** A company earning 25 percent whose stable return is anchored at an industry 12 percent gets a materially higher stable rate, and the terminal value is deliberately more conservative than the company's record. A company below its industry median is granted improvement by the anchor, which deserves notice. The direction of the anchor's pull tells you which way the terminal assumption leans.
+**What the combination tells you.** A company earning 25 percent against a 9 percent cost of capital has its stable return capped at 12 percent, so it gets a materially higher stable rate, and the terminal value is deliberately more conservative than the company's record. A company earning below its cost of capital is granted no improvement, which deserves notice. The direction of the anchor's pull tells you which way the terminal assumption leans.
 
 ### Free Cash Flow
 
@@ -81,18 +81,18 @@ Also watch how the rate changes between app refreshes. The rate moves only when 
 
 ## Part 8: Limitations
 
-The formula is only as honest as its two inputs. A stable return set too high makes any growth look cheap to fund, and the discipline of the division cannot repair a flattering numerator or denominator. The industry anchor helps but industry medians can themselves be inflated by a cyclical peak in the source data.
+The formula is only as honest as its two inputs. A stable return set too high makes any growth look cheap to fund, and the discipline of the division cannot repair a flattering numerator or denominator. The company's own five-year record helps, but five years can themselves sit on a cyclical peak.
 
 The rate also assumes the growth-reinvestment link is the only constraint. Management quality, regulation, and market size are real constraints that never appear in the division. A negative stable rate is arithmetically sound for a shrinking company but the orderly perpetual self-liquidation it describes is rarer in practice than in formulas.
 
 ## Part 9: Precise qualitative questions
 
-1. What stable growth and stable return produced this rate? Did the return anchor come from the industry median, a halfway fade, or the cost of capital?
+1. What stable growth and stable return produced this rate? Did the stable return come from the cost of capital plus a share of the company's excess, the 3-point cap, the company's own below-cost return, or the funding guard?
 2. How does the stable rate compare with the company's own reinvestment rate over the last five years?
 3. If the stable rate is far below history, what about maturity is supposed to make growth so much cheaper for this company?
 4. Is the stable growth rate at or below the risk-free rate in the valuation currency?
 5. How much does the terminal value change if the stable return is set to the company's own current ROIC instead of the anchor?
 6. For the dividend track, is the implied terminal payout consistent with the company's payout history and stated policy?
-7. Does the industry median anchoring rest on a representative period, or on a cyclical peak or trough in the benchmark data?
+7. Do the five years behind the company's own median return represent a normal period, or a cyclical peak or trough?
 8. If the stable rate is negative, is a managed perpetual shrinkage actually plausible for this business?
 9. What does the terminal free cash flow's share of total intrinsic value look like, and how much of that share rests on this one rate?

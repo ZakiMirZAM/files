@@ -4,13 +4,13 @@
 
 Model selection is the first decision the intrinsic valuation engine makes: which stream of cash to discount. A dividend model discounts the cash actually paid to shareholders. An equity cash-flow model discounts what could be paid after reinvestment. A firm model discounts the cash available to all capital providers before debt payments. The right choice depends on what can be observed about the company, so the engine decides from observables rather than leaving the choice to taste.
 
-The engine picks one of three tracks. Financial companies are valued on dividends. Companies with negative margins or a negative return on capital are valued on a revenue-driven multi-stage path. Every other company is valued on free cash flow to the firm, called FCFF, which is the operating cash flow left after taxes and reinvestment.
+The engine picks one of three tracks. Lenders and insurers are valued on dividends, while fee-based financials such as payment networks, rating firms, and exchanges are valued like any operating company (definition 825). Companies with negative margins or a negative return on capital are valued on a revenue-driven multi-stage path. Every other company is valued on free cash flow to the firm, called FCFF, which is the operating cash flow left after taxes and reinvestment.
 
 ## The decision table
 
 | Company situation | Track chosen | Reason |
 |---|---|---|
-| Bank, insurer, or other financial company | Dividend discount model | For a financial company reinvestment is not observable, because debt is raw material rather than funding. Dividends are the one cash flow that can be measured, so the valuation rests on them. |
+| Bank, insurer, or other lender | Dividend discount model | For a financial company reinvestment is not observable, because debt is raw material rather than funding. Dividends are the one cash flow that can be measured, so the valuation rests on them. |
 | Negative operating margin, or a return on capital at or below zero | Revenue-driven n-stage path | Growth cannot be read off earnings that do not exist. The valuation builds from the revenue path, a margin that converges on the industry's, and reinvestment tied to sales. |
 | Everything else | FCFF at the cost of capital | The firm model is the dependable choice whenever the mix of debt and equity could shift over time, because it values operations first and settles debt at the end. |
 

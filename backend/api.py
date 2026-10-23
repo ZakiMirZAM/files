@@ -3008,6 +3008,50 @@ def _lifecycle_from_series(
 
 
 @cached(ttl_seconds=30 * 60, key_prefix="db")
+def _location_inputs(ticker: str, rows: list, rf: Optional[float],
+                     erp: Optional[float]) -> tuple[Optional[float], Optional[float], Optional[dict]]:
+    """(rf, erp, locationRates) for one company: the risk-free rate in its
+    REPORTING currency (inflation differential vs the US) and the equity risk
+    premium of its COUNTRY (US ERP + country risk premium), Damodaran's
+    dcfrates method. Legacy rollback, missing inputs or any failure keep the
+    US rates unchanged."""
+    if valuation_engine() == "legacy" or rf is None or erp is None or not rows:
+        return rf, erp, None
+    try:
+        import datetime as _dt
+        from marketdata.country_rates import location_rates
+        currency = None
+        for r in reversed(rows):
+            try:
+                currency = r["Reported Currency"]
+            except (IndexError, KeyError):
+                currency = None
+            if currency:
+                break
+        with db_conn() as conn:
+            meta = conn.execute("SELECT country FROM tickers WHERE UPPER(ticker) = ?",
+                                (ticker.upper(),)).fetchone()
+        # Expected inflation looks forward from TODAY, not from the filing year.
+        loc = location_rates(ticker, meta["country"] if meta else None, currency,
+                             rf, erp, _dt.date.today().year)
+        return loc["riskFreeRate"], loc["equityRiskPremium"], loc
+    except Exception as exc:  # noqa: BLE001 — location is a refinement, never a blocker
+        log.warning("[api] location rates for %s failed: %s", ticker, exc)
+        return rf, erp, None
+
+
+def _norms_with_location(ticker: str, loc: Optional[dict]) -> dict[str, Any]:
+    """Industry norms plus the location block: local expected inflation sets the
+    long-run nominal growth cap for a non-USD reporter."""
+    norms = _industry_growth_norms(ticker)
+    if loc:
+        norms = dict(norms)
+        norms["locationRates"] = loc
+        if (loc.get("currency") or "USD").upper() != "USD" and loc.get("expectedInflation") is not None:
+            norms["expectedInflation"] = loc["expectedInflation"]
+    return norms
+
+
 def _industry_growth_norms(ticker: str) -> dict[str, Any]:
     """Industry norms a single company's forecast leans on when its own numbers
     carry no signal (Damodaran Ch.11, Figure 11.6): the sales-to-capital ratio a
@@ -3049,10 +3093,92 @@ def _industry_growth_norms(ticker: str) -> dict[str, Any]:
         ind_roic = _industry_roic(row["industry"])
         if ind_roic:
             out["roic"] = ind_roic
+        # DCF accuracy plan: the capital-weighted AGGREGATE (sum of NOPAT over
+        # sum of cash-subtracted capital, in USD) is what Damodaran's datasets
+        # and Mauboussin report; the equal-weight median above understates a
+        # large-cap industry (IT: 19.0% aggregate vs 10.8% median).
+        agg = _industry_roic_aggregate(row["industry"])
+        if agg:
+            out["roicAggregate"] = agg
+        infl = _expected_inflation()
+        if infl is not None:
+            out["expectedInflation"] = infl
         return out
     except Exception as exc:  # noqa: BLE001 — norms are a nicety, never a blocker
         log.warning("[api] industry growth norms for %s failed: %s", ticker, exc)
         return {}
+
+
+@cached(ttl_seconds=30 * 60, key_prefix="db")
+def _industry_roic_aggregate(industry: str) -> Optional[float]:
+    """Capital-weighted industry ROIC from the latest filings:
+    sum(NOPAT) / sum(equity + debt - cash & short-term investments), both
+    converted to USD through fx_rates (a level, never a ratio, is converted).
+    Firms with non-positive capital are left out; losses stay in, because an
+    aggregate is meant to show what the industry's capital earns as a whole.
+    None with fewer than three firms or no USD rate."""
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT f."Operating Income" AS op, f."Income Tax Expense" AS tx,
+                       f."Income Before Tax" AS ibt,
+                       f."Total Stockholders Equity" AS eq, f."Total Debt" AS td,
+                       COALESCE(f."Cash And Short Term Investments",
+                                f."Cash And Cash Equivalents") AS cash,
+                       x.usd_per_unit AS fx
+                FROM financials f
+                JOIN tickers t ON t.ticker = f.Ticker
+                JOIN fx_rates x ON x.currency = f."Reported Currency"
+                JOIN (SELECT Ticker, MAX(CAST("Calendar Year" AS INTEGER)) AS y
+                      FROM financials
+                      WHERE "Calendar Year" GLOB '[0-9][0-9][0-9][0-9]'
+                      GROUP BY Ticker) last
+                  ON last.Ticker = f.Ticker
+                 AND CAST(f."Calendar Year" AS INTEGER) = last.y
+                WHERE t.industry = ? AND f."Revenue" > 0 AND f."Market Cap" > 0
+                """,
+                (industry,),
+            ).fetchall()
+        nopat_sum = cap_sum = 0.0
+        n = 0
+        for r in rows:
+            op, eq = r["op"], r["eq"]
+            if op is None or eq is None or not r["fx"]:
+                continue
+            capital = eq + (r["td"] or 0.0) - (r["cash"] or 0.0)
+            if capital <= 0:
+                continue
+            tax = (r["tx"] / r["ibt"]) if (r["tx"] is not None and r["ibt"]) else None
+            if tax is None or not (0.0 <= tax <= 0.6):
+                tax = MARGINAL_TAX_RATE
+            nopat_sum += op * (1.0 - tax) * r["fx"]
+            cap_sum += capital * r["fx"]
+            n += 1
+        if n < 3 or cap_sum <= 0:
+            return None
+        return round(nopat_sum / cap_sum, 4)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[api] industry aggregate ROIC for %s failed: %s", industry, exc)
+        return None
+
+
+@cached(ttl_seconds=24 * 3600, key_prefix="macro")
+def _expected_inflation() -> Optional[float]:
+    """Latest 10-year breakeven inflation (FRED T10YIE, stored by the
+    marketdata scheduler) as a decimal; None when the series is absent."""
+    try:
+        from marketdata import connect as _md_connect
+        from marketdata.fred_client import read_series
+        conn = _md_connect()
+        try:
+            obs = read_series(conn, "T10YIE")
+        finally:
+            conn.close()
+        return round(obs[-1].value / 100.0, 4) if obs else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[api] expected inflation unavailable: %s", exc)
+        return None
 
 
 @cached(ttl_seconds=30 * 60, key_prefix="db")
@@ -5559,9 +5685,13 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
         # Value score + DCF/MoS via the shared snapshot builder (DB-only, no live price).
         if db is not None:
             try:
+                _rf, _erp, _loc = _location_inputs(tk, rs, macro.get("rf"), macro.get("erp"))
                 snap = build_comparative_snapshot(
-                    tk, rs, db=db, rf=macro.get("rf"), erp=macro.get("erp"),
+                    tk, rs, db=db, rf=_rf, erp=_erp,
                     use_live_price=False, rates=fx_rates,
+                    # Legacy rollback keeps the old norm-free ranking, byte-identical.
+                    industry_norms=(_norms_with_location(tk, _loc)
+                                    if valuation_engine() != "legacy" else None),
                 )
             except Exception as exc:  # noqa: BLE001 — one bad ticker must not drop the table
                 log.warning("[api] ranking snapshot for %s failed: %s", tk, exc)
@@ -5918,6 +6048,9 @@ def _valuation_block(snap: Any) -> dict[str, Any]:
         "impliedPrice": snap.implied_price if comparable else None,
         "marginOfSafety": snap.margin_of_safety if comparable else None,
         "fcfGrowthUsed": snap.avg_fcf_growth,
+        # What fcfGrowthUsed holds: revenueGrowth (the forecast's first-year
+        # rate), fcfPerShareHistory, or dividendGrowth (financials).
+        "growthUsedKind": getattr(snap, "growth_used_kind", None),
         # The currencies the two figures are in, and why they could not be
         # compared when that is the case. Always present.
         "priceComparison": pc,
@@ -6274,10 +6407,13 @@ def individual_endpoint(request: Request, ticker: str = PathParam(pattern=TICKER
                     _gdp = get_nominal_gdp_growth().get("value")
                 except Exception:  # noqa: BLE001 — the economy pace is garnish
                     _gdp = None
+                _rf, _erp, _loc = _location_inputs(ticker_upper, rows_full,
+                                                   macro["rf"], macro["erp"])
                 snap = build_individual_snapshot(
-                    ticker_upper, rows_full, db=db, rf=macro["rf"], erp=macro["erp"],
+                    ticker_upper, rows_full, db=db, rf=_rf, erp=_erp,
                     erp_method=macro.get("erpMethod"), hist_params=hist_params,
-                    industry_norms=_industry_growth_norms(ticker_upper),
+                    industry_norms=(_norms_with_location(ticker_upper, _loc) if _loc
+                                    else _industry_growth_norms(ticker_upper)),
                     gdp_growth=_gdp)
                 if snap is not None:
                     snap_dict = _snapshot_to_dict(snap)

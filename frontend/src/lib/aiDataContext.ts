@@ -5,6 +5,7 @@
 import type { LeaderboardRow, Metric, SectionData, SectionKey, SectorMetricsData } from "./types";
 import type { SectorTotal } from "./sectorRotation";
 import { moneySign } from "./format";
+import { growthUsedWords } from "./growthUsedLabel";
 
 function num(v: number | null | undefined, digits = 2): string {
   return v == null || Number.isNaN(v) ? "n/a" : Number(v).toFixed(digits);
@@ -101,7 +102,9 @@ export function buildDataContext(
       if (val.dcfIntrinsicPerShare != null) v.push(`DCF intrinsic $${num(val.dcfIntrinsicPerShare)}`);
       if (val.wacc != null) v.push(`WACC ${num(val.wacc * 100)}%`);
       if (val.marginOfSafety != null) v.push(`margin of safety ${num(val.marginOfSafety * 100)}%`);
-      if (val.fcfGrowthUsed != null) v.push(`FCF growth assumed ${num(val.fcfGrowthUsed * 100)}%`);
+      if (val.fcfGrowthUsed != null) {
+        v.push(`growth assumed ${num(val.fcfGrowthUsed * 100)}% (${growthUsedWords(val.growthUsedKind)})`);
+      }
       if (v.length) lines.push(`Valuation: ${v.join(", ")}`);
     }
     // Capital base: the figures behind "how much of invested capital is goodwill"

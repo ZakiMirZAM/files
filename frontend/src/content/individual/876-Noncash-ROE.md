@@ -43,7 +43,7 @@ Accounting choices matter at the edges. Interest income must be separately discl
 |---|---|---|
 | Cash-rich technology companies | Noncash ROE far above plain ROE | Large securities portfolios dilute the plain ratio; the adjustment removes them. |
 | Mature industrials | Small gap between the two ratios | Modest cash balances leave little to correct. |
-| Banks and insurers | Not meaningful | Interest-earning assets are the business itself, so stripping them removes the company. Financials are valued on dividends instead. |
+| Banks and insurers | Not meaningful | Interest-earning assets are the business itself, so stripping them removes the company. Lenders and insurers are valued on dividends instead. |
 | Companies with negative noncash equity | Not computable | Buybacks can push equity below the cash balance, and the ratio has no base to divide by. |
 | Young loss-makers | Not meaningful | Negative profit makes any ROE variant unreadable. |
 
