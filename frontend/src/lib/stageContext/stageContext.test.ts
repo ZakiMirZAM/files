@@ -133,11 +133,13 @@ describe("units: every figure in the unit the contract names", () => {
     expect(g).toContain("industry 13.9% a year compound");
   });
 
-  it("the growth split prints the compound rates first and the log parts after", () => {
-    // The log parts are reconciled by cfFormatters so they add to the total:
-    // 49.6 = 13.0 + 36.6.
+  it("the growth split parts are compound rates that add to the compound total", () => {
+    // This used to print log points (49.6 = 13.0 + 36.6) beside compound
+    // rates (64.2 and 13.9), two units in one line. Every figure is now a
+    // compound rate: company exp(0.129952 + 0.366236) - 1 = 64.2, industry
+    // exp(0.129952) - 1 = 13.9, share part = company less industry = 50.3.
     expect(lineStartingWith(NVDA, "NVDA growth split |")).toContain(
-      "log points a year: total 49.6 = industry 13.0 + share 36.6",
+      "compound percent a year: total 64.2 = industry 13.9 + share 50.3",
     );
   });
 

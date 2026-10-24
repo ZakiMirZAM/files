@@ -47,7 +47,7 @@ The denominator swings with earnings. A weak profit year inflates the rate mecha
 | Young growth companies | Often above 1.00 | Investment outruns profit, and the gap is filled with share issues. |
 | Mature manufacturers | 0.20 to 0.60 | Steady net investment funded comfortably from earnings. |
 | Utilities and telecom | Low equity rate despite heavy capex | Much of the spending is debt-funded, and the subtraction removes it. |
-| Banks and insurers | Not meaningful | Debt is raw material for a financial company, so the debt subtraction loses its meaning. The app values financials on dividends instead. |
+| Banks and insurers | Not meaningful | Debt is raw material for a financial company, so the debt subtraction loses its meaning. The app values lenders and insurers on dividends instead. |
 | Declining businesses | Near zero or negative | Little net investment, and borrowing or disposals can exceed it. |
 
 Comparing the rate across sectors without noting debt policy is meaningless, because the same physical investment produces very different equity rates under different funding.

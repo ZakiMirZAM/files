@@ -29,6 +29,7 @@ import {
   type CompactTier,
 } from "../lib/format";
 import { cn } from "../lib/cn";
+import { snapshotChange, type SnapshotChange } from "../lib/snapshotChange";
 import { MetricTerm } from "./individual/DefinitionsBlock";
 
 const GOLD = "#c9a84c";
@@ -268,12 +269,11 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
       .map((years) => {
         const prev = lookbackValue(trend, years);
         if (prev === null) return null;
-        // For rate-of-change metrics, show absolute pp change (since the value is already a %)
-        if (isRateOfChange) return { years, change: latest - prev, isPp: true };
-        if (prev === 0) return null;
-        return { years, change: ((latest - prev) / Math.abs(prev)) * 100, isPp: false };
+        // A rate shows its point change; a level shows its compound annual
+        // rate, or the cumulative change when either end is not positive.
+        return snapshotChange(latest, prev, years, isRateOfChange);
       })
-      .filter((s): s is { years: number; change: number; isPp: boolean } => s !== null);
+      .filter((s): s is SnapshotChange => s !== null);
   }, [trend, frequency, isRateOfChange]);
 
   const overallChange =
@@ -673,12 +673,13 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
           <div className="flex items-center justify-between mb-3">
             <p className="label">Lookback Snapshots</p>
             <p className="text-[0.7rem] text-white/30 font-mono">
-              {isRateOfChange ? "absolute pp Δ vs that point" : "% change vs same-period-of-year"}
+              {isRateOfChange ? "absolute pp Δ vs that point" : "compound % a year vs same-period-of-year"}
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {snapshots.map(({ years, change, isPp }) => {
-              const material = isPp ? Math.abs(change) >= 2 : isMaterialChange(change, 20);
+            {snapshots.map(({ years, change, kind }) => {
+              const material =
+                kind === "pp" ? Math.abs(change) >= 2 : isMaterialChange(change, kind === "cagr" ? 10 : 20);
               const positive = change >= 0;
               return (
                 <div
@@ -690,7 +691,9 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                     material && !positive && "border-loss/40 bg-loss-ghost",
                   )}
                 >
-                  <p className="text-[0.65rem] uppercase tracking-wider text-white/40">{years}y Δ</p>
+                  <p className="text-[0.65rem] uppercase tracking-wider text-white/40">
+                    {years}y {kind === "cagr" ? "a year" : kind === "cumulative" ? "cumulative" : "Δ"}
+                  </p>
                   <p
                     className={cn(
                       "font-mono text-base mt-1 font-medium",
@@ -699,7 +702,7 @@ export function MetricBlock({ metric, recessionBands = [], embedded = false, hid
                       !material && "text-white/80",
                     )}
                   >
-                    {positive ? "+" : ""}{change.toFixed(3)}{isPp ? "pp" : "%"}
+                    {positive ? "+" : ""}{change.toFixed(3)}{kind === "pp" ? "pp" : "%"}
                   </p>
                 </div>
               );

@@ -44,7 +44,7 @@ The benchmark side moves with data availability. An industry median from the ben
 | Manufacturing and hardware | Warnings deserve full weight | Physical capacity must be bought, and returns far above the median rarely persist. |
 | Retail and logistics | Watch the working-capital side | Growth consumes inventory and receivables, which light projections often omit. |
 | Commodity producers | Benchmark quality matters | Industry medians swing with the cycle, so a warning can reflect the benchmark's year rather than the projection. |
-| Financial companies | Not applicable | Financials are valued on dividends, and this check belongs to the revenue-driven path. |
+| Lenders and insurers | Not applicable | Lenders and insurers are valued on dividends, and this check belongs to the revenue-driven path. |
 
 A warning should always be judged against the industry named in it. The same 30 percent imputed return is routine for elite software and absurd for steel.
 

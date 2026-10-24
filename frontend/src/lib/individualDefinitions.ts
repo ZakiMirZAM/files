@@ -53,7 +53,11 @@ export type IndividualSectionKey =
   // slots wide, so this lands in the empty 800s. anyDefByNumber tries the
   // individual resolver first and no other surface reaches here (economic is
   // 600+NN, credit 700+NN, and both miss at 800), so the band is free.
-  | "capitalAllocation" // 800-849 -> UsesOfCashSection
+  | "capitalAllocation" // 800-819 -> UsesOfCashSection
+  // Damodaran-engine input policies (backend/valuation/policy.py, DCF accuracy
+  // plan 2026-09-27): organic growth driver, stable growth, return on new
+  // capital, margin target, valuation ROIC, fee-based financials routing.
+  | "dcfInputs" // 820-829 -> ForecastSection
   // Leverage decomposition of ROE, ROE = ROIC + D/E x [ROIC - i(1-t)]. Follows
   // capitalAllocation into the 800s for the same reason. ROE (002), ROIC (003)
   // and Debt To Equity (012) are reused from their existing bands rather than
@@ -119,7 +123,9 @@ const SECTION_RANGES: ReadonlyArray<readonly [IndividualSectionKey, number, numb
   // bands (capex 159, R&D 085, acquisitions 160, buybacks 167, dividends 168,
   // debt repayment 165, operating cash flow 024), so they are reused rather than
   // duplicated here. Only the section overview and the derived share metric are new.
-  ["capitalAllocation", 800, 849],
+  // Narrowed from 800-849 (only 800-801 exist) to make room for dcfInputs.
+  ["capitalAllocation", 800, 819],
+  ["dcfInputs", 820, 829],
   ["leverageRoe", 850, 869],
   ["intrinsicModels", 870, 889],
   // Story-to-value definitions (see the note on IndividualSectionKey above).

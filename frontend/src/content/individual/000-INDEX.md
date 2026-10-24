@@ -472,3 +472,33 @@ Reused existing defs: P/E → 061, PEG → 018, ROE → 002, ROIC → 003, WACC 
 Cost of Equity → 184, Excess Return (ROE − Ke) → 185, ROIC − WACC Spread → 044,
 Reinvestment Rate → 047, Marginal ROIC → 048, Fundamental Growth → 519,
 Risk-Free Rate → 500.
+### Uses of cash (800-819)
+
+Band registered as `capitalAllocation` (800-819; narrowed from 800-849 on 2026-10-23,
+only 800 and 801 exist) in `src/lib/individualDefinitions.ts`.
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 800 | 800-Uses-Of-Cash.md | Uses Of Cash (overview, concept format) |
+| [x] | 801 | 801-Share-Of-Operating-Cash-Flow.md | Share Of Operating Cash Flow |
+
+### DCF inputs (820-829)
+
+The input policies of the damodaran engine (`backend/valuation/policy.py`, DCF accuracy
+plan 2026-09-27): growth driver, stable growth, stable return on new capital, margin
+target, the single valuation ROIC, and the fee-based financials routing. Band registered
+as `dcfInputs` (820-829) in `src/lib/individualDefinitions.ts`. 820-824 follow the 9-part
+template; 825 is concept format. 826-829 are spare.
+
+| Done | # | File | Title shown |
+|---|---|---|---|
+| [x] | 820 | 820-Organic-Revenue-Trend.md | Organic Revenue Trend |
+| [x] | 821 | 821-Stable-Growth-Policy.md | Stable Growth Policy |
+| [x] | 822 | 822-Return-On-New-Capital.md | Return On New Capital |
+| [x] | 823 | 823-Operating-Margin-Target.md | Operating Margin Target |
+| [x] | 824 | 824-Valuation-ROIC.md | Valuation ROIC |
+| [x] | 825 | 825-Fee-Based-Financials.md | Fee-Based Financials (concept format) |
+
+Reused existing defs: Fundamental Growth (consistency check) → 519, Reinvestment Rate →
+047, ROIC → 003, WACC → 183, Risk-Free Rate → 500, Life-Cycle Stage → 521, R&D
+Capitalization → 076, Stable Period Beta → 878, Terminal Value And Excess Returns → 880.

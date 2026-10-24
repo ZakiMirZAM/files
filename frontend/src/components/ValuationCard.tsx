@@ -1,6 +1,7 @@
 import type { IndividualAnalysis } from "../lib/types";
 import { formatCurrency, formatPercent, formatPerShare } from "../lib/format";
 import { cn } from "../lib/cn";
+import { growthUsedLabel } from "../lib/growthUsedLabel";
 import { Check, X, TrendingUp, Calculator, Award } from "lucide-react";
 import { DefinitionsBlock, MetricTerm } from "./individual/DefinitionsBlock";
 import { StageToggle, useActiveVariant } from "./individual/StageToggle";
@@ -212,7 +213,7 @@ function IntrinsicPanel({
             ? <span className={cn("font-mono", mosColor)}>{mosPct >= 0 ? "+" : ""}{mosPct.toFixed(3)}%</span>
             : refusal ? "not applicable" : "n/a"
         } />
-        <Row label="Growth used" value={
+        <Row label={growthUsedLabel(valuation.growthUsedKind, "Growth used")} value={
           growth != null ? `${(growth * 100).toFixed(3)}%` : "n/a"
         } />
         {refusal && (

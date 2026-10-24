@@ -470,6 +470,12 @@ def run_fcff_revenue(*,
         })
 
     ret_stable = roic_stable if roic_stable else roic_path[-1]
+    if (ret_stable is not None and ret_stable > 0 and g_stable > 0
+            and g_stable / ret_stable >= 0.90):
+        # Last line of defence (policy.guard_stable_return upstream): a
+        # perpetual return too low to fund g forever would reinvest more than
+        # 90% of profit and can turn the terminal value negative.
+        ret_stable = max(wacc_stable, g_stable / 0.90)
     if ret_stable is not None and ret_stable > 0:
         tv = terminal_value_firm(ebit_after_tax, g_stable, wacc_stable,
                                  ret_stable)
@@ -485,6 +491,15 @@ def run_fcff_revenue(*,
             return None
         reinvest_term = (max(0.0, (rev * g_stable) / sales_to_capital)
                          if sales_to_capital else 0.0)
+        if ebit_after_tax > 0 and g_stable > 0:
+            # Perpetual new capital earns at least the cost of capital (the
+            # same rule as policy.guard_stable_return): a young firm's own
+            # sales-to-capital must not demand more reinvestment forever than
+            # a cost-of-capital return would, or a profitable terminal year
+            # turns into a negative terminal value (Tesla FY2018 in the
+            # backtest).
+            nopat_next = ebit_after_tax * (1.0 + g_stable)
+            reinvest_term = min(reinvest_term, nopat_next * g_stable / wacc_stable)
         fcff_terminal = ebit_after_tax * (1.0 + g_stable) - reinvest_term
         terminal_value = fcff_terminal / (wacc_stable - g_stable)
         reinvest_stable = None
@@ -620,10 +635,9 @@ def fcff_stage_variants(*,
             "growthTerminal": round(g_stable, 4),
             "waccStable": out["waccStable"],
             "reinvestmentStable": out["reinvestmentStable"],
-            # The provenance label only means something on the earnings path;
-            # a sales-to-capital variant never touched the ROIC anchor.
-            "roicStableSource": (roic_stable_source
-                                 if reinvest_method == "earnings" else None),
+            # Every track carries the guarded stable return in its terminal
+            # value now, sales-to-capital included.
+            "roicStableSource": roic_stable_source,
             "terminalValue": out["terminalValue"],
             "pvExplicit": out["pvExplicit"],
             "pvTerminal": out["pvTerminal"],

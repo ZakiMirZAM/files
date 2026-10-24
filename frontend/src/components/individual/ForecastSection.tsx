@@ -1,5 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { ForecastRow, IndividualForecast, NextTwoYearsBlock, StoryChecks, WaccBuild } from "../../lib/types";
+import type {
+  ForecastRow,
+  GrowthReconciliation,
+  IndividualForecast,
+  LocationRates,
+  NextTwoYearsBlock,
+  StoryChecks,
+  ValuationSelection,
+  WaccBuild,
+} from "../../lib/types";
 import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
@@ -19,6 +28,12 @@ import { isStoryForecast, postStoryDcf, storyDcfKey } from "../../lib/api";
 import { SLOW_ROUTE_TIMEOUT_MS, useResource } from "../../lib/useResource";
 import { stageShapeLabel, storyDcfBody } from "../../lib/story";
 import { setStoryMode, useStoredStory, useStoryMode, type StoryMode } from "../../lib/storyStore";
+import {
+  marginOfSafetyFor,
+  resolveStableGrowth,
+  useStableGrowthChoice,
+  type StableGrowthBasis,
+} from "../../lib/stableGrowthChoice";
 
 interface ForecastSectionProps {
   forecast: IndividualForecast;
@@ -174,6 +189,7 @@ function ForecastView({
   // "Show anyway" holds for the scope it was clicked on and is not persisted.
   const [shownFor, setShownFor] = useState<string | null>(null);
   const showProjections = projectionsVisible(growthSource, shownFor, scope);
+  const [sgChoice, setSgChoice] = useStableGrowthChoice(ticker);
   if (f.applicable === false) {
     return (
       <ForecastFrame switcher={switcher}>
@@ -224,7 +240,14 @@ function ForecastView({
   // number of ordinary shares per receipt is not on file.
   const priceRefusal =
     f.priceComparison?.applicable === false ? f.priceComparison.reason : null;
-  const mos = priceRefusal ? null : view.marginOfSafety;
+  // The stable-growth toggle is a lens on the recommended structure: the value
+  // per share and margin of safety follow it, the scores do not.
+  const sg = resolveStableGrowth(sel?.stableGrowthAlternatives, sgChoice);
+  const sgLens = sg?.basis === "rf" && !isVariantView;
+  const shownIntrinsic = sgLens ? sg.intrinsicPerShare : view.intrinsicPerShare;
+  const mos = priceRefusal
+    ? null
+    : sgLens ? marginOfSafetyFor(sg.intrinsicPerShare, f.currentPrice) : view.marginOfSafety;
   const mosColor =
     mos == null ? "text-white/50" :
     mos >= 0.25 ? "text-gain-strong" :
@@ -235,7 +258,9 @@ function ForecastView({
 
   const assumptions: Array<{ k: string; v: string }> = [
     { k: "Horizon", v: `${a.horizonYears} yrs` },
-    { k: "Revenue growth", v: `${rate(a.revenueGrowthInitial)} → ${rate(a.revenueGrowthTerminal)}` },
+    // revenueGrowthInitial is the growth that drives the forecast; its source
+    // and the stable rate it fades to are in the Growth Used panel below.
+    { k: "Growth used", v: `${rate(a.revenueGrowthInitial)} → ${rate(sgLens ? sg.stableGrowth : a.revenueGrowthTerminal)}` },
     { k: "Operating margin", v: `${rate(a.operatingMarginCurrent)} → ${rate(a.operatingMarginTarget)}` },
     ...(storyChecks
       ? [
@@ -316,7 +341,19 @@ function ForecastView({
         ))}
       </div>
 
-      {f.waccBuild && <WaccBuildPanel build={f.waccBuild} />}
+      {f.growthReconciliation && (
+        <GrowthUsedPanel
+          gr={f.growthReconciliation}
+          sel={sel}
+          choice={sg?.basis ?? "min"}
+          onChoice={setSgChoice}
+          lensApplies={!isVariantView}
+        />
+      )}
+
+      {sel?.stableReturnPolicy && <StableReturnPanel sel={sel} />}
+
+      {f.waccBuild && <WaccBuildPanel build={f.waccBuild} location={f.locationRates ?? null} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Valuation bridge */}
@@ -336,7 +373,7 @@ function ForecastView({
             <div className="pt-1 mt-2">
               <div className="flex items-baseline justify-between">
                 <span className="text-white/55 text-xs"><MetricTerm metric="Intrinsic / share" asSpan /></span>
-                <span className="font-display text-2xl font-semibold text-gold">{perShare(view.intrinsicPerShare)}</span>
+                <span className="font-display text-2xl font-semibold text-gold">{perShare(shownIntrinsic)}</span>
               </div>
             </div>
             <BridgeRow
@@ -353,6 +390,12 @@ function ForecastView({
             </div>
             {priceRefusal && (
               <p className="text-xs text-white/55 leading-snug pt-1">{priceRefusal}</p>
+            )}
+            {sgLens && (
+              <p className="text-xs text-white/45 leading-snug pt-1">
+                The value per share is at the risk-free stable growth; the lines
+                above it stay at the default stable growth.
+              </p>
             )}
             {/* A story has one value per share, so no cross-check values. */}
             {!storyChecks && (
@@ -505,7 +548,151 @@ function ForecastView({
   );
 }
 
-function WaccBuildPanel({ build: b }: { build: WaccBuild }) {
+const STABLE_RETURN_SOURCE: Record<string, string> = {
+  costOfCapital: "Set at the cost of capital: new investment in the stable phase earns no excess return.",
+  ownBelowCostOfCapital: "The company's own return is kept, because it is below the cost of capital.",
+  costOfCapitalPlusShare: "The cost of capital plus the share of the company's excess return that is kept.",
+  cappedExcess: "The cost of capital plus the share kept, held at the cap of 3 points above the cost of capital.",
+  raisedToFundStableGrowth: "Raised so stable growth needs less than 90% of earnings reinvested.",
+};
+
+const capitalize = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
+function Tile({ k, v, hi }: { k: string; v: string; hi?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "rounded-sm px-2.5 py-2 border border-gold/10 bg-white/[0.015]",
+        hi && "border-gold/40 bg-gold/[0.06]",
+      )}
+    >
+      <p className="text-[0.65rem] uppercase tracking-wider text-white/40 leading-tight"><MetricTerm metric={k} asSpan /></p>
+      <p className="font-mono text-[0.78rem] text-white/85 mt-0.5">{v}</p>
+    </div>
+  );
+}
+
+const SG_OPTIONS: { key: StableGrowthBasis; label: string }[] = [
+  { key: "min", label: "lower of risk-free rate and long-run economy growth" },
+  { key: "rf", label: "risk-free rate" },
+];
+
+function GrowthUsedPanel({
+  gr,
+  sel,
+  choice,
+  onChoice,
+  lensApplies,
+}: {
+  gr: GrowthReconciliation;
+  sel: ValuationSelection | null;
+  choice: StableGrowthBasis;
+  onChoice: (c: StableGrowthBasis) => void;
+  lensApplies: boolean;
+}) {
+  const sgBlock = gr.stableGrowth;
+  const alts = sel?.stableGrowthAlternatives;
+  const shownStable = choice === "rf" && alts?.rf
+    ? alts.rf.stableGrowth
+    : (sgBlock?.value ?? alts?.min?.stableGrowth ?? null);
+  const tiles: { k: string; v: string; hi?: boolean }[] = [
+    { k: "Growth used", v: rate(gr.growthUsed), hi: true },
+  ];
+  if (gr.organicTrend != null) tiles.push({ k: "Organic revenue trend", v: rate(gr.organicTrend) });
+  if (gr.baseRate != null) tiles.push({ k: "Base rate", v: rate(gr.baseRate) });
+  if (shownStable != null) tiles.push({ k: "Stable growth", v: rate(shownStable) });
+  if (sgBlock?.riskFreeRate != null) tiles.push({ k: "Risk-free rate", v: rate(sgBlock.riskFreeRate) });
+  if (sgBlock?.longRunNominalGrowth != null) {
+    tiles.push({ k: "Long-run nominal growth", v: rate(sgBlock.longRunNominalGrowth) });
+  }
+  return (
+    <div className="panel-soft p-4 mb-6 space-y-3">
+      <p className="eyebrow">Growth Used</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {tiles.map((t) => <Tile key={t.k} {...t} />)}
+      </div>
+      {gr.methodUsed && (
+        <p className="text-sm text-white/65 leading-snug">{capitalize(gr.methodUsed)}.</p>
+      )}
+      {gr.organicTrend != null && gr.baseRate != null && (
+        <p className="text-xs text-white/50 leading-snug">
+          The company's organic revenue trend is {rate(gr.organicTrend)} a year; the
+          projection pulls it toward a {rate(gr.baseRate)} base rate, because few
+          companies keep growing faster than that for long.
+        </p>
+      )}
+      {sgBlock?.source && (
+        <p className="text-xs text-white/50 leading-snug">Stable growth is set by {sgBlock.source}.</p>
+      )}
+      {alts?.rf && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[0.7rem] text-white/50"><MetricTerm metric="Stable growth" asSpan />:</span>
+          {SG_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              aria-pressed={choice === o.key}
+              onClick={() => onChoice(o.key)}
+              className={cn(
+                "px-2.5 py-1 rounded-sm border text-[0.7rem] font-mono transition-colors",
+                choice === o.key
+                  ? "border-gold/60 bg-gold/15 text-gold"
+                  : "border-white/15 text-white/60 hover:border-gold/40 hover:text-gold/80",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {alts?.rf && choice === "rf" && !lensApplies && (
+        <p className="text-xs text-white/40 leading-snug">
+          This choice changes the value on the recommended structure only.
+        </p>
+      )}
+      {gr.marginTargetSource && (
+        <p className="text-xs text-white/50 leading-snug">
+          <MetricTerm metric="Operating margin target" asSpan />: {gr.marginTargetSource}.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        <DefinitionLink number={821}>How stable growth is set</DefinitionLink>
+        <DefinitionLink number={823}>How the margin target is set</DefinitionLink>
+      </div>
+    </div>
+  );
+}
+
+function StableReturnPanel({ sel }: { sel: ValuationSelection }) {
+  const p = sel.stableReturnPolicy;
+  if (!p) return null;
+  const tiles: { k: string; v: string; hi?: boolean }[] = [
+    { k: "Cost of capital (stable phase)", v: rate(p.costOfCapital) },
+    { k: "Own normalized return", v: rate(p.ownNormalized) },
+    { k: "Share of excess kept", v: `${(p.share * 100).toFixed(0)}%` },
+    { k: "Cap (cost of capital + 3 points)", v: p.cap == null ? "none" : rate(p.cap) },
+    { k: "Industry aggregate return", v: rate(p.industryAggregate) },
+    { k: "Return on new capital", v: rate(sel.roicStable), hi: true },
+  ];
+  const source = sel.roicStableSource ? STABLE_RETURN_SOURCE[sel.roicStableSource] : undefined;
+  return (
+    <div className="panel-soft p-4 mb-6 space-y-3">
+      <p className="eyebrow">Return on New Capital</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {tiles.map((t) => <Tile key={t.k} {...t} />)}
+      </div>
+      {source && <p className="text-sm text-white/65 leading-snug">{source}</p>}
+      {p.shareReason && (
+        <p className="text-xs text-white/50 leading-snug">
+          Share kept because of the {p.shareReason}. The industry figure is a reference only.
+        </p>
+      )}
+      <DefinitionLink number={822} className="text-xs">How the return on new capital is set</DefinitionLink>
+    </div>
+  );
+}
+
+function WaccBuildPanel({ build: b, location: loc }: { build: WaccBuild; location: LocationRates | null }) {
   const betaLabel = b.betaMethod && b.betaMethod.startsWith("bottom_up")
     ? "Beta (bottom-up)"
     : "Beta (measured)";
@@ -518,6 +705,9 @@ function WaccBuildPanel({ build: b }: { build: WaccBuild }) {
     { k: betaLabel, v: b.beta == null ? "n/a" : b.beta.toFixed(3) },
     { k: "Risk-free (10Y)", v: rate(b.riskFreeRate) },
     { k: erpLabel, v: rate(b.equityRiskPremium) },
+    ...(loc?.country && loc.countryRiskPremium
+      ? [{ k: "Country risk premium", v: rate(loc.countryRiskPremium) }]
+      : []),
     { k: "Cost of equity", v: rate(b.costOfEquity) },
     { k: "Cost of debt (pre→after)", v: `${rate(b.costOfDebtPretax)} → ${rate(b.costOfDebtAfterTax)}` },
     { k: "Interest coverage", v: b.interestCoverage == null ? "n/a" : `${b.interestCoverage.toFixed(3)}x` },
@@ -529,6 +719,14 @@ function WaccBuildPanel({ build: b }: { build: WaccBuild }) {
       <p className="eyebrow mb-3 inline-flex items-center gap-2">
         <Scale className="w-4 h-4" /> Cost of Capital · true WACC
       </p>
+      {loc?.adjusted && (
+        <p className="text-xs text-white/55 leading-snug mb-3">
+          Rates for {loc.country ?? "this company"} in {loc.currency ?? "its reporting currency"}: the
+          risk-free rate is the US Treasury yield scaled by expected inflation
+          ({rate(loc.expectedInflation)} against {rate(loc.expectedInflationUS)} in the US), and the
+          equity risk premium adds the country risk premium.
+        </p>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {tiles.map(({ k, v, hi }) => (
           <div

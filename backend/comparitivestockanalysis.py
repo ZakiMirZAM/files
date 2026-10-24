@@ -420,8 +420,13 @@ def build_snapshot(
     erp: float | None = None,
     use_live_price: bool = True,
     rates: Optional[dict[str, float]] = None,
+    industry_norms: Optional[dict] = None,
 ) -> Optional[TickerSnapshot]:
     """One company's ranked snapshot.
+
+    ``industry_norms`` are the same industry anchors the individual page passes
+    to compute_forecast (sales-to-capital, margin, return aggregate, expected
+    inflation), so a company's DCF column here matches its own page.
 
     ``rates`` is ``{currency: USD per unit}``. A caller that builds many
     snapshots in one pass should read the table once and pass it here: the
@@ -500,6 +505,7 @@ def build_snapshot(
     # built (e.g. negative ROIC / missing shares).
     eva_intrinsic: Optional[float] = None
     forecast = _ia.compute_forecast(rows, beta=beta, rf=rf, erp=erp, price=live_price,
+                                    industry_norms=industry_norms,
                                     price_unusable=price_unusable,
                                     price_unusable_reason=(
                                         price_comparison.reason if price_unusable else None))

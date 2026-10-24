@@ -132,6 +132,9 @@ export interface IndividualValuation {
    *  null on purpose and `reason` says which units could not be reconciled. */
   priceComparison?: PriceComparison | null;
   fcfGrowthUsed: number | null;   // decimal: 0.08 = 8% measured growth
+  /** What `fcfGrowthUsed` actually is. The field name predates the damodaran
+   *  engine, where the number is the revenue growth that drives the forecast. */
+  growthUsedKind?: GrowthUsedKind | null;
   // Under the damodaran engine these are the CHOSEN MODEL's actual values
   // (null when no model is solvable); legacy echoes its old constants.
   wacc: number | null;
@@ -174,6 +177,35 @@ export interface StageVariant {
   rows?: ForecastRow[] | DividendDiscountRow[];
 }
 
+export type GrowthUsedKind =
+  | "revenueGrowth"
+  | "fcfPerShareHistory"
+  | "dividendGrowth"
+  | "legacyFcfPerShare";
+
+/** How the stable-phase return on NEW capital was set: the cost of capital plus
+ *  a share of the company's own excess return, capped. */
+export interface StableReturnPolicy {
+  share: number;                   // 0 | 0.25 | 0.5 of the excess kept
+  shareReason: string;
+  ownNormalized: number | null;
+  cap: number | null;              // WACC + 0.03, or null
+  costOfCapital: number | null;
+  industryAggregate: number | null; // reference only
+}
+
+export interface StableGrowthAlternative {
+  stableGrowth: number;
+  intrinsicPerShare: number | null;
+}
+
+export type StableReturnSource =
+  | "costOfCapital"
+  | "ownBelowCostOfCapital"
+  | "costOfCapitalPlusShare"
+  | "cappedExcess"
+  | "raisedToFundStableGrowth";
+
 export interface ValuationSelection {
   track: "fcff" | "nstage" | "ddm";
   recommendedStages: number;
@@ -183,7 +215,15 @@ export interface ValuationSelection {
   rationale: string[];
   hModelApplicable?: boolean;
   roicStable?: number | null;
-  roicStableSource?: string;
+  roicStableSource?: StableReturnSource | string;
+  stableReturnPolicy?: StableReturnPolicy | null;
+  /** The recommended structure valued at each stable-growth basis: `min` is
+   *  the lower of the risk-free rate and long-run nominal growth (the default),
+   *  `rf` the risk-free rate alone. `rf` is absent when the two coincide. */
+  stableGrowthAlternatives?: {
+    min: StableGrowthAlternative;
+    rf?: StableGrowthAlternative | null;
+  } | null;
   diagnostics?: ValuationDiagnostic[];
   stageVariants: Record<string, StageVariant>;
 }
@@ -392,6 +432,28 @@ export interface GrowthReconciliation {
   marginTarget: number | null;
   marginTargetSource: string;
   mode: "regression" | "shadow" | "fundamental" | "damodaran";
+  // ── Damodaran engine (policy.py) ──
+  /** 5-year organic revenue CAGR, before the shrink toward `baseRate`. */
+  organicTrend?: number | null;
+  baseRate?: number | null;
+  cleanReinvestmentRate?: number | null;
+  /** Reinvestment (net R&D and acquisitions included) x valuation ROIC. */
+  cleanFundamental?: number | null;
+  roicUsed?: number | null;
+  rndCapitalized?: boolean;
+  rndLife?: number | null;
+  stableGrowth?: {
+    value: number;
+    basis: "min" | "rf";
+    source: string;
+    longRunNominalGrowth: number | null;
+    riskFreeRate: number | null;
+  } | null;
+  /** The efficiency term is shown but never projected. */
+  efficiencyExcluded?: boolean;
+  /** growthUsed minus cleanFundamental. */
+  consistencyGap?: number | null;
+  consistencyFlag?: boolean;
 }
 
 /** One growth-viability due-diligence question with the figures behind it. */
@@ -412,6 +474,21 @@ export interface GrowthViability {
   method?: string;
 }
 
+/** Location-specific discount-rate inputs (backend marketdata/country_rates). */
+export interface LocationRates {
+  riskFreeRate: number;
+  equityRiskPremium: number;
+  currency: string | null;
+  country: string | null;
+  countrySource: string;
+  countryRiskPremium: number;
+  expectedInflation: number | null;
+  expectedInflationUS: number | null;
+  adjusted: boolean;
+  crpAsOf: string | null;
+  notes: string[];
+}
+
 export interface IndividualForecast {
   // false for Financials/REITs (FCFF is the wrong model); the rest is absent then.
   applicable?: boolean;
@@ -419,6 +496,7 @@ export interface IndividualForecast {
   reason?: string | null;
   assumptions: ForecastAssumptions;
   waccBuild?: WaccBuild | null;
+  locationRates?: LocationRates | null;
   // Damodaran engine: model selection + every stage-count variant.
   valuationSelection?: ValuationSelection | null;
   // Damodaran Ch.11: historical vs fundamental growth, and the reinvestment bridge.
@@ -1532,6 +1610,7 @@ export interface GroupValuation {
   dcfIntrinsic: number | null;
   marginOfSafety: number | null;
   fcfGrowthUsed: number | null;
+  growthUsedKind?: GrowthUsedKind | null;
   valueScore: number | null;
 }
 

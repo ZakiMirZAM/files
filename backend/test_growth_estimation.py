@@ -228,10 +228,12 @@ def test_legacy_shadow_does_not_move_the_valuation(monkeypatch):
 
 
 def test_damodaran_growth_is_measured_not_capped(monkeypatch):
-    # The damodaran engine (the default): GROWTH_MODEL is ignored, fundamental
-    # growth (reinvestment x ROIC) drives the projection uncapped, every stage
-    # variant is computed, and the life-cycle bounds survive only as
-    # diagnostics. The 30% compounder is no longer pinned to exactly 25%.
+    # The damodaran engine (the default): GROWTH_MODEL is ignored, the 5-year
+    # organic revenue trend shrunk 30% toward the 5% base rate drives the
+    # projection uncapped (DCF accuracy plan 2026-09-27; reinvestment x ROIC is
+    # the consistency check), every stage variant is computed, and the
+    # life-cycle bounds survive only as diagnostics. The 30% compounder is no
+    # longer pinned to exactly 25%.
     monkeypatch.delenv("VALUATION_ENGINE", raising=False)
     rows = _profitable_fast_grower()
     out = _forecast(rows, "shadow", monkeypatch)    # mode flag must be inert
@@ -240,9 +242,11 @@ def test_damodaran_growth_is_measured_not_capped(monkeypatch):
     gr = out["growthReconciliation"]
     assert gr["mode"] == "damodaran"
     assert gr["reinvestmentMethod"] == "earnings"
-    # The driving growth IS the fundamental rate — measured, not clamped.
+    # The driving growth IS the shrunk organic trend: measured, not clamped.
+    assert gr["organicTrend"] == pytest.approx(0.30, abs=1e-3)
     assert (out["assumptions"]["revenueGrowthInitial"]
-            == pytest.approx(gr["fundamental"], abs=1e-3))
+            == pytest.approx(0.7 * gr["organicTrend"] + 0.3 * 0.05, abs=1e-3))
+    assert gr["efficiencyExcluded"] is True
     assert out["assumptions"]["revenueGrowthInitial"] != ia.FORECAST_GROWTH_CAP
 
     sel = out["valuationSelection"]

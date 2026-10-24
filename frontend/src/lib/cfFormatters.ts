@@ -265,8 +265,9 @@ export type ResolvedGrowthSplit =
       industrySigned: string;
       shareThen: string;
       shareNow: string;
-      /** Log points a year: the total and its two parts, reconciled so the
-       *  printed parts add to the printed total. */
+      /** Compound percent a year: the company total, the industry part and
+       *  the share part (company less industry), reconciled so the printed
+       *  parts add to the printed total. */
       total: string;
       industryPart: string;
       sharePart: string;
@@ -277,12 +278,18 @@ export function resolveGrowthSplit(
 ): ResolvedGrowthSplit {
   const g = co?.growth;
   if (!g) return { kind: "none" };
-  const split = reconcilePartsFromFractions(g.companyCagr5y, [
-    g.industryPoints,
-    g.sharePoints,
-  ]);
-  const companyCompound = compoundFromLogValue(g.companyCagr5y);
-  const industryCompound = compoundFromLogValue(g.industryCagr5y);
+  // The backend's parts are log rates, which add; compound rates do not. Every
+  // printed figure is a compound rate, so the share part is the company's
+  // compound rate less the industry's, and the parts still add to the total.
+  const industryLog = g.industryPoints;
+  const shareLog = g.sharePoints;
+  const companyCompound =
+    industryLog == null || shareLog == null ? null : compoundFromLogValue(industryLog + shareLog);
+  const industryCompound = compoundFromLogValue(industryLog);
+  const split =
+    companyCompound == null || industryCompound == null
+      ? null
+      : reconcileParts(companyCompound, [industryCompound, companyCompound - industryCompound]);
   if (
     split == null ||
     companyCompound == null ||

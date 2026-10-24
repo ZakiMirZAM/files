@@ -153,7 +153,7 @@ function growthSplitLine(t: string, co: CompanyBlock): string {
     `industry ${growth.industrySigned}% a year compound`,
     `share then ${growth.shareThen}%`,
     `share now ${growth.shareNow}%`,
-    `log points a year: total ${growth.total} = industry ${growth.industryPart} + share ${growth.sharePart}`,
+    `compound percent a year: total ${growth.total} = industry ${growth.industryPart} + share ${growth.sharePart}`,
     `years ${countOf(co.growth?.years)}`,
   );
 }

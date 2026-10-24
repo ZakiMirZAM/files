@@ -1,5 +1,6 @@
 import type { GroupValuation } from "../lib/types";
 import { cn } from "../lib/cn";
+import { growthUsedLabel } from "../lib/growthUsedLabel";
 
 interface GroupValuationBadgeProps {
   valuation: GroupValuation;
@@ -43,7 +44,7 @@ export function GroupValuationBadge({ valuation, groupLabel }: GroupValuationBad
           <Stat label="Margin of safety" value={
             mosPct !== null ? `${mosPct >= 0 ? "+" : ""}${mosPct.toFixed(3)}%` : "n/a"
           } valueClass={mosColor} />
-          <Stat label="FCF growth used" value={
+          <Stat label={growthUsedLabel(valuation.growthUsedKind, "FCF growth used")} value={
             valuation.fcfGrowthUsed !== null ? `${(valuation.fcfGrowthUsed * 100).toFixed(3)}%` : "n/a"
           } />
           <Stat label="Value Score" value={

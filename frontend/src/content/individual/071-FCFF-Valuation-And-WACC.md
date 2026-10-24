@@ -20,13 +20,13 @@ The app runs the model in eight steps, in this order.
 
 First, the app sets the base cash flow. Base FCFF starts from NOPAT and subtracts reinvestment. NOPAT is net operating profit after tax, the operating profit the company would keep if it had no debt. Reinvestment is the net capital spending and working capital the business consumes to keep running and to grow.
 
-Second, the app estimates growth. For a company that earns a real return on its capital, the growth rate is measured from fundamentals: the reinvestment rate times the return on invested capital. For a young or loss-making company the revenue trend leads instead, read from a log-linear regression fitted across every year of history. The regression is always shown beside the fundamental rate as a cross-check. No rate is assumed and no rate is clamped.
+Second, the app estimates growth. For most companies the growth rate is the organic revenue trend of the last five years, with revenue bought through acquisitions removed and the trend pulled 30 percent toward a 5 percent base rate (definition 820). Utilities and telecoms grow with their capital instead, at the reinvestment rate times the return on invested capital, and research-heavy companies take half of each. The reinvestment rate times the return on capital is shown beside the growth used as a consistency check, and the log-linear regression fitted across every year of revenue is shown as a cross-check. No rate is clamped.
 
 Third, the app projects FCFF forward through a stage structure chosen for the company: a single-stage perpetuity for a firm that is already stable, five high-growth years with an abrupt shift for a moderate grower, or five high-growth years plus a five-year transition for a very fast grower. Every structure is computed and shown; the recommended one drives the headline. Definition 870 explains the selection.
 
 Fourth, the app funds that growth with reinvestment. The reinvestment rate equals growth divided by ROIC. ROIC is return on invested capital, the profit earned per dollar of capital put to work. A company growing fast at a low return must plow back most of its profit, so the model never lets growth arrive for free.
 
-Fifth, the app caps the terminal growth. Terminal growth is the assumed forever growth rate after the projection ends. The model caps it at the live risk-free rate. The risk-free rate is the yield on a long government bond, the return available with almost no risk. No company can outgrow the whole economy forever, so the cap holds the assumption in check.
+Fifth, the app sets the terminal growth. Terminal growth is the assumed forever growth rate after the projection ends. The model sets it at the lower of the live risk-free rate and long-run nominal growth of the economy, and only a declining company keeps a lower rate of its own (definition 821). The risk-free rate is the yield on a long government bond, the return available with almost no risk. No company can outgrow the whole economy forever, so the cap holds the assumption in check.
 
 Sixth, the app discounts the cash. Every projected year's flow and the terminal value are discounted at the WACC. The WACC build is described in Part 2b.
 
@@ -66,7 +66,7 @@ The FCFF model prices the one thing an owner actually buys, the future cash, and
 
 The firm-level form is chosen on purpose. Equity-level models wobble when a company's debt is high, low, or changing. The FCFF approach values the operations first and settles the lender's claim afterward. The same method then works across companies with very different debt levels.
 
-The model's discipline runs in both directions. The margin of safety it reports is meaningful because the inputs were not free to be optimistic. Growth is fitted from the full history. Reinvestment is charged by rule. Terminal growth is capped by the bond market.
+The model's discipline runs in both directions. The margin of safety it reports is meaningful because the inputs were not free to be optimistic. Growth is measured from the organic revenue trend and pulled toward a base rate. Reinvestment is charged by rule. Terminal growth is capped by the bond market.
 
 ## Part 4: What influences the output
 
@@ -84,7 +84,7 @@ The model fits best where cash flows are predictable and the debt mix is convent
 |---|---|---|
 | Mature industrials and consumer franchises | Reliable | History is long and cash flows are steady, so every input is estimable. |
 | Technology past its hypergrowth | Usable with care | Cash flows are positive but the terminal decade is harder to judge. |
-| Young or money-losing firms | Weak | Base FCFF is negative and the regression has little to fit, so value lives in distant assumptions. |
+| Young or money-losing firms | Weak | Base FCFF is negative and the revenue trend has few years to measure, so value lives in distant assumptions. |
 | Deep cyclicals such as miners and steelmakers | Distorted at one point | The base year and the fitted growth both mislead unless earnings are normalized to mid-cycle. |
 | Banks and insurers | Not applicable | Debt is their raw material, not financing, so operating cash flow and reinvestment cannot be defined. |
 | Commodity producers | Needs a price view | Output value depends on a future commodity price the model does not forecast. |
@@ -111,7 +111,7 @@ The reinvestment rule leaves a footprint that can be checked. Compare the model'
 
 ### Free Cash Flow
 
-**Why read the two together.** Free Cash Flow is the stream the model projects forward. The model's whole forecast is built on the company's free cash flow history. The growth regression is fitted to that same series. Reading the model without reading the actual cash flow hides what the forecast is resting on.
+**Why read the two together.** Free Cash Flow is the stream the model projects forward. The model's whole forecast is built on the company's free cash flow history. The growth trend is measured on revenue, and the margin and reinvestment rules turn that revenue into the projected cash flow. Reading the model without reading the actual cash flow hides what the forecast is resting on.
 
 **What the combination tells you.** A steady, positive free cash flow history makes the model's base trustworthy. A volatile or negative history means the base is fragile and the value depends heavily on assumptions. Comparing the projected path against the real history shows whether the forecast is a modest extension of the record or a sharp break from it.
 

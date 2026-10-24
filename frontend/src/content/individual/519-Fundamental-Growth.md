@@ -16,7 +16,7 @@ Common readings of the metric:
 | Above 15 percent | Rare and hard to sustain. Reaching that level needs both a very high return and a very high reinvestment rate. The question becomes how long competition will allow the return to stay that high. |
 | Not computed | The return on invested capital is zero or negative, so the formula produces no meaningful answer. The app values growth for these companies through the sales-to-capital path instead. |
 
-In this app, fundamental growth is never negative. The reinvestment rate is held at zero or above, and the metric is only produced when the return on capital is positive.
+In this app, fundamental growth can be negative. A negative reinvestment rate is kept as measured, and the metric is only produced when the return on capital is positive.
 
 ## Part 2: How it is calculated
 
@@ -38,7 +38,7 @@ The app builds the number in the order below.
 | 4 | Checks the latest rate against the company's own recent median. When the latest year sits far from that median, the median drives instead and a warning says so, because one acquisition year or working-capital swing is not a growth plan. The rate itself is never clamped and can exceed 1.00. |
 | 5 | Multiplies the reinvestment rate by the current return on invested capital. |
 | 6 | Adds the Efficiency Term when the return on capital has risen across two consecutive years. A rise in only the latest year is reported as a warning instead of being projected. |
-| 7 | Shows the historical growth rate beside the result in the Growth Reconciliation section as a cross-check. The fundamental rate drives the discounted cash flow for any company whose return on capital carries a signal. |
+| 7 | Shows the historical growth rate beside the result in the Growth Reconciliation section as a cross-check. The fundamental rate is the consistency check for the growth the discounted cash flow uses, which for most companies is the organic revenue trend. |
 
 The construction follows the standard valuation framework, where expected growth in operating income is the reinvestment rate multiplied by the return on invested capital, with a second term added when the return itself is changing.
 
@@ -70,7 +70,7 @@ Fundamental growth separates the *quantity* of investment from the *quality* of 
 
 ## Part 4: What influences the output
 
-The reinvestment rate moves the number first. Heavy capital spending in a year raises the rate and raises fundamental growth. A year in which the company builds nothing and lets depreciation run ahead of spending drops the rate toward zero, and the app then reports zero growth from reinvestment. Acquisitions matter enormously here. A company that grows by buying other companies may show a low reinvestment rate if the purchase price never lands in the capital expenditure line, which understates the true growth being funded.
+The reinvestment rate moves the number first. Heavy capital spending in a year raises the rate and raises fundamental growth. A year in which the company builds nothing and lets depreciation run ahead of spending drops the rate toward zero or below it, and the app then reports little or negative growth from reinvestment. Acquisitions matter enormously here. A company that grows by buying other companies may show a low reinvestment rate if the purchase price never lands in the capital expenditure line, which understates the true growth being funded.
 
 Working capital swings are the most common source of a strange reading. A single year in which the company drained inventory or collected old customer bills faster shrinks working capital, which shrinks reinvestment, which cuts fundamental growth for a reason that has nothing to do with the growth plan. The fallback to the company's own multi-year median catches the worst single-year distortions, but a low reading that comes from one working-capital year is still not a forecast.
 
@@ -97,7 +97,7 @@ Compare fundamental growth only against companies with the same capital intensit
 
 ## Part 5b: When this model applies and when it fails
 
-Fundamental growth works best on a mature company with a positive and reasonably stable return on capital, visible capital spending, and no recent transforming acquisition. For such a company the reinvestment rate and the return on capital are both measured from the same business that will produce the growth, so the estimate has real content. The app treats this case as the sound one and blends the fundamental rate with the historical rate, weighting the fundamental rate 0.60 and the historical rate 0.40.
+Fundamental growth works best on a mature company with a positive and reasonably stable return on capital, visible capital spending, and no recent transforming acquisition. For such a company the reinvestment rate and the return on capital are both measured from the same business that will produce the growth, so the estimate has real content. The app treats this case as the sound one and shows a reconciled rate that blends the fundamental rate with the historical rate, weighting the fundamental rate 0.60 and the historical rate 0.40. The reconciled rate is a reference, and the projection runs on the organic revenue trend.
 
 The model fails for a young or high-growth company. A young company reinvests heavily before the return on capital has arrived, so the return on capital is low or negative while growth is fast. Multiplying a large reinvestment rate by a tiny return produces a growth rate far below what the company is plainly achieving. For young and high-growth companies the app therefore lets the revenue trend lead the forecast instead.
 
@@ -137,7 +137,7 @@ A falling ROIC line with a rising reinvestment rate line is the opposite warning
 
 ### DCF intrinsic value per share
 
-**Why read the two together.** Fundamental growth is one of the inputs that ultimately feeds the discounted cash flow value the app computes, so the growth number is not an isolated statistic. For any company whose return on capital carries a signal, the fundamental rate drives the forecast years outright, with the historical rate shown beside it as a cross-check. Reading the intrinsic value without knowing which growth rate produced it leaves the most important assumption invisible.
+**Why read the two together.** Fundamental growth is one of the inputs that ultimately feeds the discounted cash flow value the app computes, so the growth number is not an isolated statistic. The forecast years run on the organic revenue trend for most companies, and reinvestment times the return on capital is the consistency check beside it. Utilities and telecoms are the exception, where a three-year version of reinvestment times return on capital drives growth, and research-heavy companies blend the two half and half. Reading the intrinsic value without knowing which growth rate produced it leaves the most important assumption invisible.
 
 **What the combination tells you.** An intrinsic value that looks attractive should always be checked against the growth rate that produced the value. Establish whether that rate is fundamental, historical, or a blend of the two. If the value depends on a fundamental rate that itself depends on a one-year jump in ROIC, the value is far less firm than the single number suggests. Adjusting the growth rate down toward the sustainable component, meaning the reinvestment rate multiplied by a normal ROIC, shows how much of the intrinsic value survives without the Efficiency Term. A valuation that only works at the top of the growth range is a valuation that depends on assumptions rather than on the business.
 
