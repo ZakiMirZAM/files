@@ -31,10 +31,22 @@ function Log($msg) {
     Add-Content -Path $LOG -Value $line
 }
 
+# Connect to the port rather than asking Get-NetTCPConnection: since 2026-10-31 that
+# lookup (and netstat) has not listed these listeners even while they serve traffic.
+function Test-Port($port) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try { return ($client.ConnectAsync("127.0.0.1", $port).Wait(1000) -and $client.Connected) }
+    catch { return $false }
+    finally { $client.Close() }
+}
+
 function Restart-Rag {
-    Log "RESTART: killing anything on :3001 and relaunching server.py"
-    $conn = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
-    if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+    Log "RESTART: killing the frozen server.py and relaunching it"
+    # Found by command line, for the same reason as Test-Port: a port lookup can miss
+    # it, and then the relaunch cannot bind 3001 while the frozen one still holds it.
+    $stuck = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
+             Where-Object { $_.CommandLine -match 'python\.exe"?\s+server\.py\s*$' }
+    if ($stuck) { $stuck | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2 }
     # Tier 1 verification on. Tier 0's per-claim flags never leave the server:
     # EXPOSE is a local debugging switch, so it is pinned off rather than left to
     # whatever happens to be in the environment this process inherited.
@@ -47,7 +59,7 @@ function Restart-Rag {
 
 function Ensure-Proxy {
     # ai_proxy.py (port 3002) is a thin passthrough; if it died, /ask breaks.
-    if (-not (Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue)) {
+    if (-not (Test-Port 3002)) {
         Log "PROXY DOWN: relaunching ai_proxy.py"
         Start-Process $PYTHON -ArgumentList "ai_proxy.py" -WorkingDirectory $RAG_DIR -WindowStyle Minimized
         Start-Sleep -Seconds 5

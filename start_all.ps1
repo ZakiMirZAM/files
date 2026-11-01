@@ -19,8 +19,13 @@ if (-not $PYTHON) {
     $PYTHON = "C:\Users\Zaki_Mir\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe"
 }
 
+# Connect to the port rather than asking Get-NetTCPConnection: since 2026-10-31 that
+# lookup (and netstat) has not listed these listeners even while they serve traffic.
 function Test-Port($port) {
-    return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    $client = New-Object System.Net.Sockets.TcpClient
+    try { return ($client.ConnectAsync("127.0.0.1", $port).Wait(1000) -and $client.Connected) }
+    catch { return $false }
+    finally { $client.Close() }
 }
 
 function Wait-Port($port, $label, $seconds = 60) {
