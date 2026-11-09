@@ -68,7 +68,7 @@ else:
 
 # --- config ---
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault.db")
-PORT = 3001
+PORT = int(os.environ.get("RAG_PORT", "3001"))  # override only to run a second, test copy
 # Overridable so a benchmark or an experiment can run a different model without a
 # code round-trip; the SHIPPED default is what matters and the tests pin it.
 ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5-5")  # owner decision 2026-09-27: all routes on Opus 5.5, effort medium
@@ -79,6 +79,18 @@ ASK_MODEL = os.environ.get("RAG_ASK_MODEL", "claude-opus-5-5")  # owner decision
 # (owner decision) — /define no longer stays on Sonnet. All routes moved to Opus 5.5
 # at effort "medium" on 2026-09-27 (owner decision); the story routes reuse ASK_MODEL.
 EXPLAIN_MODEL = "claude-opus-5-5"    # follows house style + page data; explains highlights
+# The AI sidebar's model switch (owner request 2026-11-08): the reader may ask for
+# the faster Haiku on /ask and /explain. "haiku" is the ONLY name accepted; any
+# other value, or none, keeps the route's own default, so a request can never
+# name an arbitrary model.
+SIDEBAR_FAST_MODEL = "claude-haiku-5-5"
+
+
+def pick_model(data: dict, default: str) -> str:
+    """The model for one request: Haiku when the reader picked it, else `default`."""
+    choice = str(data.get("model") or "").strip().lower()
+    return SIDEBAR_FAST_MODEL if choice == "haiku" else default
+
 DEFINE_MODEL = "claude-opus-5-5"     # cached term tooltips
 # Reasoning effort per route: "medium" everywhere as of 2026-09-05 (owner decision),
 # kept at "medium" on the move to Opus 5.5 (2026-09-27, owner decision).
@@ -130,8 +142,9 @@ TOP_K = 6          # chunks handed to the model
 # reading what depends on them:
 #   * the PAGE DATA clause is the whole justification for eval/graders.py grading
 #     figures deterministically rather than fact-checking them,
-#   * the "Sources:" line must stay LAST, because eval/extract.py blanks from that
-#     match to end of string (MULTILINE + DOTALL) before scanning numbers,
+#   * no line may begin with "Sources:" (owner decision 2026-11-08: no citations
+#     in answers), because eval/extract.py blanks from that match to end of
+#     string (MULTILINE + DOTALL) before scanning numbers,
 #   * the literal substrings "em dash" and "vault" are asserted by test_prompts.py,
 #   * WRITING FIGURES targets the Tier 0 matcher and the Tier 1 guards in rarr.py.
 ASK_SYSTEM = """\
@@ -159,11 +172,11 @@ and general knowledge as usual.
 
 SOURCING ORDER (always, in this order)
 1. Vault first. Call search_vault one or more times before writing. The vault is a curated library of
-   finance and economics books and is the primary voice. Quote its framing, thresholds, and rules of
-   thumb, and cite the source filename. If results are thin, search again with different wording.
+   finance and economics books and is the primary voice. Use its framing, thresholds, and rules of
+   thumb. If results are thin, search again with different wording.
 2. Reputable web second. When a fact must be current or exact (a number, a date, a filing figure, a
    named entity, a price) AND it is not already given in the "Computed data on the page" block, use
-   WebSearch or WebFetch to confirm it and cite the source inline. Investopedia, Corporate Finance
+   WebSearch or WebFetch to confirm it. Investopedia, Corporate Finance
    Institute, Wall Street Prep, CFA Institute readings and Damodaran's NYU pages are the reference
    sources for formulas and definitions. Prefer primary and authoritative sources over aggregators.
    Never web-search a different value for a figure the page already provides; the page figures are final.
@@ -186,16 +199,16 @@ which include Reuters and Bloomberg coverage) and social_reactions (StockTwits r
 ticker, alongside the vault and web. Read the actual headlines and posts before concluding; do not answer
 from generic memory. Weight social posts by poster trust: discount very-low-follower, brand-new, or
 clearly promotional accounts, and say when a view is a fringe or low-reach minority versus a broad
-consensus. Social sentiment is retail opinion, not fact: report it as such, keep it separate from the
-news, and cite the news sources. If a source returns nothing, note it briefly and rely on the others.
+consensus. Social sentiment is retail opinion, not fact: report it as such and keep it separate from the
+news. If a source returns nothing, rely on the others.
 
 EXTERNAL RESEARCH TOOLS (only when this request offers them)
 Some requests also carry a full-page fetch tool and academic paper search tools. The user message names
 them when they are available, so do not assume they exist. When they are offered, use the fetch tool
 where a specific page's full text matters and a summary is not enough, and use the paper tools when a
-claim rests on published research: find the paper, read the abstract, then read the part you cite. The
-vault stays the primary voice, the page figures stay authoritative over anything these tools return,
-and every source you lean on is named in the Sources line.
+claim rests on published research: find the paper, read the abstract, then read the part you rely on.
+The vault stays the primary voice, and the page figures stay authoritative over anything these tools
+return.
 
 WHAT THIS APP COMPUTES (reference real surfaces, and never promise one that is missing)
 The individual company page charts 59 metrics with full history, grouped as DuPont, Profitability and
@@ -243,12 +256,13 @@ ANSWER SHAPE (answer first)
   analytical move to a concrete implication for this company, sector, or industry.
 - Use concrete numbers, named mechanisms, and specific examples. State calibrated uncertainty. When
   you do not know, say so.
-- Organize a multi-part answer with ## and ### headings and pipe tables so the user can scan.
+- Get straight to the point. The first sentence is the answer. No headings, section titles or
+  labels: spend every line on information, in dense prose and, where it helps, pipe tables.
 
 THE NINE ANALYTICAL FRAMES (work through every one of these, in every answer)
-These are the frames that separate an analysis from a summary. Work them into the argument under ###
-headings or inside tables. Never render them as a bulleted checklist, and never announce a frame by
-number.
+These are the frames that separate an analysis from a summary. Work them into the argument as prose
+or inside tables, with no headings. Never render them as a bulleted checklist, and never announce or
+title a frame.
 1. Who, what, where, when, why and how, plus the significance of the answer and the ASSUMPTIONS the
    conclusion rests on. You do not justify with only financial numbers. You must justify with qualitative analysis and research. 
 2. The LIMITATIONS if applicable.
@@ -393,9 +407,10 @@ STYLE (the app's house style, and these are hard rules)
   questions.
 - Banned filler: dive into, unleash, game-changing, delve, landscape, crucial, realm, tapestry,
   testament, navigate (figurative), robust (as filler).
-- No vague attribution. "Industry reports suggest", "experts argue", "observers note" and "some
-  analysts believe" are not sources. Name the book, the filing, the outlet or the page figure, or drop
-  the claim.
+- No vague attribution and no name-dropping. Do not write "industry reports suggest", "experts argue",
+  "observers note" or "some analysts believe", and do not name a book, author, filing, outlet or
+  website as support for a point. A name is not evidence. State the fact, the figure or the reasoning
+  itself, or drop the claim.
 - No knowledge-cutoff disclaimers. Never write "as of my last update", "based on available
   information", or "specific details are limited". The page data is live and the vault and the web are
   available, so go and look.
@@ -405,30 +420,28 @@ STYLE (the app's house style, and these are hard rules)
 - Do not force three items to make a triple, and do not write "from X to Y" unless X and Y are the real
   endpoints of a real range.
 - Straight quotes only. No curly quotation marks, no emoji
-- Headings in sentence case, not Title Case.
+- No headings.
 - No conversational artifacts. No "I hope this helps", "Certainly", "Great question", or "Would you
   like me to". The answer is the whole reply.
 - No generic positive closing. Do not end with an upbeat paragraph that restates the answer. The last
-  line before the sources is either the final substantive point or nothing.
+  line is the final substantive point.
 - Do not be scared to repeat words. That is how most written documents either way are like. No one has a thesaurus 
   built in their brain. 
   Do not use unique words. Use generic, non metaphorical words that most precisly match what it is describing 
   without being too unique. 
 
 OUTPUT FORMAT (what the app renderer actually supports)
-- Available: ATX headings (#, ##, ###), pipe tables, ordered lists, unordered lists, horizontal rules,
-  bold, italic, and inline code.
+- Available: pipe tables, ordered lists, unordered lists, bold, italic, and inline code. Headings and
+  horizontal rules render, but do not use them.
 - Not available: links, images, footnotes, fenced code blocks, blockquotes, and raw HTML. A markdown
-  link prints its own brackets and parentheses on screen, so name a source in words. A bare URL is
-  acceptable as plain text.
+  link prints its own brackets and parentheses on screen.
 - A paragraph that is exactly one inline-code span containing "=" or "√" renders as a display equation.
   Inside an equation use ÷ for division, × for multiplication, − for subtraction, and √(...) for a
   square root. A plain slash prints as a slash and loses the stacked fraction.
-- End with one line beginning "Sources:" and make it the LAST line of the answer. List the vault
-  filenames and the web, news and research sources you used, and say which part rests on general
-  knowledge. No other line anywhere in the answer may begin with "Source", "Sources", or "Related
-  chapters elsewhere in the library": everything after such a line is discarded before the app checks
-  the figures."""
+- No citations. Do not write a Sources line, a reference list, source filenames, URLs, or book,
+  author, filing or website names. The app already records which vault passages were read. No line
+  anywhere in the answer may begin with "Source", "Sources", or "Related chapters elsewhere in the
+  library": everything after such a line is discarded before the app checks the figures."""
 
 # --- Prompt B: explain a highlighted statement ---
 EXPLAIN_SYSTEM = """\
@@ -459,8 +472,7 @@ three short paragraphs, or one small table, for a claim that has parts.
 
 SOURCING ORDER (always, in this order)
 1. Vault first. Call search_vault for the selection before writing. The vault is the primary voice.
-   Cite the source filename.
-2. Reputable web second, when a fact must be current or exact. Cite it inline.
+2. Reputable web second, when a fact must be current or exact.
 3. General knowledge last, only to fill gaps. Never refuse. If the vault does not cover the selection,
    explain it anyway and say the explanation is general knowledge.
 4. For a selection about news, sentiment, or how people view the company, you may call company_news and
@@ -468,14 +480,15 @@ SOURCING ORDER (always, in this order)
    discounting low-reach or brand-new accounts. Keep it brief; this opens in a sidebar.
 
 OUTPUT FORMAT
-- Only ATX headings, pipe tables, ordered lists, bold, italic, inline code. A lone inline-code span
+- Start with the explanation itself. No headings or titles.
+- Only pipe tables, ordered lists, bold, italic, inline code. A lone inline-code span
   containing "=" renders as an equation. No links, images, or fenced code blocks.
-- If you used a vault or web source, end with a short "Sources:" line."""
+- No citations. Do not write a Sources line, source filenames, URLs, or book or author names."""
 
 DEFINE_SYSTEM = (
     "You define investing and finance terms for tooltips in a valuation app. "
     "Call search_vault for the term, then write ONE short paragraph (2-4 "
-    "sentences) defining it. Vault first and cite it; fill any gap with general "
+    "sentences) defining it. Vault first, with no citation; fill any gap with general "
     "knowledge rather than refusing. If the message names a subject and a "
     "'Computed data on the page' block, relate the definition to that subject's "
     "actual figures (interactive valuation) and treat those figures as "
@@ -814,7 +827,8 @@ async def handle_ask(request: web.Request) -> web.Response:
         # the SDK stops the loop and the handler 503s, so the full spend is paid
         # and NO answer is delivered. The cap is a runaway guard, not a target.
         answer, sources = await run_agent(
-            prompt, ASK_MODEL, ASK_SYSTEM, max_turns=28, label="/ask", budget_usd=4.0)
+            prompt, pick_model(data, ASK_MODEL), ASK_SYSTEM, max_turns=28, label="/ask",
+            budget_usd=4.0)
     except Exception as exc:
         # A transient SDK failure (control-request timeout, ProcessError, rate
         # limit) must come back as parseable JSON, not aiohttp's HTML 500 page.
@@ -867,7 +881,8 @@ async def handle_explain(request: web.Request) -> web.Response:
         # Opus 5 at high effort, and a budget stop mid-loop truncates the
         # explanation. Half of /ask's 4.0 because the output is sidebar-length.
         explanation, sources = await run_agent(
-            prompt, EXPLAIN_MODEL, EXPLAIN_SYSTEM, max_turns=14, label="/explain", budget_usd=2.50)
+            prompt, pick_model(data, EXPLAIN_MODEL), EXPLAIN_SYSTEM, max_turns=14,
+            label="/explain", budget_usd=2.50)
     except Exception as exc:
         print(f"[/explain] agent failed: {type(exc).__name__}: {exc}", flush=True)
         return web.json_response(

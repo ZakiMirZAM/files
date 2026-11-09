@@ -4,7 +4,7 @@ This button writes a plain answer about a number, a term, or a question on the p
 
 There are two ways to start it. The first is to highlight text: select any words or any number in the main part of the page and a small Explain using AI button appears just above what you selected, then click it. The second is the Explain using AI button next to each question in the Qualitative section, which answers that exact question for you.
 
-The panel shows a short loading line while it works, then the finished answer. Under some answers a Vault sources line lists the books the answer drew from, so you can see where it came from. For a question answer, a Copy to my answer button puts the text into your answer box, and a Regenerate button writes a fresh one.
+The panel shows a short loading line while it works, then the finished answer. For a question answer, a Copy to my answer button puts the text into your answer box, and a Regenerate button writes a fresh one.
 
 ## What the button does not do
 

@@ -1,12 +1,13 @@
 // Module-level store for the single unified AI sidebar, modeled on
-// definitionPanelStore.ts. Two callers open it: the "Explain using AI" button
-// next to a qualitative question (answer mode), and the floating button that
-// appears on a text selection (explain mode). The AiPanel mounted once in the
-// AppShell subscribes and renders. Each openAi() bumps `id` so the panel
-// re-fetches even when reopened on the same mode.
+// definitionPanelStore.ts. Three callers open it: the "Explain using AI" button
+// next to a qualitative question (answer mode), the floating button that
+// appears on a text selection (explain mode), and the chat button in the app
+// header (chat mode, where the reader types any question). The AiPanel mounted
+// once in the AppShell subscribes and renders. Each openAi() bumps `id` so the
+// panel re-fetches even when reopened on the same mode.
 import type { SectionKey } from "./types";
 
-export type AiMode = "answer" | "explain";
+export type AiMode = "answer" | "explain" | "chat";
 
 export interface AiRequest {
   id: number;
@@ -62,6 +63,15 @@ export function closeAi(): void {
   if (current === null) return;
   current = null;
   emit();
+}
+
+/** The header chat button: opens the chat, or closes it when it is already open. */
+export function toggleChat(): void {
+  if (current?.mode === "chat") {
+    closeAi();
+    return;
+  }
+  openAi({ mode: "chat", title: "Ask AI" });
 }
 
 export function getOpenAi(): AiRequest | null {

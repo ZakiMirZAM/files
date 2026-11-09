@@ -100,10 +100,20 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # the answer, building on the reader's, in the 5W1H shape of ASK_SYSTEM's frame 1
 # (Who, What, Where, When, Why, How, Significance, Assumptions). ASK, EXPLAIN and
 # DEFINE unchanged; every route's model moved to Opus 5.5 the same day.
+#
+# ASK_SYSTEM, EXPLAIN_SYSTEM and DEFINE_SYSTEM re-recorded 2026-11-08: owner
+# request to stop spending tokens on citations ("The rag is just a database of
+# info. no need for citation"; a name is not evidence). Every "cite" instruction
+# is removed, the ASK "Sources:" last line becomes a ban on any Sources line, and
+# the vague-attribution rule now also bans naming a book, author or site as
+# support. STORY prompts unchanged (their JSON "sources" field feeds the UI).
+# Same day, second owner request ("does not waste time listing titles. Just get
+# straight to the point"): ASK and EXPLAIN drop headings; the first sentence is
+# the answer and the nine frames are written as prose or tables, untitled.
 EXPECTED = {
-    "ASK_SYSTEM": "08cb44695ac24e1d0f0897c73a8d99005bb28a9cab63c30f0fc974cc941117c2",
-    "EXPLAIN_SYSTEM": "7ab1fd4b392db5ff82546a95786a38744618a28ff727a53e52e7915fcaf0cc03",
-    "DEFINE_SYSTEM": "0bd480bd4844636a16bafd43ece4daabfe0083f732e6b0719a8441eb019c275a",
+    "ASK_SYSTEM": "4a8596d1a8afca40a7add6e36cd7ebaee2424b11c0fef96cb22c2c9d1d7d90f2",
+    "EXPLAIN_SYSTEM": "c8529f2900c12ca70e11339f52f4a1e4c411fd319010878ae8f58942e2249dd1",
+    "DEFINE_SYSTEM": "166795c5e2cb00f72e4b358d04a68d56652baf0289a033032ce9e388dfd16a90",
     "STORY_SYSTEM": "ac3a68ab0f2a400ea37659ab2660801c03c3d57f91dc90afeb9bef2ae0d377db",
     "STORY_ANSWER_SYSTEM": "c39948d6e78d633c901286015e5f73f10e7cdb96582e379769f4e3ece6be82a2",
 }
@@ -299,16 +309,26 @@ def test_story_system_has_no_fallbacks_but_keeps_the_null_rule():
     assert "set value to null and say why in the proof" in text
 
 
-def test_ask_puts_the_sources_line_last():
-    """eval/extract.py blanks from a `Sources:` match to END OF STRING (MULTILINE +
-    DOTALL) before scanning numbers. That is only safe while the prompt guarantees
-    the line is last and forbids any earlier one."""
+def test_ask_forbids_a_sources_line():
+    """Owner decision 2026-11-08: answers carry no citations. eval/extract.py blanks
+    from a `Sources:` match to END OF STRING (MULTILINE + DOTALL) before scanning
+    numbers, so the prompt must forbid every line shape it blanks on; otherwise a
+    stray early line would hide the figures after it from the check."""
     # Whitespace-normalised: the prompt is hard-wrapped, so a phrase can straddle a
     # line break and a literal substring test would fail on formatting alone.
     flat = " ".join(server.ASK_SYSTEM.split())
-    assert "LAST line" in flat
+    assert "No citations" in flat
+    assert "LAST line" not in flat, "ASK_SYSTEM still asks for a closing Sources line"
     assert "Related chapters elsewhere in the library" in flat, \
         "ASK_SYSTEM stopped forbidding the other line shape extract.py blanks on"
+
+
+@pytest.mark.parametrize("name", ["ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM"])
+def test_answer_prompts_never_ask_for_citations(name):
+    """Citations cost output tokens and the owner does not want them."""
+    flat = " ".join(getattr(server, name).lower().split())
+    for phrase in ("cite the source", "cite it", "sources:\" line", "named in the sources"):
+        assert phrase not in flat, f"{name} still asks for a citation ({phrase!r})"
 
 
 def test_rag_calc_off_removes_the_calculator_from_the_advertised_tools():

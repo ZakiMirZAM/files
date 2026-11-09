@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Sparkles, X, Copy, Check, RefreshCw, BookText, Save, Maximize2, Minimize2 } from "lucide-react";
+import {
+  Sparkles,
+  X,
+  Copy,
+  Check,
+  RefreshCw,
+  Save,
+  Maximize2,
+  Minimize2,
+  MessageSquare,
+} from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { cn } from "../lib/cn";
 import { Markdown } from "./Markdown";
@@ -18,11 +28,12 @@ import {
   AiVerificationStrip,
   reviewCount,
 } from "./AiVerification";
-import { closeAi, getOpenAi, subscribeAi } from "../lib/aiPanelStore";
+import { closeAi, getOpenAi, subscribeAi, toggleChat } from "../lib/aiPanelStore";
 import { CONNECT_AI } from "../lib/connectQuestions";
+import { AiChat } from "./AiChat";
+import { getAiModel, modelIdFor, setAiModel, subscribeAiModel } from "../lib/aiModelStore";
 
 type Status = "loading" | "done" | "error";
-const ASK_MODEL = "claude-opus-5-5";
 
 /** Thrown to stop a run that must not reach the model: a newer request took
  *  over, or the reader navigated away while the figures were being gathered. */
@@ -31,13 +42,6 @@ class AbandonedError extends Error {
     super(message);
     this.name = "AbandonedError";
   }
-}
-
-function prettySource(path: string): string {
-  const parts = path.split("/");
-  const book = parts[0] === "Books" && parts.length > 1 ? parts[1] : parts[0];
-  const file = parts[parts.length - 1].replace(/\.md$/, "");
-  return `${book.slice(0, 42)} · ${file}`;
 }
 
 function parseSources(raw: string): string[] {
@@ -52,6 +56,8 @@ function parseSources(raw: string): string[] {
 export function AiPanel() {
   const req = useSyncExternalStore(subscribeAi, getOpenAi);
   const open = req != null;
+  const isChat = req?.mode === "chat";
+  const aiModel = useSyncExternalStore(subscribeAiModel, getAiModel);
 
   // Cache lookup for answer-mode questions (skipped for explain mode).
   const cacheArgs =
@@ -90,6 +96,8 @@ export function AiPanel() {
   // Decide: serve from cache, or call the server (and cache the result).
   useEffect(() => {
     if (!req) return;
+    // Chat mode sends nothing on open; AiChat sends each typed question itself.
+    if (req.mode === "chat") return;
 
     if (req.mode === "explain") {
       if (handledRef.current === gen) return;
@@ -141,6 +149,8 @@ export function AiPanel() {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     const reqId = req.id;
     const request = req;
+    // Read once per run, so the saved answer records the model that wrote it.
+    const model = getAiModel();
 
     // The figures are gathered HERE, not at the click, so a question whose
     // answer came back from the cache above never pays for them.
@@ -171,12 +181,14 @@ export function AiPanel() {
             context: request.context,
             section: request.section,
             dataContext,
+            model,
           })
         : explainSelection({
             selection: request.selection ?? "",
             context: request.context,
             subject: request.subject,
             dataContext,
+            model,
           });
     });
 
@@ -193,7 +205,7 @@ export function AiPanel() {
             questionId: req.questionId!,
             answer: r.text,
             sources: JSON.stringify(r.sources),
-            model: ASK_MODEL,
+            model: modelIdFor(model),
             // Strip the token: it is a one-shot handle on the live request, and a
             // stale one in the cache would re-fire /verify on every reload.
             verification: r.verification
@@ -227,6 +239,9 @@ export function AiPanel() {
   useEffect(() => {
     if (!AI_VERIFY_UI) return;
     if (status !== "done" || !result || !req) return;
+    // Chat mode never resets `result`, so without this the hidden answer from
+    // before the chat opened would send its spent token to /verify again.
+    if (req.mode === "chat") return;
     const report = result.verification;
     if (!report || report.status !== "flagged" || report.revised) return;
     const token = report.token;
@@ -320,26 +335,72 @@ export function AiPanel() {
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
         />
       )}
+      {/* Mobile/tablet: fixed overlay sliding in from the right. Desktop (lg+):
+          an in-flow sticky column beside the page, like the notebook, so the
+          page stays usable while the panel is open. Inert while closed. */}
       <aside
         data-ai-panel
         aria-label="AI assistant"
         aria-hidden={!open}
+        inert={!open}
         className={cn(
           "fixed inset-y-0 right-0 z-50 w-full bg-ink-900/95 backdrop-blur-md",
           expanded ? "sm:w-[760px]" : "sm:w-[480px]",
-          "transform transition-[width,transform] duration-300 ease-out border-l border-gold/15",
+          "transform transition-[width,transform] duration-300 ease-out",
           open ? "translate-x-0" : "translate-x-full",
+          // lg:z-40 keeps the fixed page outline (PageTOC, z-30) from drawing over the panel.
+          "lg:sticky lg:top-0 lg:h-screen lg:self-start lg:z-40 lg:transform-none lg:overflow-clip",
+          !open ? "lg:w-0" : expanded ? "lg:w-[760px]" : "lg:w-[480px]",
         )}
       >
-        <div className="h-full flex flex-col">
+        <div
+          className={cn(
+            "h-full w-full flex flex-col border-l border-gold/15",
+            expanded ? "sm:w-[760px]" : "sm:w-[480px]",
+          )}
+        >
           <header className="flex items-center gap-3 px-4 py-3 border-b border-gold/15 shrink-0">
             <Sparkles className="w-4 h-4 text-gold shrink-0" />
             <h3 className="flex-1 min-w-0 font-display text-base font-semibold text-white leading-tight truncate">
               {req?.title ?? "AI"}
             </h3>
             <span className="font-mono text-[0.65rem] uppercase tracking-wider text-white/30 shrink-0">
-              {req?.mode === "explain" ? "Explain" : "Answer"}
+              {req?.mode === "explain" ? "Explain" : isChat ? "Chat" : "Answer"}
             </span>
+            <div
+              role="group"
+              aria-label="AI model"
+              className="inline-flex shrink-0 rounded-sm border border-gold/15 overflow-hidden font-mono text-[0.65rem]"
+            >
+              {(["opus", "haiku"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setAiModel(m)}
+                  aria-pressed={aiModel === m}
+                  title={m === "opus" ? "Opus 5.5: deeper answers" : "Haiku 5.5: faster answers"}
+                  className={cn(
+                    "px-2 py-1 transition-colors",
+                    aiModel === m ? "bg-gold/15 text-gold" : "text-white/45 hover:text-white/80",
+                  )}
+                >
+                  {m === "opus" ? "Opus" : "Haiku"}
+                </button>
+              ))}
+            </div>
+            {open && !isChat && (
+              // The open panel covers the header's own chat button on wide
+              // screens, so the panel carries a way back to the chat.
+              <button
+                type="button"
+                onClick={toggleChat}
+                aria-label="Open the chat"
+                title="Open the chat"
+                className="btn-ghost p-1.5 shrink-0"
+              >
+                <MessageSquare className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
@@ -355,7 +416,9 @@ export function AiPanel() {
             </button>
           </header>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+          <AiChat active={isChat} />
+
+          <div ref={scrollRef} className={cn("flex-1 overflow-y-auto px-4 py-4", isChat && "hidden")}>
             {status === "loading" && (
               <div className="flex items-center gap-2.5 text-sm text-white/45 font-mono py-6">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -407,21 +470,6 @@ export function AiPanel() {
                 <Markdown content={showOriginal && answerOriginal ? answerOriginal : result.text} />
 
                 <AiVerificationDetail report={result.verification} />
-
-                {result.sources.length > 0 && (
-                  <div className="pt-4 border-t border-gold/10">
-                    <p className="flex items-center gap-1.5 label mb-2">
-                      <BookText className="w-3.5 h-3.5 text-gold/60" /> Vault sources
-                    </p>
-                    <ul className="space-y-1">
-                      {result.sources.map((s) => (
-                        <li key={s} className="font-mono text-[0.7rem] text-white/45 leading-snug">
-                          {prettySource(s)}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 <div className="pt-2 flex flex-wrap items-center gap-2">
                   {req?.onCopy && (

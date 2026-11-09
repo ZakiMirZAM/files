@@ -9,6 +9,7 @@ import {
   Layers,
   LineChart,
   Menu,
+  MessageSquare,
   Notebook,
   NotebookPen,
   PanelLeftClose,
@@ -16,8 +17,9 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "../lib/cn";
+import { getOpenAi, subscribeAi, toggleChat } from "../lib/aiPanelStore";
 import { NotebookPanel } from "./notebook/NotebookPanel";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { LogoMark } from "./Logo";
@@ -53,6 +55,7 @@ export function AppShell() {
     }
   });
   const [notebookOpen, setNotebookOpen] = useState<boolean>(loadNotebookOpen);
+  const chatOpen = useSyncExternalStore(subscribeAi, getOpenAi)?.mode === "chat";
   const location = useLocation();
 
   useEffect(() => {
@@ -181,6 +184,18 @@ export function AppShell() {
               <Breadcrumbs pathname={location.pathname} />
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={toggleChat}
+                aria-pressed={chatOpen}
+                aria-label="Toggle AI chat"
+                title="Ask AI"
+                className={cn(
+                  "p-2 rounded-sm transition-colors",
+                  chatOpen ? "bg-gold/15 text-gold" : "text-white/55 hover:text-gold",
+                )}
+              >
+                <MessageSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              </button>
               <button
                 onClick={() => setNotebookOpen((o) => !o)}
                 aria-pressed={notebookOpen}

@@ -5,6 +5,7 @@
 import type { SectionKey, StoryInputName } from "./types";
 import { budgetWaitMessage, canAsk, recordAsk, secondsUntilAllowed } from "./askBudget";
 import { STORY_INPUTS } from "./story";
+import type { AiModelChoice } from "./aiModelStore";
 
 const AI_BASE = (import.meta.env.VITE_AI_BASE as string | undefined) ?? "http://localhost:3001";
 
@@ -89,6 +90,8 @@ export interface AskParams {
   section?: SectionKey;
   /** Compact summary of the page's computed figures (sent as the `data` field). */
   dataContext?: string;
+  /** The sidebar's model switch. Omitted means the server's default (Opus). */
+  model?: AiModelChoice;
 }
 
 export interface ExplainParams {
@@ -98,6 +101,8 @@ export interface ExplainParams {
   subject?: string;
   /** The subject's computed figures (sent as the `data` field). */
   dataContext?: string;
+  /** The sidebar's model switch. Omitted means the server's default (Opus). */
+  model?: AiModelChoice;
 }
 
 async function postAi(path: string, body: unknown, timeoutMs: number): Promise<unknown> {
@@ -254,6 +259,7 @@ export async function askQuestion(params: AskParams): Promise<AiResult> {
     context: params.context,
     section: params.section,
     data: params.dataContext, // server reads the page figures from `data`
+    model: params.model,
   };
   // 300s: the heartbeat proxy keeps the connection alive past Cloudflare's 100s
   // edge limit, so a long Sonnet answer (web searches, many turns) can complete.
@@ -306,6 +312,7 @@ export async function explainSelection(params: ExplainParams): Promise<AiResult>
     context: params.context,
     subject: params.subject,
     data: params.dataContext, // server reads the subject's figures from `data`
+    model: params.model,
   };
   const data = (await postAi("/explain", body, 420_000)) as {
     explanation?: string;
