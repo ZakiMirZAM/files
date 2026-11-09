@@ -122,7 +122,8 @@ const applicationTables = {
     createdAt: v.number(),
   })
     .index("by_user_deck", ["userId", "deckId"])
-    .index("by_user_due", ["userId", "due"]),
+    .index("by_user_due", ["userId", "due"])
+    .index("by_user_deck_due", ["userId", "deckId", "due"]),
 
   // One study rating (1 Again, 2 Hard, 3 Good, 4 Easy) with the FSRS log.
   learnReviews: defineTable({
@@ -166,6 +167,16 @@ const applicationTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // A7: who uploaded each Learn file (book PDFs, mark pictures). The first
+  // claim wins, as with noteFiles; nothing is served or deleted without it.
+  learnFiles: defineTable({
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+    createdAt: v.number(),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_user_storage", ["userId", "storageId"]),
 
   // A7: one mark found in a book. `method` says how it was found: a real PDF
   // annotation object, or a page comparison with the clean original.

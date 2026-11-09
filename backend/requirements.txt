@@ -6,3 +6,4 @@ yfinance>=0.2.40
 pandas>=2.0
 xlrd>=2.0.1          # Shiller ie_data.xls, Damodaran histimpl.xls, GPR .xls
 openpyxl>=3.1        # xlsx safety net for spreadsheet parsing
+python-multipart>=0.0.9  # file uploads (POST /api/learn/import)

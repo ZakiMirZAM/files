@@ -444,3 +444,64 @@ def test_story_answer_prompt_names_the_eight_labels_in_order():
     assert "begins with its label and a colon" in text and "250 to 550 words" in text
     assert '"builtOnReader"' in text and '"adequate"' not in text
     assert "STEP 1" not in text
+
+
+# --- Learn section prompts (rag/learn.py) ------------------------------------
+# LEARN_CARDS_SYSTEM, LEARN_QUIZ_SYSTEM and LEARN_GRADE_SYSTEM recorded 2026-11-08
+# for the new /learn/cards, /learn/quiz and /learn/grade routes (Learn slices A4
+# AI decks and A6 tests). They live in rag/learn.py, not server.py, so server.py
+# only gains imports, an EFFORT_BY_LABEL merge and three add_post lines; they are
+# pinned here under the same rule as every other prompt. Pending owner approval of
+# the text; the other five prompts are unchanged.
+LEARN_EXPECTED = {
+    "LEARN_CARDS_SYSTEM": "5805b9e7f845aed26c9d7ad9ef33c7aa54cd3cd246bf5614368a8c4fbe5d2eda",
+    "LEARN_QUIZ_SYSTEM": "93fefc5b8ec7ba0f68d1f95ee3dc340c54f5f3ab6699d0e6ac7ebf0884224ef0",
+    "LEARN_GRADE_SYSTEM": "b0c088315e6fafb088b43fb1719b9c844e01d639be6717598a1494bf281868ae",
+}
+
+
+@pytest.mark.parametrize("name", sorted(LEARN_EXPECTED))
+def test_learn_prompt_text_is_unchanged(name):
+    """Regenerate with:
+       python -c "import sys;sys.path.insert(0,'rag');import learn,hashlib;\
+print({n: hashlib.sha256(t.encode()).hexdigest() for n,t in learn.PROMPTS.items()})"
+    """
+    import learn
+    assert set(learn.PROMPTS) == set(LEARN_EXPECTED)
+    assert digest(learn.PROMPTS[name]) == LEARN_EXPECTED[name], (
+        f"{name} changed. If this edit is owner-approved, update LEARN_EXPECTED in "
+        "the same commit.")
+
+
+@pytest.mark.parametrize("name", sorted(LEARN_EXPECTED))
+def test_learn_prompts_pass_through_options_for_unchanged(name):
+    import learn
+    literal = learn.PROMPTS[name]
+    for allow_web in (True, False):
+        opts = server.options_for(model="claude-opus-5-5", system_prompt=literal,
+                                  max_turns=4, allow_web=allow_web)
+        assert opts.system_prompt == literal
+        assert opts.setting_sources == [] and opts.strict_mcp_config is True
+
+
+@pytest.mark.parametrize("name", sorted(LEARN_EXPECTED))
+def test_learn_prompts_keep_house_rules(name):
+    import learn
+    text = learn.PROMPTS[name]
+    flat = " ".join(text.split())
+    assert "em dash" in text.lower()
+    assert "—" not in text and "–" not in text
+    for ch in ("“", "”", "‘", "’"):
+        assert ch not in text
+    assert "no citations" in flat.lower()
+    assert "Return one JSON object and nothing else" in flat
+    if name == "LEARN_GRADE_SYSTEM":
+        assert "Do not call any tool" in flat
+    else:
+        assert "search_vault" in text and "vault" in text.lower()
+        assert "WebSearch" in text
+
+
+def test_learn_routes_run_medium_effort():
+    for label in ("/learn/cards", "/learn/quiz", "/learn/grade"):
+        assert server.EFFORT_BY_LABEL[label] == "medium"

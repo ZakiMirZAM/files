@@ -47,6 +47,7 @@ from claude_agent_sdk import (
 )
 
 import calc_tools
+import learn
 import rarr
 import research_tools
 import retrieval
@@ -115,6 +116,7 @@ STORY_EFFORT: EffortLevel = "medium"
 EFFORT_BY_LABEL: dict[str, EffortLevel] = {
     "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
     "/story-inputs": STORY_EFFORT, "/story-answer": STORY_EFFORT,
+    **learn.EFFORT_BY_LABEL,  # /learn/cards, /learn/quiz, /learn/grade (rag/learn.py)
 }
 VAULT_TOOL = "mcp__vault__search_vault"
 # The agent may use the vault search plus the web (vault-first sourcing, web for
@@ -1070,6 +1072,13 @@ def main() -> None:
     app.router.add_post("/story-inputs", handle_story_inputs)
     app.router.add_post("/story-answer", handle_story_answer)
     app.router.add_post("/verify", handle_verify)
+    # Learn section (rag/learn.py): its own prompts, the same run_agent and model switch.
+    learn_routes = learn.make_handlers(
+        run_agent, pick_model, ASK_MODEL,
+        research_tools.GUIDANCE if research_tools.MODE == "on" else "")
+    app.router.add_post("/learn/cards", learn_routes["cards"])
+    app.router.add_post("/learn/quiz", learn_routes["quiz"])
+    app.router.add_post("/learn/grade", learn_routes["grade"])
     app.router.add_get("/health", handle_health)
     print(f"RAG server on http://localhost:{PORT}  (ask={ASK_MODEL}, explain={EXPLAIN_MODEL}, define={DEFINE_MODEL})")
     print(f"  vault.db: {DB_PATH}  | tools: vault search + web + company_news + social_reactions")

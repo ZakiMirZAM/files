@@ -7667,3 +7667,41 @@ def profit_pool_endpoint(
         if row is None:
             raise HTTPException(404, f"sector '{sector}' not found")
         return build_profit_pool(conn, sector)
+
+
+# ── Learn: flashcard import (slice A4) ───────────────────────────────────────
+# Parses an uploaded .apkg or .xlsx into cards and returns them; stores nothing.
+# CSV/TSV/Anki text are parsed in the browser. nginx caps /api bodies at 256 KB
+# (deploy/nginx.conf), so the file itself is held under that here too.
+LEARN_IMPORT_MAX_BODY = 256 * 1024
+LEARN_IMPORT_MAX_FILE = 255 * 1024
+
+
+@app.post("/api/learn/import")
+@limiter.limit("20/minute")
+async def learn_import_endpoint(request: Request) -> dict[str, Any]:
+    if int(request.headers.get("content-length") or 0) > LEARN_IMPORT_MAX_BODY:
+        raise HTTPException(status_code=413, detail="The file is too large (limit 255 KB).")
+    import learn_import  # noqa: PLC0415
+    try:
+        # request.form() needs python-multipart; imported lazily so a missing
+        # package only disables this route, never the whole API.
+        form = await request.form(max_files=1, max_fields=4)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Send the file as a multipart upload.") from exc
+    upload = form.get("file")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(status_code=400, detail="No file in the upload.")
+    data = await upload.read(LEARN_IMPORT_MAX_FILE + 1)
+    await upload.close()
+    if len(data) > LEARN_IMPORT_MAX_FILE:
+        raise HTTPException(status_code=413, detail="The file is too large (limit 255 KB).")
+    # The parse runs in a separate process with a hard time limit
+    # (learn_import.PARSE_TIMEOUT_S); this thread only waits for it, so a
+    # hostile file can never stall the event loop of the single worker.
+    from starlette.concurrency import run_in_threadpool  # noqa: PLC0415
+    try:
+        cards = await run_in_threadpool(learn_import.parse_upload_isolated, upload.filename or "", data)
+    except learn_import.ImportError_ as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"cards": cards}
