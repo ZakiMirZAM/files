@@ -42,7 +42,7 @@ export function DeckDetail({ deckId, onBack, onStudy }: DeckDetailProps) {
           <h2 className="font-display text-2xl font-semibold text-white break-words">{deck?.name ?? " "}</h2>
           {stats && (
             <p className="text-sm text-white/55 mt-1">
-              {countText(stats.cards, stats.cardsCapped)} cards · {countText(stats.due, stats.dueCapped)} due
+              {countText(stats.cards, stats.cardsCapped)} {stats.cards === 1 && !stats.cardsCapped ? "card" : "cards"} ·{countText(stats.due, stats.dueCapped)} due
               {stats.new !== null && ` · ${stats.new.toLocaleString()} new`}
             </p>
           )}

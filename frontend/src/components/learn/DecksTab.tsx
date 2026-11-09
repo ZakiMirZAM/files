@@ -222,7 +222,7 @@ function DeckRow({ deck, onOpen, onStudy }: { deck: Doc<"learnDecks">; onOpen: (
           <button type="button" onClick={onOpen} className="text-left w-full min-h-[44px]">
             <span className="block text-white font-medium break-words hover:text-gold transition-colors">{deck.name}</span>
             <span className="block text-xs text-white/45 mt-0.5">
-              {stats ? `${countText(stats.cards, stats.cardsCapped)} cards · ` : ""}
+              {stats ? `${countText(stats.cards, stats.cardsCapped)} ${stats.cards === 1 && !stats.cardsCapped ? "card" : "cards"} · ` : ""}
               {stats && stats.due > 0 ? (
                 <span className="text-gold">{countText(stats.due, stats.dueCapped)} due</span>
               ) : stats ? (
