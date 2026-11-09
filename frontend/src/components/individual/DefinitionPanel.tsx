@@ -328,7 +328,7 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                       </div>
                     </dl>
                     )}
-                    {calculation.note && (
+                    {calculation.note && !calculation.tree && (
                       <p className="mt-2.5 text-[0.65rem] leading-relaxed text-white/35">{calculation.note}</p>
                     )}
                   </div>
