@@ -16,6 +16,7 @@ import { IndividualPage } from "./pages/IndividualPage";
 import { ReportPage } from "./pages/ReportPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
 import { GuidePage } from "./pages/GuidePage";
+import { LearnPage } from "./pages/LearnPage";
 import { PublicGuide } from "./pages/PublicGuide";
 import { TermsPage } from "./pages/TermsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
@@ -140,6 +141,7 @@ export default function App() {
             <Route path="report" element={<ReportPage />} />
             <Route path="simulator" element={<SimulatorPage />} />
             <Route path="guide" element={<GuidePage />} />
+            <Route path="learn" element={<LearnPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

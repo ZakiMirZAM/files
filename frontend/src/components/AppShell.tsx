@@ -5,6 +5,7 @@ import {
   Building2,
   Compass,
   Globe2,
+  GraduationCap,
   Landmark,
   Layers,
   LineChart,
@@ -41,6 +42,7 @@ const NAV = [
   { to: "/app/individual", label: "Individual", icon: LineChart },
   { to: "/app/report", label: "Final Report", icon: Notebook },
   { to: "/app/simulator", label: "Stock Simulator", icon: TrendingUp },
+  { to: "/app/learn", label: "Learn", icon: GraduationCap },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "ifed.sidebar.collapsed";

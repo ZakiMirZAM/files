@@ -96,6 +96,101 @@ const applicationTables = {
     .index("by_storage", ["storageId"])
     .index("by_user_storage", ["userId", "storageId"]),
 
+  // ── Learn section (slices A4-A7) ─────────────────────────────────────────
+  // Flashcard decks: imported (CSV/.xlsx/Anki), AI-generated, or hand-made.
+  learnDecks: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    source: v.union(v.literal("import"), v.literal("ai"), v.literal("manual")),
+    /** For an AI deck: the request the user typed. */
+    prompt: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // One card. `due` drives the study queue; `srs` is the ts-fsrs card state
+  // (JSON), absent until the card is first studied.
+  learnCards: defineTable({
+    userId: v.id("users"),
+    deckId: v.id("learnDecks"),
+    front: v.string(),
+    back: v.string(),
+    tags: v.optional(v.array(v.string())),
+    due: v.number(),
+    srs: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user_deck", ["userId", "deckId"])
+    .index("by_user_due", ["userId", "due"]),
+
+  // One study rating (1 Again, 2 Hard, 3 Good, 4 Easy) with the FSRS log.
+  learnReviews: defineTable({
+    userId: v.id("users"),
+    cardId: v.id("learnCards"),
+    rating: v.number(),
+    reviewedAt: v.number(),
+    log: v.optional(v.string()),
+  }).index("by_user_card", ["userId", "cardId"]),
+
+  // A generated test: questions as JSON (multiple choice and short answer).
+  learnTests: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    prompt: v.string(),
+    deckId: v.optional(v.id("learnDecks")),
+    questions: v.string(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // One attempt at a test: answers, self grades and AI grades as JSON.
+  learnAttempts: defineTable({
+    userId: v.id("users"),
+    testId: v.id("learnTests"),
+    answers: v.string(),
+    score: v.number(),
+    total: v.number(),
+    completedAt: v.number(),
+  }).index("by_user_test", ["userId", "testId"]),
+
+  // A7: a book the user imported. The marked copy is kept privately; the clean
+  // original is optional (needed only when the marks are flattened).
+  learnBooks: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    fileName: v.string(),
+    storageId: v.id("_storage"),
+    cleanStorageId: v.optional(v.id("_storage")),
+    pageCount: v.number(),
+    noteCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // A7: one mark found in a book. `method` says how it was found: a real PDF
+  // annotation object, or a page comparison with the clean original.
+  learnBookNotes: defineTable({
+    userId: v.id("users"),
+    bookId: v.id("learnBooks"),
+    page: v.number(),
+    kind: v.union(
+      v.literal("handwriting"),
+      v.literal("underline"),
+      v.literal("highlight"),
+      v.literal("note"),
+      v.literal("mark"),
+    ),
+    method: v.union(v.literal("annotation"), v.literal("comparison")),
+    imageStorageId: v.optional(v.id("_storage")),
+    /** [x0, y0, x1, y1] in PDF points, as JSON. */
+    rect: v.optional(v.string()),
+    /** Typed note text, when the annotation carries one. */
+    text: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user_book", ["userId", "bookId"])
+    .index("by_user_book_page", ["userId", "bookId", "page"]),
+
   // Saved tickers / industries the user is analyzing (recents)
   watchlist: defineTable({
     userId: v.id("users"),
