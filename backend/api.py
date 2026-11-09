@@ -6208,6 +6208,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
             {"key": k, "label": lab, "group": grp, "unit": u}
             for (k, lab, grp, u) in DISPLAY_METRICS
         ],
+        # Learn slice A3: {"history": {key: tree}, "metrics": {label: tree}} or None
+        "formulaTrees": getattr(snap, "formula_trees", None),
         # Deep-value asset floors (Graham Number / NCAV / Net-Net)
         "valuationAnchors": snap.valuation_anchors,
         # Forensic earnings-quality block (Schilit, "Financial Shenanigans")

@@ -551,6 +551,10 @@ class IndividualSnapshot:
     # Fundamental metric history: {metric_key: {year: value}} (drives the trends grid)
     metric_history: dict[str, dict[int, Optional[float]]] = field(default_factory=dict)
 
+    # Learn slice A3: formula trees for the latest year of each charted metric and
+    # each statement metric with a formula (page_formulas.py). None on failure.
+    formula_trees: Optional[dict] = None
+
     # Whether the market quote and the model's per-ordinary-share value are the
     # same kind of number, and in which currencies. Always present. When
     # applicable is False the margin of safety, the reverse DCF and every other
@@ -7092,6 +7096,18 @@ def build_individual_snapshot(
     if beta_hist:
         metric_hist["beta"] = beta_hist
 
+    # Learn slice A3: each charted metric's formula tree, its result taken from
+    # metric_hist itself so the sidebar number always equals the chart's last point.
+    try:
+        from page_formulas import build_page_trees
+        formula_trees = build_page_trees(
+            rows, metric_hist, DISPLAY_METRICS, beta=beta, rf=rf, erp=erp,
+            beta_hist=beta_hist or {}, hist_params=hist_params or {},
+            currency=(_row_str(latest, "Reported Currency") or "USD"))
+    except Exception as exc:  # noqa: BLE001 — the page must not break on a tree
+        log.warning("formula trees failed for %s: %s", ticker.upper(), exc)
+        formula_trees = None
+
     # Deep-value anchors, forensic shenanigans block, residual-income valuation,
     # and R&D capitalization. Each is guarded so an edge case can't break the page.
     valuation_anchors = _valuation_anchors(latest)
@@ -7417,6 +7433,7 @@ def build_individual_snapshot(
         forecast=forecast,
         growth_viability=growth_viability,
         metric_history=metric_hist,
+        formula_trees=formula_trees,
         price_comparison=(price_comparison.to_dict()
                           if price_comparison is not None else None),
         valuation_anchors=valuation_anchors,

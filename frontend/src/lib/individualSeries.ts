@@ -19,6 +19,7 @@ import type { IndividualBenchmarks, Metric, MetricMeta, SectionData, SectorMetri
 import { formatCurrency, formatNumber, formatPercent } from "./format";
 import { formatMetricValue } from "./metricFormat";
 import { resolveDefNumber } from "./individualDefinitions";
+import type { FormulaNode } from "./formulaTree";
 
 export interface SeriesPoint {
   period: string;
@@ -61,6 +62,32 @@ const yearOf = (period: string) => period.slice(0, 4);
 
 /** Keys whose series is already a growth rate (revenue_growth, net_income_growth, ...). */
 export const isGrowthRateKey = (key: string): boolean => /_growth$/i.test(key);
+
+/**
+ * Learn slice A3: definition number -> the metric's formula tree, keyed the
+ * same way as buildSeriesIndex (statement metrics first, then the charted
+ * ratios through metricMeta), with the same "at least two points" rule for a
+ * statement metric, so the sidebar shows the tree for the same metric whose
+ * chart it shows.
+ */
+export function buildFormulaIndex(data: SectionData | null | undefined): Map<number, FormulaNode> {
+  const index = new Map<number, FormulaNode>();
+  const trees = data?.analysis?.formulaTrees;
+  if (!trees) return index;
+  const add = (number: number | undefined, tree: FormulaNode | undefined) => {
+    if (number == null || !tree) return;
+    if (!index.has(number)) index.set(number, tree); // first source wins
+  };
+  for (const m of data?.metrics ?? []) {
+    if (m.trend.length >= 2) add(resolveDefNumber(m.name), trees.metrics[m.name]);
+  }
+  const metaByKey = new Map<string, MetricMeta>((data?.analysis?.metricMeta ?? []).map((m) => [m.key, m]));
+  for (const [key, tree] of Object.entries(trees.history)) {
+    const meta = metaByKey.get(key);
+    add(resolveDefNumber(meta?.label ?? key) ?? resolveDefNumber(key), tree);
+  }
+  return index;
+}
 
 /** Build the definition-number -> series map for the current ticker's data. */
 export function buildSeriesIndex(data: SectionData | null | undefined): Map<number, DefinitionSeries> {

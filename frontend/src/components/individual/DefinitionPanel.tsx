@@ -20,6 +20,7 @@ import { getPageAiContext } from "../../lib/aiContextStore";
 import { cn } from "../../lib/cn";
 import { DefinitionChart } from "./DefinitionChart";
 import { FormulaTree } from "./FormulaTree";
+import type { FormulaNode } from "../../lib/formulaTree";
 import { HelpBadge } from "../onboarding/HelpBadge";
 
 interface DefinitionPanelProps {
@@ -38,6 +39,9 @@ interface DefinitionPanelProps {
    * between the historical chart and the definition text.
    */
   benchmarks?: Map<number, DefinitionBenchmark>;
+  /** definition number -> the metric's formula tree for the company in view
+   *  (Learn slice A3). Used when the opener passed no calculation of its own. */
+  formulaIndex?: Map<number, FormulaNode>;
 }
 
 function BenchmarkRow({
@@ -88,14 +92,29 @@ function BenchmarkRow({
  * an override series (one company's trend, opened from the comparative matrix),
  * else a full economic MetricBlock, else the lean per-metric DefinitionChart.
  */
-export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = [], benchmarks }: DefinitionPanelProps) {
+export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = [], benchmarks, formulaIndex }: DefinitionPanelProps) {
   const openState = useSyncExternalStore(subscribeDefinition, getOpenDefinition);
   const open = openState != null;
   const openNumber = openState?.number ?? null;
   const overrideSeries = openState?.series;
   const overrideTitle = openState?.title;
   const overrideDescription = openState?.description;
-  const calculation = openState?.calculation;
+  // The opener's own calculation wins (the comparison table, slice A2); a
+  // plain metric click on the company page falls back to the page's tree.
+  const indexTree =
+    !openState?.calculation && openNumber != null && openNumber > 0
+      ? formulaIndex?.get(openNumber)
+      : undefined;
+  const calculation =
+    openState?.calculation ??
+    (indexTree
+      ? {
+          heading: `How ${indexTree.name} is calculated`,
+          rows: [],
+          result: { label: indexTree.name, value: indexTree.display },
+          tree: indexTree,
+        }
+      : undefined);
   // The opener's scope (a clicked matrix cell) wins; a clicked label has none,
   // so one is derived from the page in view.
   const questionScope =

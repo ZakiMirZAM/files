@@ -112,6 +112,8 @@ def fmt(v: Optional[float], unit: str, ccy: str) -> str:
         return f"{sign}{a:.2f}%"
     if unit == "beta":
         return f"{sign}{a:.3f}"
+    if unit == "days":
+        return f"{sign}{a:.1f} days"
     return f"{sign}{a:.2f}x"  # multiple / ratio
 
 

@@ -52,7 +52,7 @@ import { NextStagePanel } from "../components/connections/NextStagePanel";
 import { PeerRankingTable } from "../components/PeerRankingTable";
 import { ComparisonSection } from "../components/individual/ComparisonSection";
 import { PEER_RANKING } from "../lib/connectionsCopy";
-import { buildBenchmarkIndex, buildSeriesIndex } from "../lib/individualSeries";
+import { buildBenchmarkIndex, buildFormulaIndex, buildSeriesIndex } from "../lib/individualSeries";
 import { buildConnectDeck, CONNECT_DECK_TITLE } from "../lib/connectQuestions";
 import { PRICE_DECK_TITLE, STORY_DECK_TITLE } from "../lib/questions";
 import { buildPriceDeck } from "../lib/story";
@@ -101,6 +101,7 @@ export function IndividualPage() {
              : result?.status === "api_down" ? result.mock
              : null;
   const seriesIndex = useMemo(() => buildSeriesIndex(data), [data]);
+  const formulaIndex = useMemo(() => buildFormulaIndex(data), [data]);
   // Benchmarks only pair with LIVE data: against the offline mock the numbers
   // would compare fabricated figures with real group averages.
   const benchmarkIndex = useMemo(
@@ -554,6 +555,7 @@ export function IndividualPage() {
       <DefinitionPanel
         seriesIndex={seriesIndex}
         benchmarks={benchmarkIndex}
+        formulaIndex={formulaIndex}
       />
     </div>
   );

@@ -1,3 +1,5 @@
+import type { FormulaNode } from "./formulaTree";
+
 export type SectionKey = "economic" | "credit" | "sector" | "industry" | "comparative" | "individual" | "final_review";
 
 export interface QualitativeQuestion {
@@ -1387,6 +1389,12 @@ export interface IndividualAnalysis {
   // Fundamental metric history ({key: {year: value}}) + the column metadata.
   metricHistory?: Record<string, Record<string, number>>;
   metricMeta?: MetricMeta[];
+  // Learn slice A3: the latest year's formula tree per charted metric (by key)
+  // and per statement metric (by label). Null when the build failed.
+  formulaTrees?: {
+    history: Record<string, FormulaNode>;
+    metrics: Record<string, FormulaNode>;
+  } | null;
   // Deep-value anchors, forensic shenanigans, residual-income valuation, R&D cap.
   valuationAnchors?: ValuationAnchors | null;
   shenanigans?: Shenanigans | null;
