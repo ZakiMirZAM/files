@@ -7302,9 +7302,8 @@ _SPREAD_METRIC_INPUTS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _spread_company_inputs(latest: Any, prior: Any | None) -> dict[str, Any]:
-    """The company's own input values for the spread metrics: the stored lines
-    _company_metrics reads plus its derived terms. No new arithmetic."""
+def _spread_raw_values(latest: Any, prior: Any | None) -> dict[str, float | None]:
+    """The stored lines _company_metrics reads plus its derived terms, unrounded."""
     values: dict[str, float | None] = {
         c: _sf(latest, c) for c in _SECTOR_NEEDED_COLS if c != "Reported Currency"
     }
@@ -7314,6 +7313,34 @@ def _spread_company_inputs(latest: Any, prior: Any | None) -> dict[str, Any]:
     if prior is not None:
         values["Prior Operating Income"] = _sf(prior, "Operating Income")
         values["Prior Revenue"] = _sf(prior, "Revenue")
+    return values
+
+
+def _spread_formula_trees(latest: Any, prior: Any | None) -> dict[str, Any]:
+    """Learn slice A2: one formula tree per comparison metric, built by
+    company_profile/formulas.py from the SAME rows and live rates as the table.
+    test_formulas.py proves each tree's result equals _company_metrics."""
+    from company_profile.formulas import Params, build_formula_trees
+    keys = latest.keys() if hasattr(latest, "keys") else ()
+    rf_capm, erp = _sector_wacc_params()
+    params = Params(
+        rf_capm=rf_capm, erp=erp, rf_growth=_live_rf(),
+        currency=(latest["Reported Currency"] if "Reported Currency" in keys else None) or "USD",
+        fiscal_year=int(latest["yr"]) if "yr" in keys else None,
+        prior_year=(int(prior["yr"]) if prior is not None and "yr" in prior.keys() else None),
+        sector=latest["sec"] if "sec" in keys else None,
+        ttm_overlay=bool(isinstance(latest, dict) and latest.get("_ttm_overlay")),
+        beta_min=_SECTOR_BETA_MIN, beta_max=_SECTOR_BETA_MAX,
+        nim_materiality=_NIM_MATERIALITY, nim_funding_min=_NIM_FUNDING_MIN,
+        nim_leverage_min=_NIM_LEVERAGE_MIN,
+    )
+    return build_formula_trees(_spread_raw_values(latest, prior), params)
+
+
+def _spread_company_inputs(latest: Any, prior: Any | None) -> dict[str, Any]:
+    """The company's own input values for the spread metrics: the stored lines
+    _company_metrics reads plus its derived terms. No new arithmetic."""
+    values = _spread_raw_values(latest, prior)
     keys = latest.keys() if hasattr(latest, "keys") else ()
     return {
         "fiscalYear": int(latest["yr"]) if "yr" in keys else None,
@@ -7406,6 +7433,11 @@ def _spreads_payload(tk: str) -> dict[str, Any]:
             table["metricInputs"] = {
                 k: list(v) for k, v in _SPREAD_METRIC_INPUTS.items() if k in table["metrics"]
             }
+            try:
+                trees = _spread_formula_trees(latest, prior)
+                table["formulas"] = {k: v for k, v in trees.items() if k in table["metrics"]}
+            except Exception as exc:  # noqa: BLE001 — the inputs list still stands
+                log.warning("[api] spreads formulas for %s failed: %s", tk, exc)
         history = build_spread_history(tk, peer_history, group_members)
         # The table's latest values use live market caps (and the TTM overlay
         # when on); the history re-runs stored rows. For the company's latest

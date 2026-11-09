@@ -6,6 +6,7 @@
 // per-(company, metric) series are not part of the numbered definition system.
 
 import type { DefinitionSeries } from "./individualSeries";
+import type { FormulaNode } from "./formulaTree";
 import type { SectionKey } from "./types";
 
 /** Where a definition's Part 9 questions should save their answers. Supplied by
@@ -41,6 +42,9 @@ export interface DefinitionCalculation {
   rows: { label: string; value: string }[];
   result: { label: string; value: string };
   note?: string;
+  /** The metric's formula tree (Learn slice A2). When present the panel draws
+   *  it instead of the flat input rows. */
+  tree?: FormulaNode;
 }
 
 let open: OpenDefinition | null = null;

@@ -19,6 +19,7 @@ import { splitSurfaceDefinition } from "../../lib/definitionQuestions";
 import { getPageAiContext } from "../../lib/aiContextStore";
 import { cn } from "../../lib/cn";
 import { DefinitionChart } from "./DefinitionChart";
+import { FormulaTree } from "./FormulaTree";
 import { HelpBadge } from "../onboarding/HelpBadge";
 
 interface DefinitionPanelProps {
@@ -311,6 +312,9 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                 {calculation && (
                   <div className="mb-5 pb-5 border-b border-gold/10">
                     <p className="label mb-2.5">{calculation.heading}</p>
+                    {calculation.tree ? (
+                      <FormulaTree root={calculation.tree} />
+                    ) : (
                     <dl className="space-y-1.5">
                       {calculation.rows.map((r) => (
                         <div key={r.label} className="flex items-baseline justify-between gap-3">
@@ -323,6 +327,7 @@ export function DefinitionPanel({ seriesIndex, metricBlocks, recessionBands = []
                         <dd className="font-mono text-[0.8rem] tabular-nums text-gold">{calculation.result.value}</dd>
                       </div>
                     </dl>
+                    )}
                     {calculation.note && (
                       <p className="mt-2.5 text-[0.65rem] leading-relaxed text-white/35">{calculation.note}</p>
                     )}

@@ -12,6 +12,7 @@ import type { ConnectionsData, SectorBlock } from "../connectionsTypes";
 import type { GroupMapData, ProfitPoolData, ValueSystemData } from "../groupMapApi";
 import type { IndustryStructure } from "../industryStructureApi";
 import type { SectionData, SectorMetricsData } from "../types";
+import type { FormulaNode } from "../formulaTree";
 
 /** The reader's stage, which decides how far down the block reaches. */
 export type StageKind = "credit" | "sector" | "industry" | "comparative" | "company";
@@ -148,6 +149,8 @@ export interface SpreadsData {
   };
   /** metric key -> the `inputs.values` names its formula reads, in order. */
   metricInputs?: Record<string, string[]>;
+  /** metric key -> its formula tree (Learn slice A2); absent on older payloads. */
+  formulas?: Record<string, FormulaNode>;
   /** metric key -> the company's last years with the industry and group medians,
    *  same display units and same median rule as the latest table. */
   history?: Record<string, SpreadHistoryPoint[]>;

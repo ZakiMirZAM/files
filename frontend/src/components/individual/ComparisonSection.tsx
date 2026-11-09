@@ -95,11 +95,13 @@ function calculationFor(p: SpreadsData, key: string, company: string): Definitio
   const names = p.metricInputs?.[key];
   if (!m || !names || !p.inputs) return undefined;
   const { values, currency, fiscalYear } = p.inputs;
+  const tree = p.formulas?.[key];
   return {
-    heading: `${company}'s inputs`,
+    heading: tree ? `How ${company}'s ${m.label} is calculated` : `${company}'s inputs`,
     rows: names.map((n) => ({ label: INPUT_LABELS[n] ?? n, value: formatInput(n, values[n], currency) })),
     result: { label: m.label, value: formatSectorValue(m.company, unitOf(m.unit)) },
     note: `Fiscal year ${fiscalYear ?? "n/a"}, amounts in ${currency}.`,
+    tree,
   };
 }
 
