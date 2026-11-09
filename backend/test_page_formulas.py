@@ -137,6 +137,24 @@ def test_blank_latest_year_falls_back_to_the_prior_year():
 
 
 @pytest.mark.parametrize("ticker", TICKERS)
+def test_dcf_roic_build_reproduces_the_dcf_roic(ticker):
+    """The DCF section's ROIC tree is drawn from roicBuild; its pieces must give
+    exactly the ROIC the forecast used, or the build is not sent at all."""
+    rows = _rows(ticker)
+    f = ia.compute_forecast(rows, beta=1.0, rf=0.043, erp=0.05) or {}
+    a = f.get("assumptions") or {}
+    rb = a.get("roicBuild")
+    if rb is None:
+        pytest.skip(f"{ticker}: no valuation ROIC build")
+    rebuilt = rb["adjustedOperatingIncome"] * (1 - rb["taxRate"]) / rb["capital"]
+    assert _close(rebuilt, rb["roic"]), (ticker, rebuilt, rb["roic"])
+    # assumptions["roic"] travels rounded to 4 decimals.
+    assert abs(rb["roic"] - a["roic"]) <= 5e-5, (ticker, rb["roic"], a["roic"])
+    base = rb["equity"] + rb["debt"] - (rb["cash"] if rb["cashSubtracted"] else 0.0)
+    assert _close(base, rb["capitalBase"]), (ticker, base, rb["capitalBase"])
+
+
+@pytest.mark.parametrize("ticker", TICKERS)
 def test_every_tree_has_a_formula(ticker):
     _rows_, _hist, trees = _trees(ticker)
     for group in ("history", "metrics"):

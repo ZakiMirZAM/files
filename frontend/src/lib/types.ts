@@ -264,6 +264,23 @@ export type VerticalTable = Record<string, Record<string, number>>;
 
 // ── Forward FCFF forecast ─────────────────────────
 
+/** The valuation ROIC's pieces (individualanalysis._valuation_roic_parts). */
+export interface RoicBuild {
+  operatingIncome: number | null;
+  equity: number | null;
+  debt: number;
+  cash: number;
+  capitalBase: number | null;
+  cashSubtracted: boolean;
+  rdAdded: number | null;
+  rdAmortization: number | null;
+  researchAsset: number | null;
+  taxRate: number;
+  adjustedOperatingIncome: number | null;
+  capital: number | null;
+  roic: number | null;
+}
+
 export interface ForecastAssumptions {
   horizonYears: number;
   baseRevenue: number | null;
@@ -273,6 +290,8 @@ export interface ForecastAssumptions {
   operatingMarginTarget: number | null;
   taxRate: number;
   roic: number | null;
+  /** Learn slice A3: the pieces of `roic` (damodaran engine only). */
+  roicBuild?: RoicBuild | null;
   wacc: number;
   growthMethod?: string;
   cash?: number | null;

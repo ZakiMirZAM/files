@@ -1,7 +1,11 @@
 import { type ReactNode } from "react";
 import { BookOpen } from "lucide-react";
 import { resolveDefNumber } from "../../lib/individualDefinitions";
-import { openDefinition } from "../../lib/definitionPanelStore";
+import {
+  openDefinition,
+  openDefinitionSeries,
+  type DefinitionCalculation,
+} from "../../lib/definitionPanelStore";
 import { cn } from "../../lib/cn";
 
 // Definitions now open in the single sidebar panel (DefinitionPanel), mounted
@@ -93,6 +97,9 @@ interface MetricTermProps {
   asSpan?: boolean;
   className?: string;
   children?: ReactNode;
+  /** Learn slice A3: when given, the click opens the definition WITH this
+   *  calculation (a formula tree for this exact figure) above the text. */
+  calculation?: DefinitionCalculation;
 }
 
 /**
@@ -106,6 +113,7 @@ export function MetricTerm({
   asSpan = false,
   className,
   children,
+  calculation,
 }: MetricTermProps) {
   const number = resolve(metric);
   if (number == null) return <span className={className}>{children ?? metric}</span>;
@@ -116,7 +124,8 @@ export function MetricTerm({
     className,
   );
   const tooltip = `What is ${metric}? Click to open the definition`;
-  const activate = () => requestDefinition(number);
+  const activate = () =>
+    calculation ? openDefinitionSeries({ number, calculation }) : requestDefinition(number);
 
   if (asSpan) {
     return (

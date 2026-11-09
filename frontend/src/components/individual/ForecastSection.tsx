@@ -13,6 +13,14 @@ import { formatCurrency, formatNumber, formatPerShare } from "../../lib/format";
 import { cn } from "../../lib/cn";
 import { Scale, AlertTriangle } from "lucide-react";
 import { DefinitionLink, MetricTerm } from "./DefinitionsBlock";
+import type { DefinitionCalculation } from "../../lib/definitionPanelStore";
+import type { FormulaNode } from "../../lib/formulaTree";
+import {
+  dcfCostOfDebtTree,
+  dcfCostOfEquityTree,
+  dcfRoicTree,
+  dcfWaccTree,
+} from "../../lib/dcfFormulas";
 import { StageToggle, useActiveVariant } from "./StageToggle";
 import { NextTwoYearsSection } from "./NextTwoYearsSection";
 import { QualitativeBlock } from "../QualitativeBlock";
@@ -56,6 +64,16 @@ const MODES: Array<{ mode: StoryMode; label: string }> = [
 ];
 
 const money = (v: number | null | undefined): string => (v == null ? "n/a" : formatCurrency(v));
+
+/** A tile's formula tree, in the shape the definition sidebar draws (slice A3). */
+function treeCalc(heading: string, tree: FormulaNode): DefinitionCalculation {
+  return {
+    heading: `How the ${heading} is calculated`,
+    rows: [],
+    result: { label: tree.name, value: tree.display },
+    tree,
+  };
+}
 const perShare = (v: number | null | undefined): string => formatPerShare(v);
 const rate = (v: number | null | undefined, digits = 3): string => (v == null ? "n/a" : `${(v * 100).toFixed(digits)}%`);
 
@@ -256,7 +274,10 @@ function ForecastView({
     "text-loss-strong";
   const hasStageMeta = viewRows.length > 0 && viewRows[0].phase != null;
 
-  const assumptions: Array<{ k: string; v: string }> = [
+  // Learn slice A3: the DCF's own ROIC and WACC open their formula trees.
+  const roicCalc = a.roicBuild ? treeCalc("ROIC (valuation)", dcfRoicTree(a.roicBuild, money)) : undefined;
+  const waccCalc = f.waccBuild ? treeCalc("WACC (valuation)", dcfWaccTree(f.waccBuild, money)) : undefined;
+  const assumptions: Array<{ k: string; v: string; calc?: DefinitionCalculation }> = [
     { k: "Horizon", v: `${a.horizonYears} yrs` },
     // revenueGrowthInitial is the growth that drives the forecast; its source
     // and the stable rate it fades to are in the Growth Used panel below.
@@ -269,8 +290,8 @@ function ForecastView({
         ]
       : []),
     { k: "Tax rate (effective)", v: rate(a.taxRate) },
-    { k: "ROIC", v: rate(a.roic) },
-    { k: "WACC", v: rate(a.wacc) },
+    { k: "ROIC", v: rate(a.roic), calc: roicCalc },
+    { k: "WACC", v: rate(a.wacc), calc: waccCalc },
     { k: "Net debt", v: money(a.netDebt) },
     { k: "Diluted shares", v: a.dilutedShares == null ? "n/a" : formatNumber(a.dilutedShares) },
     { k: "Exit P/FCF", v: a.exitPfcfMultiple == null ? "n/a" : `${a.exitPfcfMultiple.toFixed(3)}x` },
@@ -333,9 +354,9 @@ function ForecastView({
 
       {/* Assumptions */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-        {assumptions.map(({ k, v }) => (
+        {assumptions.map(({ k, v, calc }) => (
           <div key={k} className="panel-soft px-3 py-2.5">
-            <p className="text-[0.65rem] uppercase tracking-wider text-white/40"><MetricTerm metric={k} asSpan /></p>
+            <p className="text-[0.65rem] uppercase tracking-wider text-white/40"><MetricTerm metric={k} asSpan calculation={calc} /></p>
             <p className="font-mono text-[0.8rem] text-white/85 mt-0.5">{v}</p>
           </div>
         ))}
@@ -701,18 +722,22 @@ function WaccBuildPanel({ build: b, location: loc }: { build: WaccBuild; locatio
     : b.erpMethod === "fixed_fallback"
       ? "Equity risk premium (anchor)"
       : "Equity risk premium";
-  const tiles: { k: string; v: string; hi?: boolean }[] = [
+  const tiles: { k: string; v: string; hi?: boolean; calc?: DefinitionCalculation }[] = [
     { k: betaLabel, v: b.beta == null ? "n/a" : b.beta.toFixed(3) },
     { k: "Risk-free (10Y)", v: rate(b.riskFreeRate) },
     { k: erpLabel, v: rate(b.equityRiskPremium) },
     ...(loc?.country && loc.countryRiskPremium
       ? [{ k: "Country risk premium", v: rate(loc.countryRiskPremium) }]
       : []),
-    { k: "Cost of equity", v: rate(b.costOfEquity) },
-    { k: "Cost of debt (pre→after)", v: `${rate(b.costOfDebtPretax)} → ${rate(b.costOfDebtAfterTax)}` },
+    { k: "Cost of equity", v: rate(b.costOfEquity), calc: treeCalc("Cost of equity (valuation)", dcfCostOfEquityTree(b)) },
+    {
+      k: "Cost of debt (pre→after)",
+      v: `${rate(b.costOfDebtPretax)} → ${rate(b.costOfDebtAfterTax)}`,
+      calc: b.costOfDebtAfterTax == null ? undefined : treeCalc("Cost of debt (valuation)", dcfCostOfDebtTree(b)),
+    },
     { k: "Interest coverage", v: b.interestCoverage == null ? "n/a" : `${b.interestCoverage.toFixed(3)}x` },
     { k: "Weights (E / D)", v: `${(b.weightEquity * 100).toFixed(3)}% / ${(b.weightDebt * 100).toFixed(3)}%` },
-    { k: "WACC", v: rate(b.wacc), hi: true },
+    { k: "WACC", v: rate(b.wacc), hi: true, calc: treeCalc("WACC (valuation)", dcfWaccTree(b, money)) },
   ];
   return (
     <div className="panel-soft p-4 mb-6">
@@ -728,7 +753,7 @@ function WaccBuildPanel({ build: b, location: loc }: { build: WaccBuild; locatio
         </p>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-        {tiles.map(({ k, v, hi }) => (
+        {tiles.map(({ k, v, hi, calc }) => (
           <div
             key={k}
             className={cn(
@@ -736,7 +761,7 @@ function WaccBuildPanel({ build: b, location: loc }: { build: WaccBuild; locatio
               hi && "border-gold/40 bg-gold/[0.06]",
             )}
           >
-            <p className="text-[0.65rem] uppercase tracking-wider text-white/40 leading-tight"><MetricTerm metric={k} asSpan /></p>
+            <p className="text-[0.65rem] uppercase tracking-wider text-white/40 leading-tight"><MetricTerm metric={k} asSpan calculation={calc} /></p>
             <p className="font-mono text-[0.78rem] text-white/85 mt-0.5">{v}</p>
           </div>
         ))}

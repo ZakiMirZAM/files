@@ -1425,22 +1425,66 @@ def _valuation_capital(row: sqlite3.Row) -> Optional[float]:
     return None
 
 
+def _valuation_roic_parts(rows: list[sqlite3.Row], i: int, rnd_life: Optional[int]) -> dict:
+    """The pieces of the valuation ROIC for the year at index i, so the page can
+    show how it is built (Learn slice A3). ``roic`` is None when there is no
+    operating income or no positive capital base. _valuation_roic returns
+    exactly ``parts["roic"]``, so the pieces can never drift from the number."""
+    row = rows[i]
+    op = _row_val(row, "Operating Income")
+    eq = _row_val(row, "Total Stockholders Equity")
+    if eq is None:
+        eq = _row_val(row, "Total Equity")
+    debt = _row_val(row, "Total Debt") or 0.0
+    cash = _row_val(row, "Cash And Short Term Investments")
+    if cash is None:
+        cash = _row_val(row, "Cash And Cash Equivalents") or 0.0
+    capital = _valuation_capital(row)
+    parts: dict = {
+        "operatingIncome": op, "equity": eq, "debt": debt, "cash": cash,
+        "capitalBase": capital,
+        "cashSubtracted": (capital is not None and eq is not None
+                           and abs(capital - (eq + debt - cash)) < 1e-6),
+        "rdAdded": None, "rdAmortization": None, "researchAsset": None,
+        "taxRate": _effective_tax_rate(row), "adjustedOperatingIncome": None,
+        "capital": None, "roic": None,
+    }
+    if op is None or capital is None:
+        return parts
+    adj_op, adj_cap = op, capital
+    if rnd_life:
+        rd_newest = _rd_newest_first(rows, i)
+        if rd_newest[0] is not None and rd_newest[0] > 0:
+            amort = _research_amortization(rd_newest, rnd_life)
+            asset = _research_asset(rd_newest, rnd_life)
+            parts.update(rdAdded=rd_newest[0], rdAmortization=amort, researchAsset=asset)
+            adj_op = op + rd_newest[0] - amort
+            adj_cap = capital + asset
+    parts.update(adjustedOperatingIncome=adj_op, capital=adj_cap,
+                 roic=adj_op * (1.0 - parts["taxRate"]) / adj_cap)
+    return parts
+
+
+def _roic_build_for(rows: list[sqlite3.Row], rnd_life: Optional[int],
+                    roic_used: Optional[float]) -> Optional[dict]:
+    """The latest year's valuation-ROIC pieces, or None when they do not give
+    the ROIC the forecast actually used (never show a build for another number)."""
+    try:
+        parts = _valuation_roic_parts(rows, len(rows) - 1, rnd_life)
+    except Exception:  # noqa: BLE001 — a display aid, never a blocker
+        return None
+    r = parts.get("roic")
+    if r is None or roic_used is None or abs(r - roic_used) > 1e-9:
+        return None
+    return {k: (round(v, 6) if isinstance(v, float) else v) for k, v in parts.items()}
+
+
 def _valuation_roic(rows: list[sqlite3.Row], i: int, rnd_life: Optional[int]) -> Optional[float]:
     """One ROIC definition for the valuation: NOPAT / valuation capital for the
     year at index i, with R&D capitalized when ``rnd_life`` is given (operating
     income gains this year's R&D less amortization; capital gains the research
     asset). The vendor ROIC column is never used here."""
-    row = rows[i]
-    op = _row_val(row, "Operating Income")
-    capital = _valuation_capital(row)
-    if op is None or capital is None:
-        return None
-    if rnd_life:
-        rd_newest = _rd_newest_first(rows, i)
-        if rd_newest[0] is not None and rd_newest[0] > 0:
-            op = op + rd_newest[0] - _research_amortization(rd_newest, rnd_life)
-            capital = capital + _research_asset(rd_newest, rnd_life)
-    return op * (1.0 - _effective_tax_rate(row)) / capital
+    return _valuation_roic_parts(rows, i, rnd_life)["roic"]
 
 
 def _clean_reinvestment_rate(rows: list[sqlite3.Row], rnd_life: Optional[int],
@@ -2780,6 +2824,10 @@ def compute_forecast(
             "operatingMarginTarget": round(margin_tgt, 4) if margin_tgt is not None else None,
             "taxRate": round(tax, 4),
             "roic": round(roic, 4) if roic is not None else None,
+            # Learn slice A3: the pieces of the valuation ROIC above, sent only
+            # when they produce exactly that ROIC. Absent under legacy, so the
+            # legacy output stays byte-identical (dcf_snapshot.py --compare).
+            **({"roicBuild": _roic_build_for(rows, rnd_life, roic)} if _engine != "legacy" else {}),
             "wacc": round(wacc, 4),
             "growthMethod": reconcile_note,
             "reinvestmentMethod": reinvest_method,
