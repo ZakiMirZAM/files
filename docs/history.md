@@ -40,3 +40,15 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     (Who, What, Where, When, Why, How, Significance, Assumptions, one labelled paragraph each) and
     returns `{answer, sources, builtOnReader}`. `STORY_SYSTEM` gains a ninth row, `stages` (1, 2 or
     3). ASK, EXPLAIN and DEFINE prompt texts unchanged; both story hashes re-recorded.
+  - **2026-11-08** (Learn A1, branch `feat/learn-chat-sidebar`): answers carry no citations and no
+    headings (owner: the RAG is a database of information, not evidence to name). `pick_model`
+    accepts only `"haiku"` (maps to `claude-haiku-5-5`) for the chat sidebar's Opus/Haiku switch;
+    every other value keeps `ASK_MODEL`. Hashes re-recorded.
+  - **2026-11-10** (Learn A4-A6, same branch): owner approved the three Learn prompts in
+    `rag/learn.py` as written: `LEARN_CARDS_SYSTEM` (`/learn/cards`, vault then web then general
+    knowledge, the owner's flashcard style, "Beyond the text," for the model's own analysis),
+    `LEARN_QUIZ_SYSTEM` (`/learn/quiz`, four-choice questions with real-mistake distractors and a
+    model answer for short answers) and `LEARN_GRADE_SYSTEM` (`/learn/grade`, no tools, score 1,
+    0.5 or 0 with feedback to "you"). All three run on Opus 5.5 at `medium` effort and honour the
+    Haiku switch. `server.py` only imports `learn`, merges its effort labels and adds three routes;
+    the prompts are module constants pinned in `LEARN_EXPECTED` in `rag/test_prompts.py`.
