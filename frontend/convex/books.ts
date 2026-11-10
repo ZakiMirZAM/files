@@ -127,24 +127,33 @@ export const discardFile = mutation({
   },
 });
 
+/**
+ * A book is either an uploaded copy (`storageId`) or a PDF in the owner's local
+ * Books folder (`localPath`, the local bookshelf); exactly one of the two.
+ */
 export const createBook = mutation({
   args: {
     title: v.string(),
     fileName: v.string(),
-    storageId: v.id("_storage"),
+    storageId: v.optional(v.id("_storage")),
+    localPath: v.optional(v.string()),
     cleanStorageId: v.optional(v.id("_storage")),
     pageCount: v.number(),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
-    await requireOwnedFile(ctx, userId, args.storageId);
+    const localPath = args.localPath?.trim().slice(0, 1000);
+    if ((args.storageId === undefined) === !localPath) {
+      throw new Error("A book needs either an uploaded file or a local path");
+    }
+    if (args.storageId) await requireOwnedFile(ctx, userId, args.storageId);
     if (args.cleanStorageId) await requireOwnedFile(ctx, userId, args.cleanStorageId);
     const now = Date.now();
     return await ctx.db.insert("learnBooks", {
       userId,
       title: cleanTitle(args.title),
       fileName: args.fileName.slice(0, 300),
-      storageId: args.storageId,
+      ...(args.storageId ? { storageId: args.storageId } : { localPath }),
       ...(args.cleanStorageId ? { cleanStorageId: args.cleanStorageId } : {}),
       pageCount: Math.max(0, Math.floor(args.pageCount)),
       noteCount: 0,
@@ -217,6 +226,7 @@ export const listBooks = query({
         _id: b._id,
         title: b.title,
         fileName: b.fileName,
+        localPath: b.localPath ?? null,
         hasClean: b.cleanStorageId !== undefined,
         pageCount: b.pageCount,
         noteCount: b.noteCount,
@@ -276,7 +286,7 @@ export const noteImageUrl = query({
 });
 
 /**
- * Deletes the book and both PDFs now; its notes and their pictures go in
+ * Deletes the book and its uploaded PDFs now; its notes and their pictures go in
  * batches (a long book can have many) through a scheduled follow-up.
  */
 export const deleteBook = mutation({
@@ -284,7 +294,8 @@ export const deleteBook = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
     const book = await requireBook(ctx, args.bookId, userId);
-    await deleteOwnedFile(ctx, userId, book.storageId);
+    // A local-bookshelf book has no uploaded copy; its PDF stays in the Books folder.
+    if (book.storageId) await deleteOwnedFile(ctx, userId, book.storageId);
     if (book.cleanStorageId) await deleteOwnedFile(ctx, userId, book.cleanStorageId);
     await ctx.db.delete(args.bookId);
     await deleteNotesBatch(ctx, userId, args.bookId);

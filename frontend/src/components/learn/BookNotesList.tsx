@@ -6,11 +6,14 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MARK_KIND_LABEL, MARK_KINDS, normRect, type MarkKind, type Rect } from "../../lib/bookMarks/types";
+import { localBookUrl } from "../../lib/localBooks";
 import { PdfViewer } from "./PdfViewer";
 
 export interface BookNotesListProps {
   bookId: Id<"learnBooks">;
   title: string;
+  /** Set for a local-bookshelf book: the PDF is read from the Books folder. */
+  localPath?: string | null;
   onBack: () => void;
 }
 
@@ -24,7 +27,7 @@ function parseRect(s: string | undefined): Rect | null {
   }
 }
 
-export function BookNotesList({ bookId, title, onBack }: BookNotesListProps) {
+export function BookNotesList({ bookId, title, localPath, onBack }: BookNotesListProps) {
   const notes = useQuery(api.books.bookNotes, { bookId });
   const deleteBook = useMutation(api.books.deleteBook);
   const [kind, setKind] = useState<MarkKind | "all">("all");
@@ -32,7 +35,8 @@ export function BookNotesList({ bookId, title, onBack }: BookNotesListProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const fileUrl = useQuery(api.books.bookFileUrl, open ? { bookId } : "skip");
+  const storedUrl = useQuery(api.books.bookFileUrl, open && !localPath ? { bookId } : "skip");
+  const fileUrl = localPath ? localBookUrl(localPath) : storedUrl;
 
   const counts = useMemo(() => {
     const c: Partial<Record<MarkKind, number>> = {};

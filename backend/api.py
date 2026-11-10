@@ -300,6 +300,8 @@ app.add_middleware(
     allow_origin_regex=None if _allowed_origins else r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    # The local bookshelf's PDF reader asks for byte ranges and must see these.
+    expose_headers=["Accept-Ranges", "Content-Range", "Content-Length"],
 )
 
 # ── Unhandled-error handler (must exist for CORS to work on 500s) ────────────
@@ -7707,3 +7709,48 @@ async def learn_import_endpoint(request: Request) -> dict[str, Any]:
     except learn_import.ImportError_ as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"cards": cards}
+
+
+# ── Learn: local bookshelf (local site only) ─────────────────────────────────
+# Lists and serves the PDFs in the owner's Books folder so the local site can
+# open any book without uploading it. Paths are checked in local_books.py.
+# Three guards, because the production backend runs on this same PC behind the
+# Cloudflare tunnel: (1) off in production, (2) off unless the local launcher
+# sets LOCAL_BOOKS=1, so a backend started without ENV=production still serves
+# nothing, (3) only direct loopback requests: anything that came through
+# nginx/the tunnel (forwarding headers) or names a non-local Host (DNS
+# rebinding) gets 404.
+_LOCAL_HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1)(:\d{1,5})?$", re.IGNORECASE)
+_FORWARD_HEADERS = ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "cf-ray", "forwarded")
+
+
+def _local_books_root(request: Request):
+    import local_books  # noqa: PLC0415
+
+    if IS_PRODUCTION or os.environ.get("LOCAL_BOOKS", "").strip() != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    if any(h in request.headers for h in _FORWARD_HEADERS) or not _LOCAL_HOST_RE.match(
+        request.headers.get("host", "")
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+    root = local_books.books_root()
+    if root is None:
+        raise HTTPException(status_code=404, detail="No Books folder on this computer.")
+    return local_books, root
+
+
+@app.get("/api/learn/local-books")
+def local_books_list(request: Request) -> dict[str, Any]:
+    local_books, root = _local_books_root(request)
+    return {"books": local_books.list_books(root)}
+
+
+@app.get("/api/learn/local-books/file")
+def local_books_file(request: Request, id: str = Query(..., max_length=1000)):  # noqa: A002
+    from fastapi.responses import FileResponse  # noqa: PLC0415
+
+    local_books, root = _local_books_root(request)
+    path = local_books.resolve_book(root, id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return FileResponse(path, media_type="application/pdf", headers={"Cache-Control": "private, max-age=3600"})

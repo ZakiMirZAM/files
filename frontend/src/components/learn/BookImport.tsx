@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { closePdf, openPdf, type PdfDoc } from "../../lib/bookMarks/pdfjs";
 import { scanBook, ScanCancelled, type MarkWithPicture, type ScanResult } from "../../lib/bookMarks/scan";
+import { localBookUrl, type LocalBook } from "../../lib/localBooks";
 
 const NOTES_PER_SAVE = 25;
 const PARALLEL_UPLOADS = 4;
@@ -54,9 +55,11 @@ function pageList(pages: number[]): string {
 export interface BookImportProps {
   onDone: (bookId: Id<"learnBooks">) => void;
   onClose: () => void;
+  /** A book from the local bookshelf: read from the Books folder, never uploaded. */
+  localBook?: LocalBook;
 }
 
-export function BookImport({ onDone, onClose }: BookImportProps) {
+export function BookImport({ onDone, onClose, localBook }: BookImportProps) {
   const generateUploadUrl = useMutation(api.books.generateUploadUrl);
   const createBook = useMutation(api.books.createBook);
   const addNotes = useMutation(api.books.addNotes);
@@ -66,7 +69,7 @@ export function BookImport({ onDone, onClose }: BookImportProps) {
 
   const [marked, setMarked] = useState<File | null>(null);
   const [clean, setClean] = useState<File | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(() => (localBook ? titleFromFile(localBook.name) : ""));
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const abortRef = useRef<AbortController | null>(null);
 
@@ -126,7 +129,8 @@ export function BookImport({ onDone, onClose }: BookImportProps) {
   }
 
   async function start() {
-    if (!marked) return;
+    if (!marked && !localBook) return;
+    const fileName = localBook ? localBook.name : marked!.name;
     const ac = new AbortController();
     abortRef.current = ac;
     let bookId: Id<"learnBooks"> | null = null;
@@ -136,23 +140,33 @@ export function BookImport({ onDone, onClose }: BookImportProps) {
     const status = (s: string) => setPhase({ kind: "running", status: s, page: 0, pageCount: 0, found: 0 });
     try {
       status("Opening the PDF");
-      markedDoc = await openPdf({ data: new Uint8Array(await marked.arrayBuffer()) });
+      let markedBytes: ArrayBuffer;
+      if (localBook) {
+        const res = await fetch(localBookUrl(localBook.id), { signal: ac.signal });
+        if (!res.ok) throw new Error("The book could not be read from the Books folder");
+        markedBytes = await res.arrayBuffer();
+      } else {
+        markedBytes = await marked!.arrayBuffer();
+      }
+      markedDoc = await openPdf({ data: new Uint8Array(markedBytes) });
       if (clean) cleanDoc = await openPdf({ data: new Uint8Array(await clean.arrayBuffer()) });
       if (ac.signal.aborted) throw new ScanCancelled();
 
-      status("Saving a private copy");
+      status(localBook ? "Saving the book" : "Saving a private copy");
+      // pdfIds holds only uploads: a local-bookshelf book keeps its PDF in the folder.
       const pdfIds: Id<"_storage">[] = [];
       try {
-        pdfIds.push(await upload(marked, "application/pdf", ac.signal));
-        if (clean) pdfIds.push(await upload(clean, "application/pdf", ac.signal));
-        const [storageId, cleanStorageId] = pdfIds;
+        const storageId = marked && !localBook ? await upload(marked, "application/pdf", ac.signal) : undefined;
+        if (storageId) pdfIds.push(storageId);
+        const cleanStorageId = clean ? await upload(clean, "application/pdf", ac.signal) : undefined;
+        if (cleanStorageId) pdfIds.push(cleanStorageId);
         const pageCount = markedDoc.numPages;
         bookId = await withRetry(
           () =>
             createBook({
-              title: title.trim() || titleFromFile(marked.name),
-              fileName: marked.name,
-              storageId,
+              title: title.trim() || titleFromFile(fileName),
+              fileName,
+              ...(localBook ? { localPath: localBook.id } : { storageId }),
               ...(cleanStorageId ? { cleanStorageId } : {}),
               pageCount,
             }),
@@ -254,24 +268,35 @@ export function BookImport({ onDone, onClose }: BookImportProps) {
 
   return (
     <div className="panel p-4 space-y-4">
-      <p className="text-sm text-white/70">Add the marked PDF. If your app flattens marks, also add the clean original.</p>
+      <p className="text-sm text-white/70">
+        {localBook
+          ? "This book is read from your Books folder and is not uploaded. If your app flattens marks, also add the clean original."
+          : "Add the marked PDF. If your app flattens marks, also add the clean original."}
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="panel-soft p-3 block cursor-pointer min-h-[44px]">
-          <span className="label block mb-1">Marked PDF</span>
-          <span className="text-sm text-white/80 break-all">{marked ? marked.name : "Choose a file"}</span>
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            className="sr-only"
-            disabled={running}
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              setMarked(f);
-              if (f && !title) setTitle(titleFromFile(f.name));
-            }}
-          />
-        </label>
+        {localBook ? (
+          <div className="panel-soft p-3 min-h-[44px]">
+            <span className="label block mb-1">Marked PDF</span>
+            <span className="text-sm text-white/80 break-all">{localBook.name}</span>
+          </div>
+        ) : (
+          <label className="panel-soft p-3 block cursor-pointer min-h-[44px]">
+            <span className="label block mb-1">Marked PDF</span>
+            <span className="text-sm text-white/80 break-all">{marked ? marked.name : "Choose a file"}</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              disabled={running}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setMarked(f);
+                if (f && !title) setTitle(titleFromFile(f.name));
+              }}
+            />
+          </label>
+        )}
         <label className="panel-soft p-3 block cursor-pointer min-h-[44px]">
           <span className="label block mb-1">Clean original (optional)</span>
           <span className="text-sm text-white/80 break-all">{clean ? clean.name : "Choose a file"}</span>
@@ -326,7 +351,7 @@ export function BookImport({ onDone, onClose }: BookImportProps) {
           </button>
         ) : (
           <>
-            <button type="button" className="btn-gold" disabled={!marked} onClick={() => void start()}>
+            <button type="button" className="btn-gold" disabled={!marked && !localBook} onClick={() => void start()}>
               Find my notes
             </button>
             <button type="button" className="btn-ghost" onClick={onClose}>

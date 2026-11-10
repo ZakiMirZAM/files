@@ -155,12 +155,15 @@ const applicationTables = {
   }).index("by_user_test", ["userId", "testId"]),
 
   // A7: a book the user imported. The marked copy is kept privately; the clean
-  // original is optional (needed only when the marks are flattened).
+  // original is optional (needed only when the marks are flattened). A book from
+  // the local bookshelf has no copy: `localPath` names the PDF in the owner's
+  // Books folder, which only the local site can open.
   learnBooks: defineTable({
     userId: v.id("users"),
     title: v.string(),
     fileName: v.string(),
-    storageId: v.id("_storage"),
+    storageId: v.optional(v.id("_storage")),
+    localPath: v.optional(v.string()),
     cleanStorageId: v.optional(v.id("_storage")),
     pageCount: v.number(),
     noteCount: v.number(),
