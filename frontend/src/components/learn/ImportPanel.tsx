@@ -122,7 +122,7 @@ export function ImportPanel({ onClose, onImported }: ImportPanelProps) {
       </div>
 
       <p className="text-sm text-white/55">
-        CSV, TSV, an Anki text export (.txt), a spreadsheet (.xlsx) or an Anki deck (.apkg, up to 255 KB).
+        CSV, TSV, an Anki text export (.txt), a spreadsheet (.xlsx) or an Anki deck (.apkg, up to 25 MB).
       </p>
 
       <label className="btn-outline min-h-[44px] cursor-pointer w-fit">

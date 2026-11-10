@@ -7671,17 +7671,19 @@ def profit_pool_endpoint(
 
 # ── Learn: flashcard import (slice A4) ───────────────────────────────────────
 # Parses an uploaded .apkg or .xlsx into cards and returns them; stores nothing.
-# CSV/TSV/Anki text are parsed in the browser. nginx caps /api bodies at 256 KB
-# (deploy/nginx.conf), so the file itself is held under that here too.
-LEARN_IMPORT_MAX_BODY = 256 * 1024
-LEARN_IMPORT_MAX_FILE = 255 * 1024
+# CSV/TSV/Anki text are parsed in the browser. nginx gives this route its own
+# 26 MB body cap (deploy/nginx.conf; every other /api route stays at 256 KB), so
+# an .apkg with media fits. The file itself is held to 25 MB here.
+LEARN_IMPORT_MAX_FILE = 25 * 1024 * 1024
+LEARN_IMPORT_MAX_BODY = LEARN_IMPORT_MAX_FILE + 64 * 1024
+_LEARN_IMPORT_TOO_LARGE = "The file is too large (limit 25 MB)."
 
 
 @app.post("/api/learn/import")
 @limiter.limit("20/minute")
 async def learn_import_endpoint(request: Request) -> dict[str, Any]:
     if int(request.headers.get("content-length") or 0) > LEARN_IMPORT_MAX_BODY:
-        raise HTTPException(status_code=413, detail="The file is too large (limit 255 KB).")
+        raise HTTPException(status_code=413, detail=_LEARN_IMPORT_TOO_LARGE)
     import learn_import  # noqa: PLC0415
     try:
         # request.form() needs python-multipart; imported lazily so a missing
@@ -7695,7 +7697,7 @@ async def learn_import_endpoint(request: Request) -> dict[str, Any]:
     data = await upload.read(LEARN_IMPORT_MAX_FILE + 1)
     await upload.close()
     if len(data) > LEARN_IMPORT_MAX_FILE:
-        raise HTTPException(status_code=413, detail="The file is too large (limit 255 KB).")
+        raise HTTPException(status_code=413, detail=_LEARN_IMPORT_TOO_LARGE)
     # The parse runs in a separate process with a hard time limit
     # (learn_import.PARSE_TIMEOUT_S); this thread only waits for it, so a
     # hostile file can never stall the event loop of the single worker.

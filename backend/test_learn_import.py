@@ -280,7 +280,7 @@ def test_route_returns_cards(client):
 def test_route_errors(client):
     r = client.post("/api/learn/import", files={"file": ("deck.apkg", b"junk", "application/octet-stream")})
     assert r.status_code == 422
-    r = client.post("/api/learn/import", files={"file": ("big.xlsx", b"x" * (256 * 1024), "application/octet-stream")})
+    r = client.post("/api/learn/import", files={"file": ("big.xlsx", b"x" * (25 * 1024 * 1024 + 1), "application/octet-stream")})
     assert r.status_code == 413
     r = client.post("/api/learn/import", data={"nothing": "here"})
     assert r.status_code == 400

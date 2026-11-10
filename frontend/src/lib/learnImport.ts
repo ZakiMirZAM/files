@@ -285,13 +285,13 @@ export function deckNameFromFile(name: string): string {
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:8000";
 
-/** The API's request body cap is 256 KB (deploy/nginx.conf); leave room for the form wrapper. */
-export const MAX_BACKEND_UPLOAD = 255 * 1024;
+/** /api/learn/import accepts files up to 25 MB (backend LEARN_IMPORT_MAX_FILE; nginx allows 26 MB). */
+export const MAX_BACKEND_UPLOAD = 25 * 1024 * 1024;
 
 export async function parseOnServer(file: File): Promise<ImportCard[]> {
   if (file.size > MAX_BACKEND_UPLOAD) {
     throw new Error(
-      `This file is ${Math.ceil(file.size / 1024)} KB. The limit is 255 KB. For an Anki deck, export it without media, or export "Notes in Plain Text" and import the .txt.`,
+      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is 25 MB. For an Anki deck, export it without media, or export "Notes in Plain Text" and import the .txt.`,
     );
   }
   const form = new FormData();
