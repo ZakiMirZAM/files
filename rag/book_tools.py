@@ -34,6 +34,7 @@ carries no forwarding header (nginx and the tunnel always add one).
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
 import re
 import threading
@@ -227,7 +228,6 @@ ERR_QUESTION = "question is required"
 ERR_QUESTION_LONG = "question is too long"
 ERR_BOOK = "book must be {id, pages?} naming a PDF in the Books folder"
 
-DEFAULT_BOOKS_DIR = Path.home() / "Desktop" / "Books"
 _LOCAL_HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1)(:\d{1,5})?$", re.IGNORECASE)
 _FORWARD_HEADERS = ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "cf-ray", "forwarded")
 
@@ -241,53 +241,28 @@ def local_allowed(request: web.Request) -> bool:
     return bool(_LOCAL_HOST_RE.match(request.headers.get("Host", "")))
 
 
-# --- the Books folder (same rules as backend/local_books.py) ---------------------
-def books_root() -> Path | None:
-    raw = os.environ.get("LOCAL_BOOKS_DIR", "").strip()
-    root = Path(raw) if raw else DEFAULT_BOOKS_DIR
-    try:
-        root = root.resolve(strict=True)
-    except OSError:
-        return None
-    return root if root.is_dir() else None
+# --- the Books folders: one set of rules, shared with the backend's book list ----
+# Loaded from backend/local_books.py by path (rag/ and backend/ are separate
+# processes with no shared package), so the list the page shows and the books the
+# AI can open never differ. `roots` below is that module's folder list.
+def _load_shelf_rules():
+    path = Path(__file__).resolve().parent.parent / "backend" / "local_books.py"
+    spec = importlib.util.spec_from_file_location("ife_local_books", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def _hidden(rel: Path) -> bool:
-    return any(p.startswith(".") or p in ("receipts", "review-receipts") for p in (x.lower() for x in rel.parts))
+_shelf = _load_shelf_rules()
+books_roots = _shelf.books_roots
+books_root = _shelf.books_root
+resolve_book = _shelf.resolve_book
+book_id = _shelf.book_id
 
 
-def list_pdfs(root: Path) -> list[Path]:
-    out = []
-    for p in root.rglob("*"):
-        if p.is_file() and p.suffix.lower() == ".pdf" and not _hidden(p.relative_to(root)):
-            out.append(p)
-    return sorted(out, key=lambda p: p.name.lower())
-
-
-def resolve_book(root: Path, book: str) -> Path | None:
-    """A PDF inside root, by its id (path inside the folder) or, failing that,
-    by a unique case-insensitive match of words in its file name."""
-    book = (book or "").strip()
-    if not book or len(book) > 1000 or "\x00" in book:
-        return None
-    rel = Path(book)
-    if not (rel.is_absolute() or rel.drive or ".." in rel.parts or _hidden(rel)):
-        try:
-            path = (root / rel).resolve(strict=True)
-        except OSError:
-            path = None
-        if path and path.is_relative_to(root) and path.is_file() and path.suffix.lower() == ".pdf" \
-                and not _hidden(path.relative_to(root)):
-            return path
-    words = [w for w in re.split(r"\W+", book.lower()) if w]
-    if not words:
-        return None
-    hits = [p for p in list_pdfs(root) if all(w in p.name.lower() for w in words)]
-    return hits[0] if len(hits) == 1 else None
-
-
-def book_id(root: Path, path: Path) -> str:
-    return path.relative_to(root).as_posix()
+def list_book_files(roots) -> list[Path]:
+    """Every book PDF, one per book, sorted by file name."""
+    return [path for _id, path, _size in _shelf.shelf(roots)]
 
 
 # --- page text, cached per book ----------------------------------------------------
@@ -608,9 +583,9 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         tool,
     )
 
-    def _root_or_err() -> tuple[Path | None, str | None]:
-        root = books_root()
-        return (root, None) if root else (None, "The Books folder was not found on this computer.")
+    def _root_or_err() -> tuple[list[Path] | None, str | None]:
+        roots = books_roots()
+        return (roots, None) if roots else (None, "The Books folder was not found on this computer.")
 
     def _text(s: str) -> dict:
         return {"content": [{"type": "text", "text": s}]}
@@ -635,7 +610,7 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         if err:
             return _text(err)
         words = [w for w in re.split(r"\W+", str(args.get("query") or "").lower()) if w]
-        pdfs = await asyncio.to_thread(list_pdfs, root)
+        pdfs = await asyncio.to_thread(list_book_files, root)
         hits = [p for p in pdfs if all(w in p.name.lower() for w in words)]
         if not hits:
             return _text("No book in the Books folder matches those words.")
@@ -719,8 +694,8 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         """(guidance with the book text, label) when the pages can be found, else None."""
         if not book.get("pages"):
             return None
-        root = books_root()
-        path = resolve_book(root, book["id"]) if root else None
+        roots = books_roots()
+        path = resolve_book(roots, book["id"]) if roots else None
         if path is None:
             return None
         try:
@@ -746,7 +721,7 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
     async def status(request: web.Request) -> web.Response:
         if not local_allowed(request):
             raise web.HTTPNotFound()
-        return web.json_response({"ok": books_root() is not None})
+        return web.json_response({"ok": bool(books_roots())})
 
     async def ask(request: web.Request) -> web.Response:
         if not local_allowed(request):

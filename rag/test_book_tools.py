@@ -67,7 +67,7 @@ def test_resolve_refuses(shelf, bad):
 
 
 def test_list_skips_tool_folders(shelf):
-    assert [p.name for p in book_tools.list_pdfs(shelf)] == ["Investment Valuation.pdf"]
+    assert [p.name for p in book_tools.list_book_files(shelf)] == ["Investment Valuation.pdf"]
 
 
 # --- page tools --------------------------------------------------------------------

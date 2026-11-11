@@ -30,6 +30,46 @@ def test_books_root_env_and_missing(shelf, monkeypatch):
     assert local_books.books_root() == shelf.resolve()
     monkeypatch.setenv("LOCAL_BOOKS_DIR", str(shelf / "nope"))
     assert local_books.books_root() is None
+    assert local_books.books_roots() == []
+
+
+def test_default_folder_is_documents_books_books_first():
+    assert local_books.DEFAULT_BOOKS_DIRS[0].parts[-3:] == ("Documents", "books", "books")
+
+
+@pytest.fixture
+def two(tmp_path, monkeypatch):
+    main, extra = tmp_path / "main", tmp_path / "extra"
+    (main / "sub").mkdir(parents=True)
+    extra.mkdir()
+    big = b"%PDF" + b"x" * 70_000
+    (main / "CFA Volume 2.pdf").write_bytes(big)
+    (main / "sub" / "Porter.pdf").write_bytes(b"%PDF porter")
+    (extra / "CFA Volume 2 (2).pdf").write_bytes(b"%PDF copy")          # a " (2)" copy
+    (extra / "Renamed copy.pdf").write_bytes(big)                       # same size = same file
+    (extra / "porter.pdf").write_bytes(b"%PDF other")                   # same name, other case
+    (extra / "Only Here.pdf").write_bytes(b"%PDF only")
+    (extra / "Only Here (2).pdf").write_bytes(b"%PDF only 2")
+    monkeypatch.setenv("LOCAL_BOOKS_DIR", f"{main}{local_books.os.pathsep}{extra}")
+    return main.resolve(), extra.resolve()
+
+
+def test_two_folders_one_entry_per_book(two):
+    roots = local_books.books_roots()
+    assert roots == list(two)
+    assert [b["id"] for b in local_books.list_books(roots)] == ["CFA Volume 2.pdf", "@1/Only Here.pdf", "sub/Porter.pdf"]
+
+
+def test_ids_from_either_folder_resolve_and_stay_inside(two):
+    main, extra = two
+    roots = local_books.books_roots()
+    assert local_books.resolve_book(roots, "@1/Only Here.pdf") == extra / "Only Here.pdf"
+    assert local_books.resolve_book(roots, "sub/Porter.pdf") == main / "sub" / "Porter.pdf"
+    assert local_books.book_id(roots, extra / "Only Here.pdf") == "@1/Only Here.pdf"
+    # A hidden copy still opens by its id (a saved test may point at it).
+    assert local_books.resolve_book(roots, "@1/Renamed copy.pdf") == extra / "Renamed copy.pdf"
+    for bad in ("@1/../main/CFA Volume 2.pdf", "@7/Only Here.pdf", "@1/C:/Windows/win.ini"):
+        assert local_books.resolve_book(roots, bad) is None, bad
 
 
 @pytest.fixture

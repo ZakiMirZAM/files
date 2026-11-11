@@ -7731,13 +7731,13 @@ def _local_books_root(request: Request):
         request.headers.get("host", "")
     ):
         raise HTTPException(status_code=404, detail="Not found")
-    root = local_books.books_root()
-    if root is None:
+    roots = local_books.books_roots()
+    if not roots:
         raise HTTPException(status_code=404, detail="No Books folder on this computer.")
-    return local_books, root
+    return local_books, roots
 
 
 @app.get("/api/learn/local-books")
 def local_books_list(request: Request) -> dict[str, Any]:
-    local_books, root = _local_books_root(request)
-    return {"books": local_books.list_books(root)}
+    local_books, roots = _local_books_root(request)
+    return {"books": local_books.list_books(roots)}
