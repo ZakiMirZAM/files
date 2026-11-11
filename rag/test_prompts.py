@@ -516,6 +516,9 @@ def test_learn_routes_run_medium_effort():
 # Local bookshelf AI (rag/book_tools.py). Owner approval required to change.
 BOOKS_EXPECTED = {
     "LOCAL_ASK_SYSTEM": "0ab4322ffc08c77b1f7755050a8731b15c48b415d62aea6e138bcfbaf08efe2f",
+    # Learn page Socratic tutor (owner approved 2026-11-10: "use the exact skill").
+    "LOCAL_TUTOR_SYSTEM": "68a7644815d3db272dac778c1ab644721e438e8904754b13e8b7a56d0037e938",
+    "SOCRATIC_QUIZ_GUIDANCE": "22d0c361d5a1136543be370abbb0fb4695a20c5905f10805c709bcea26132969",
 }
 
 
@@ -536,6 +539,18 @@ def test_book_prompt_keeps_house_rules():
         assert ch not in text
 
 
+def test_tutor_prompt_is_the_exact_skill_then_the_local_rules():
+    import book_tools
+    head = book_tools.SOCRATIC_TUTOR_SKILL
+    assert book_tools.LOCAL_TUTOR_SYSTEM == head + "\n\n" + book_tools.TUTOR_LOCAL_RULES
+    assert head.startswith("# Socratic Tutor\n") and "maieutic" in head
+    rules = book_tools.TUTOR_LOCAL_RULES
+    assert "NO CITATIONS" in rules and "em dash" in rules.lower() and "TEST RESULTS" in rules
+    assert "Example answer:" in rules and "The reader decides when to see it" in rules  # owner rule 2026-11-10
+    for ch in ("—", "–", "“", "”"):
+        assert ch not in rules
+
+
 def test_book_routes_run_medium_effort():
-    for label in ("/local/ask", "/local/learn/cards", "/local/learn/quiz"):
+    for label in ("/local/ask", "/local/tutor", "/local/learn/cards", "/local/learn/quiz"):
         assert server.EFFORT_BY_LABEL[label] == "medium"

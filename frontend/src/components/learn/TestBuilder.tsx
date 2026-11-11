@@ -53,6 +53,8 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
   // Local site only: a book from the Books folder for the AI to read.
   const shelf = useLocalShelf();
   const [book, setBook] = useState<BookSource | null>(null);
+  // Local site only: questions in the Socratic style (predict, explain why, find the flaw).
+  const [socratic, setSocratic] = useState(false);
   const [saving, setSaving] = useState(false);
   const stopRef = useRef(false);
   const progressRef = useRef<TestQuestion[]>([]);
@@ -114,8 +116,8 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
     setTarget(mc + short);
     const subject =
       source === "request"
-        ? { request: request.trim(), book }
-        : { request: request.trim(), cards: deckCards ?? [], book };
+        ? { request: request.trim(), book, ...(shelf && socratic ? { style: "socratic" as const } : {}) }
+        : { request: request.trim(), cards: deckCards ?? [], book, ...(shelf && socratic ? { style: "socratic" as const } : {}) };
     const bookPart = book ? `${bookLabel(book.name)}${book.pages?.trim() ? `, ${book.pages.trim()}` : ""}` : "";
     const prompt =
       source === "request"
@@ -224,6 +226,23 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
       </label>
 
       {shelf && <BookPicker books={shelf} value={book} onChange={setBook} withPages disabled={busy} />}
+      {shelf && (
+        <label className="flex items-start gap-2 text-sm text-white/70">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={socratic}
+            disabled={busy}
+            onChange={(e) => setSocratic(e.target.checked)}
+          />
+          <span>
+            Socratic questions
+            <span className="block text-xs text-white/45">
+              The questions ask you to predict, explain why, find the flaw in a claim, or apply an idea to a new case.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1.5">

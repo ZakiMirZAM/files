@@ -36,6 +36,8 @@ export function mentionLabel(b: { name: string }): string {
 interface ChatMessage {
   id: number;
   question: string;
+  /** Shown in place of a long question (the test results sent to the tutor). */
+  label?: string;
   /** Set when the question went to the local book AI. */
   bookName?: string;
   status: "loading" | "done" | "error";
@@ -53,6 +55,36 @@ interface AiChatProps {
    * open requests.
    */
   companion?: boolean;
+  /**
+   * Learn page Tests tab only: a finished test's results, sent once to the
+   * Socratic tutor when the local AI is available. The chat then stays in
+   * tutor mode, without the Ask/Tutor switch.
+   */
+  tutorSeed?: { key: string; label: string; question: string; book?: BookSource | null };
+}
+
+/** Learn page Ask AI tab, local site only: a normal answer or the Socratic tutor. */
+function ModeSwitch({ tutor, onChange, disabled }: { tutor: boolean; onChange: (t: boolean) => void; disabled: boolean }) {
+  return (
+    <div className="inline-flex rounded-sm border border-gold/20 text-xs overflow-hidden" role="group" aria-label="Chat mode">
+      {[false, true].map((t) => (
+        <button
+          key={String(t)}
+          type="button"
+          onClick={() => onChange(t)}
+          disabled={disabled}
+          aria-pressed={tutor === t}
+          title={t ? "Tutor: teaches you by asking questions, one at a time, and tracks your level" : "Ask: answers your question directly"}
+          className={cn(
+            "px-2.5 py-1 transition-colors disabled:opacity-50",
+            tutor === t ? "bg-gold/15 text-gold" : "text-white/50 hover:text-white",
+          )}
+        >
+          {t ? "Tutor" : "Ask"}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function ModelSwitch() {
@@ -75,16 +107,21 @@ function ModelSwitch() {
   );
 }
 
-export function AiChat({ active, companion = false }: AiChatProps) {
+export function AiChat({ active, companion = false, tutorSeed }: AiChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const nextId = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seconds = useSyncExternalStore(subscribeAskBudget, () => secondsUntilAllowed());
   // Local site only: a book from the Books folder for the AI to read.
   const shelf = useLocalShelf();
-  const [book, setBook] = useState<BookSource | null>(null);
+  const [book, setBook] = useState<BookSource | null>(tutorSeed?.book ?? null);
+  // Socratic tutor: only the Learn page (companion) on the local site.
+  const [tutorPicked, setTutorPicked] = useState(false);
+  const tutor = companion && shelf !== null && (tutorPicked || tutorSeed !== undefined);
+  const seededKey = useRef<string | null>(null);
   const req = useSyncExternalStore(subscribeAi, getOpenAi);
   // @-mentions: books referenced in the text, and the list shown while typing one.
   const [mentioned, setMentioned] = useState<{ label: string; book: BookSource }[]>([]);
@@ -130,16 +167,26 @@ export function AiChat({ active, companion = false }: AiChatProps) {
     });
   };
 
-  useEffect(() => {
-    if (active) inputRef.current?.focus();
-  }, [active]);
+  // The test debrief sits inline on a long page: move only the chat box, never the window.
+  const inline = tutorSeed !== undefined;
 
   useEffect(() => {
-    if (active) endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, active]);
+    if (active) inputRef.current?.focus({ preventScroll: inline });
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const send = () => {
-    const question = draft.trim();
+  useEffect(() => {
+    if (!active) return;
+    if (inline) {
+      const log = logRef.current;
+      if (log) log.scrollTop = log.scrollHeight;
+    } else {
+      endRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [messages, active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const send = () => submit(draft.trim());
+
+  const submit = (question: string, label?: string) => {
     if (!question || busy || (!usesBooks && seconds > 0)) return;
     const refs = mentionedNow(question);
     const history: ChatTurn[] = messages
@@ -149,7 +196,7 @@ export function AiChat({ active, companion = false }: AiChatProps) {
     const id = nextId.current;
     const names = [...(book ? [bookLabel(book.name)] : []), ...refs.map((b) => bookLabel(b.name))];
     const bookName = names.length > 1 ? `${names.length} books` : names[0] ?? (companion && shelf ? "your books, the library and the web" : undefined);
-    setMessages((prev) => [...prev, { id, question, status: "loading", bookName }]);
+    setMessages((prev) => [...prev, { id, question, label, status: "loading", bookName }]);
     setDraft("");
     setMention(null);
 
@@ -165,7 +212,7 @@ export function AiChat({ active, companion = false }: AiChatProps) {
       );
 
     if (book || refs.length > 0 || (companion && shelf)) {
-      settle(askLocal({ question, book, books: refs, history, model: getAiModel() }));
+      settle(askLocal({ question, book, books: refs, history, model: getAiModel(), ...(tutor ? { mode: "tutor" as const } : {}) }));
       return;
     }
 
@@ -187,9 +234,21 @@ export function AiChat({ active, companion = false }: AiChatProps) {
     );
   };
 
+  // A finished test's results go to the tutor once, as soon as the local AI answers /local/status.
+  useEffect(() => {
+    if (!tutorSeed || !tutor || seededKey.current === tutorSeed.key) return;
+    seededKey.current = tutorSeed.key;
+    submit(tutorSeed.question, tutorSeed.label);
+  }, [tutorSeed?.key, tutor]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Put a failed question back in the box and drop it from the list. */
   const resend = (m: ChatMessage) => {
     setMessages((prev) => prev.filter((x) => x.id !== m.id));
+    // The test results (a labelled message) go again as they were; they are not for editing.
+    if (m.label) {
+      submit(m.question, m.label);
+      return;
+    }
     setDraft(m.question);
     inputRef.current?.focus();
   };
@@ -222,10 +281,12 @@ export function AiChat({ active, companion = false }: AiChatProps) {
 
   return (
     <div className={cn("flex-1 min-h-0 flex flex-col", !active && "hidden")}>
-      <div role="log" aria-live="polite" className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+      <div ref={logRef} role="log" aria-live="polite" className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {messages.length === 0 && (
           <p className="text-sm text-white/45 leading-relaxed">
-            {companion
+            {tutor
+              ? "Tutor mode. Name a topic (for example \"tutor me on WACC\"). The tutor first asks a few questions, one at a time, to find your level, then teaches by questions and tracks each subskill from 0 to 5. Type \"show progress\" at any time, or \"just tell me\" for a direct answer."
+              : companion
               ? shelf
                 ? "Your study companion. Ask about anything you are learning. The AI looks in your books, the library and the web, and checks its arithmetic. Type @ to point it at a specific book. Switch to Haiku for a quick conversation."
                 : "Your study companion. Ask about anything you are learning; the AI uses the library and the web. Switch to Haiku for a quick conversation."
@@ -240,7 +301,7 @@ export function AiChat({ active, companion = false }: AiChatProps) {
         {messages.map((m) => (
           <div key={m.id} className="space-y-3">
             <p className="ml-auto max-w-[85%] w-fit rounded-sm bg-gold/10 border border-gold/20 px-3 py-2 text-sm text-white whitespace-pre-wrap">
-              {m.question}
+              {m.label ?? m.question}
             </p>
 
             {m.status === "loading" && (
@@ -258,7 +319,7 @@ export function AiChat({ active, companion = false }: AiChatProps) {
                   onClick={() => resend(m)}
                   className="btn-ghost inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Edit and resend
+                  <RefreshCw className="w-3.5 h-3.5" /> {m.label ? "Send again" : "Edit and resend"}
                 </button>
               </div>
             )}
@@ -276,7 +337,12 @@ export function AiChat({ active, companion = false }: AiChatProps) {
           send();
         }}
       >
-        {companion && <ModelSwitch />}
+        {companion && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ModelSwitch />
+            {shelf && !tutorSeed && <ModeSwitch tutor={tutor} onChange={setTutorPicked} disabled={busy} />}
+          </div>
+        )}
         {shelf && (
           <BookPicker
             books={shelf}
@@ -317,7 +383,13 @@ export function AiChat({ active, companion = false }: AiChatProps) {
             onChange={(e) => onDraft(e.target.value, e.target.selectionStart ?? e.target.value.length)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder={shelf ? "Ask a question (type @ to reference a book)" : "Ask a question"}
+            placeholder={
+              tutor
+                ? "Your answer, or a topic to learn (type @ to reference a book)"
+                : shelf
+                  ? "Ask a question (type @ to reference a book)"
+                  : "Ask a question"
+            }
             aria-label="Your question"
             className="flex-1 resize-none rounded-sm bg-ink-800 border border-gold/15 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-gold/40"
           />
@@ -332,17 +404,30 @@ export function AiChat({ active, companion = false }: AiChatProps) {
           </button>
         </div>
         {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setMessages([]);
-              setMentioned([]);
-            }}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 text-[0.7rem] text-white/40 hover:text-white/70 disabled:opacity-40"
-          >
-            <Trash2 className="w-3 h-3" /> New chat
-          </button>
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Tutor mode: the tutor holds the answer back until the reader asks for it. */}
+            {tutor && (
+              <button
+                type="button"
+                onClick={() => submit("Show me the answer to this question.")}
+                disabled={busy}
+                className="text-[0.7rem] text-gold/80 hover:text-gold underline underline-offset-2 decoration-gold/40 disabled:opacity-40"
+              >
+                Show the answer
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMessages([]);
+                setMentioned([]);
+              }}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 text-[0.7rem] text-white/40 hover:text-white/70 disabled:opacity-40"
+            >
+              <Trash2 className="w-3 h-3" /> New chat
+            </button>
+          </div>
         )}
       </form>
     </div>

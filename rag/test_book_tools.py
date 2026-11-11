@@ -190,3 +190,20 @@ def test_learn_guidance_names_the_book_and_pages():
     _, book = book_tools.parse_book({"id": "Investment Valuation.pdf", "pages": "pages 1-30"})
     text = book_tools.learn_book_guidance(book)
     assert "Investment Valuation.pdf" in text and "pages 1-30" in text and "read_pages" in text
+
+
+def test_validate_ask_tutor_mode_keeps_more_history_and_its_end():
+    hist = [{"question": f"q{i}", "answer": "x" * 5000 + f"MAP{i}"} for i in range(20)]
+    err, p = book_tools.validate_ask({"question": "tutor me", "mode": "tutor", "history": hist})
+    assert err is None and p["tutor"] is True
+    assert len(p["history"]) == book_tools.TUTOR_HISTORY_TURNS
+    # The end of a long tutor answer (skill map, open question) survives the cut.
+    assert p["history"][-1]["answer"].endswith("MAP19")
+    err, p = book_tools.validate_ask({"question": "x", "history": hist})
+    assert p["tutor"] is False and len(p["history"]) == book_tools.MAX_HISTORY_TURNS
+
+
+def test_validate_ask_tutor_mode_takes_full_test_results():
+    long_q = "r" * (book_tools.MAX_QUESTION + 1)
+    assert book_tools.validate_ask({"question": long_q})[0] == book_tools.ERR_QUESTION_LONG
+    assert book_tools.validate_ask({"question": long_q, "mode": "tutor"})[0] is None

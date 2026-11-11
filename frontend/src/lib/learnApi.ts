@@ -237,9 +237,11 @@ export async function generateQuestions(p: {
   avoid?: string[];
   book?: BookSource | null;
   slice?: Slice;
+  /** Learn test builder, local site only: Socratic questions (rag/book_tools.py). */
+  style?: "socratic";
 }): Promise<TestQuestion[]> {
   const data = await postLearn(
-    p.book ? "/local/learn/quiz" : "/learn/quiz",
+    p.book || p.style ? "/local/learn/quiz" : "/learn/quiz",
     {
       request: p.request ?? "",
       cards: clipSourceCards(p.cards ?? []),
@@ -248,6 +250,7 @@ export async function generateQuestions(p: {
       avoid: clipAvoid(p.avoid ?? []),
       ...(p.book ? { book: p.book } : {}),
       ...(p.book && p.slice ? { slice: p.slice } : {}),
+      ...(p.style ? { style: p.style } : {}),
     },
     TIMEOUT_MS,
   );
@@ -344,7 +347,7 @@ export function nextQuestionBatch(mcLeft: number, shortLeft: number): { mc: numb
 
 /** Build a test with `mcTotal` multiple-choice and `shortTotal` short-answer questions. */
 export async function buildTestQuestions(
-  source: { request?: string; cards?: { front: string; back: string }[]; book?: BookSource | null },
+  source: { request?: string; cards?: { front: string; back: string }[]; book?: BookSource | null; style?: "socratic" },
   mcTotal: number,
   shortTotal: number,
   hooks: BatchHooks<TestQuestion> = {},

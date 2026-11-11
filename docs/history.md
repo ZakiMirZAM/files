@@ -77,3 +77,13 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     chapter or URL (the story proof still quotes the page's data-block figures, which the checker needs).
     `story_answer.parse_answer_output` and `story_inputs` return `"sources": []` so the reply shape and the
     page code stay the same. Both hashes re-recorded in `EXPECTED`.
+  - **2026-11-10** (owner: "use the exact skill"; LEARN PAGE ONLY, local site only): Socratic tutor.
+    New `LOCAL_TUTOR_SYSTEM` in `rag/book_tools.py` = the Jane Street `socratic-tutor` SKILL.md body
+    (github.com/janestreet/agent_skills) word for word, then `TUTOR_LOCAL_RULES` (book/vault/web tools,
+    the owner's answer rule, TEST RESULTS debrief, NO CITATIONS, STYLE). Owner answer rule (same day):
+    keep the skill's hold-back rule; when the reader asks for the answer ("Show the answer" button or
+    "just tell me"), give why it was wrong, a line "Example answer:", then the next question.
+    `/local/ask` takes `mode: "tutor"` (12 history turns, the end of each kept; 40k-char results message).
+    New `SOCRATIC_QUIZ_GUIDANCE` is added to `/local/learn/quiz` when `style: "socratic"` (book optional
+    then). The sidebar chat, /ask, Explain using AI and the question decks are unchanged. Both hashes
+    recorded in `BOOKS_EXPECTED`.

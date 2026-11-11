@@ -22,7 +22,26 @@ import {
   type TestQuestion,
 } from "../../lib/learnApi";
 import { openAi } from "../../lib/aiPanelStore";
-import { wrongAnswersPrompt } from "../../lib/localAi";
+import { testResultsPrompt, wrongAnswersPrompt, type BookSource } from "../../lib/localAi";
+import { AiChat } from "../AiChat";
+import { useLocalShelf } from "./BookPicker";
+
+/** Every question of a finished test with its result, for the Socratic tutor debrief. */
+function resultLines(questions: TestQuestion[], responses: Record<number, QuestionResponse>) {
+  return questions.map((q, i) => {
+    const r = responses[i];
+    const points = questionPoints(q, r);
+    return q.type === "mc"
+      ? {
+          prompt: q.prompt,
+          choices: q.choices,
+          yourAnswer: r?.choice !== undefined ? `${LETTERS[r.choice]}. ${q.choices[r.choice]}` : "",
+          correctAnswer: `${LETTERS[q.answer]}. ${q.choices[q.answer]}`,
+          points,
+        }
+      : { prompt: q.prompt, yourAnswer: r?.text ?? "", correctAnswer: q.answer, points };
+  });
+}
 
 /**
  * Opens the AI chat with the questions not fully right placed in the box (the
@@ -35,19 +54,7 @@ function reviewWrong(
   responses: Record<number, QuestionResponse>,
   sourceBook?: { id: string; name: string; pages?: string },
 ): number {
-  const wrong = questions
-    .map((q, i) => ({ q, r: responses[i] }))
-    .filter(({ q, r }) => questionPoints(q, r) < 1)
-    .map(({ q, r }) =>
-      q.type === "mc"
-        ? {
-            prompt: q.prompt,
-            choices: q.choices,
-            yourAnswer: r?.choice !== undefined ? `${LETTERS[r.choice]}. ${q.choices[r.choice]}` : "",
-            correctAnswer: `${LETTERS[q.answer]}. ${q.choices[q.answer]}`,
-          }
-        : { prompt: q.prompt, yourAnswer: r?.text ?? "", correctAnswer: q.answer },
-    );
+  const wrong = resultLines(questions, responses).filter((l) => l.points < 1);
   if (wrong.length === 0) return 0;
   openAi({ mode: "chat", title: "Ask AI", draft: wrongAnswersPrompt(title, wrong), ...(sourceBook ? { book: sourceBook } : {}) });
   return wrong.length;
@@ -275,6 +282,9 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
+  // Local site only: the finished test goes to the Socratic tutor (summary, then follow-up questions).
+  const shelf = useLocalShelf();
+  const [debrief, setDebrief] = useState<{ key: string; label: string; question: string; book?: BookSource | null } | null>(null);
 
   if (test === undefined) return <p className="text-sm text-white/55">Loading the test</p>;
   if (test === null) {
@@ -304,6 +314,15 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
     try {
       await saveAttempt({ testId, answers: JSON.stringify(responses), score: s.score, total: s.total });
       setResult(s);
+      if (test) {
+        const score = formatScore(s.score, s.total);
+        setDebrief({
+          key: String(Date.now()),
+          label: `My results from "${test.title}" (${score}). Summarize them and ask me follow-up questions.`,
+          question: testResultsPrompt(test.title, score, resultLines(questions, responses)),
+          book: test.sourceBook ?? null,
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "The attempt could not be saved. Try again.");
     } finally {
@@ -314,6 +333,7 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
   function retake() {
     setResponses({});
     setResult(null);
+    setDebrief(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -390,6 +410,18 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
         )}
         {error && <p className="text-sm text-loss">{error}</p>}
       </section>
+
+      {result && debrief && shelf && (
+        <section className="space-y-2">
+          <p className="label">Tutor review</p>
+          <p className="text-xs text-white/45">
+            The tutor reads your results, summarizes what you know and where the gaps are, and offers more questions on the weak areas.
+          </p>
+          <div className="panel flex h-[36rem] flex-col">
+            <AiChat active companion tutorSeed={debrief} />
+          </div>
+        </section>
+      )}
 
       <section className="space-y-2">
         <p className="label">Past attempts</p>

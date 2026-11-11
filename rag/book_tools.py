@@ -15,12 +15,15 @@ numbers (page 1 is the first page of the file).
 
 Routes (added by server.py, all 404 unless local_allowed(request)):
   GET  /local/status        -> {"ok": true}
-  POST /local/ask           {question, book?, page?, history?, model?} -> {answer}
+  POST /local/ask           {question, book?, page?, history?, model?, mode?} -> {answer}
+                            mode "tutor" (Learn page only): LOCAL_TUTOR_SYSTEM, longer history
   POST /local/learn/cards   /learn/cards body + book {id, pages?}      -> {cards}
   POST /local/learn/quiz    /learn/quiz body + book {id, pages?}       -> {questions}
+                            style "socratic": SOCRATIC_QUIZ_GUIDANCE added; the book is then optional
 
 The cards and quiz routes use the owner-approved LEARN_*_SYSTEM prompts unchanged;
-the book to read rides in the user message. Only LOCAL_ASK_SYSTEM is new
+the book to read rides in the user message. LOCAL_ASK_SYSTEM, LOCAL_TUTOR_SYSTEM and
+SOCRATIC_QUIZ_GUIDANCE are new
 (hash-pinned in test_prompts.py, owner approval required to change).
 
 Why the guard is strict: the production AI server runs on this same PC behind
@@ -63,9 +66,146 @@ The reader knows the answer comes from their books. Do not spend words on the so
 STYLE (hard rules)
 Plain words. Define a term the first time it appears and reuse the same word for the same idea. Keep formulas exact. No headings. No em dashes or en dashes: use a period, a comma or parentheses. Straight quotes only. No analogies or metaphors. No filler words (crucial, key, pivotal, landscape, robust, delve, underscore, showcase). No conversational openers or closings and no upbeat closing paragraph: the last line is the final substantive point."""
 
-PROMPTS = {"LOCAL_ASK_SYSTEM": LOCAL_ASK_SYSTEM}
+# The Jane Street socratic-tutor skill (github.com/janestreet/agent_skills,
+# socratic-tutor/SKILL.md), WORD FOR WORD (owner: "use the exact skill"). The
+# YAML front matter is left out. Learn page only (Ask AI tab Tutor mode and the
+# test debrief); never the sidebar chat, /ask or the question decks.
+SOCRATIC_TUTOR_SKILL = """# Socratic Tutor
 
-EFFORT_BY_LABEL = {"/local/ask": "medium", "/local/learn/cards": "medium", "/local/learn/quiz": "medium"}
+Act as a personal tutor that takes the user from their current level to genuine
+mastery of a topic using the maieutic (Socratic) method: teach primarily by asking
+questions that force the user to reason, predict, and explain — not by lecturing.
+
+## Guard: confirm intent before starting
+
+This skill is for an ongoing teaching session, not for answering questions. If the
+user asked a one-off question ("explain X", "what is X", "how do I use X"), answer it
+normally and do not start the tutoring loop. If intent is ambiguous, ask one short
+question ("Want a quick answer, or should I actually teach you this properly?") before
+launching the diagnostic. A false start costs the user an unwanted quiz; a
+confirmation costs one word.
+
+## Session start
+
+1. Break the topic into 4-10 concrete subskills (fewer for narrow topics). For broad
+   topics, make a two-level tree and pick the first branch to work on.
+2. Tell the user that you will start by asking a few questions, one at a time, to see
+   what they already know.
+3. Run a short diagnostic: 3-5 probing questions spanning easy to hard, to place the
+   user's starting level per subskill. Do not teach anything until the diagnostic is
+   done.
+4. Show the initial skill map (format below) and propose where to start. Let the user
+   override.
+
+
+## Skill map
+
+Track each subskill at levels 0-5:
+
+    0 unaware . 1 heard of it . 2 can follow along . 3 can do with help
+    4 can do independently . 5 can teach it / handle edge cases
+
+Render the map as ASCII after every level change, and whenever the user asks for
+progress:
+
+    Topic: <topic>                          overall: ######.... 58%
+    -----------------------------------------------------------------
+    subskill A            [########..]  4/5  * independent
+    subskill B            [######....]  3/5  <- current focus
+    subskill C            [##........]  1/5
+    -----------------------------------------------------------------
+
+Use solid/light block characters (U+2588 / U+2591) for the bars when rendering.
+
+## Teaching loop (repeat per subskill)
+
+- Ask ONE question at a time. End the message immediately after the question and wait
+  for the answer; do not add hints, example answers, or teaching content after it.
+- Prefer questions that make the user: predict an outcome, explain why, find the flaw
+  in a plausible-but-wrong claim, apply an idea to a new case, or connect two ideas.
+- When the user is wrong, do not give the answer. Ask a narrower question that exposes
+  the contradiction in their reasoning. Only explain directly after 2-3 failed
+  attempts, and then immediately re-test the same idea from a different angle.
+- When the user is right, occasionally play devil's advocate ("are you sure? what
+  about X?") — they should be able to defend correct answers under pressure.
+- Give short explanations (a few sentences) only to introduce genuinely new material
+  the user could not derive, then return to questioning.
+- Where tools are available and relevant, set practical exercises (e.g. "write a
+  query that...", "predict what this code prints") and check the user's actual
+  output rather than their description of it.
+
+## Evaluation rules — be strict
+
+- Levels are earned, not given. Raise a level only on demonstrated performance across
+  2+ independent checks, at least one of them unprompted recall (not immediately
+  after the user was told the answer).
+- A vague or partially-correct answer is not correct. Probe until you know whether
+  the user actually understands. Do not attribute to the user any insight they did
+  not actually express.
+- Interleave spaced review: periodically re-test earlier subskills without warning.
+  If the user fails a review, lower the level and revisit.
+- Level 5 requires the user to handle an edge case or adversarial question AND
+  explain the concept clearly enough that you would trust them to teach it.
+- Do not flatter. "Not quite — why would X happen if Y were true?" beats "Great
+  try!".
+
+## Mastery and completion
+
+The course ends only when every subskill is at the target level (default 4/5; 5/5 if
+the user asked for full mastery). Then run a final mixed assessment covering
+everything, with at least one question per subskill and one integrative problem. If
+the user passes, show the final map and a summary of their weakest areas. If not,
+back to the loop.
+
+## Commands the user can use anytime
+
+- "show progress" — render the skill map
+- "harder" / "easier" — adjust difficulty
+- "just tell me" — override Socratic mode for the current question only
+- "save state" — emit a compact block (topic, skill map with levels, notes on
+  misconceptions and what has been covered) that can be pasted into a new session to
+  resume
+- "resume from:" — followed by a saved state block; restore it and continue where it
+  left off"""
+
+TUTOR_LOCAL_RULES = """LOCAL RULES FOR THIS APP
+The rules above are the tutoring method. These rules add what this app needs.
+
+TOOLS
+You can read the reader's books with four tools: list_books finds a book by words in its title, book_contents gives its chapters with page numbers, read_pages returns the text of a range of pages, and search_book finds the pages that mention given words. Before you write a question or judge an answer, read the pages that teach the idea, so that every question, every correct answer and every explanation agrees with the text. Use search_vault or the web for a point the books do not cover, and general knowledge last. Never invent a figure, a formula or a quotation. The user message may name the books the reader picked or mentioned with @, and the earlier turns of this session. You cannot run code, so a practical exercise is a calculation with worked numbers that the reader does and reports.
+
+WHEN THE READER ASKS FOR THE ANSWER
+Keep the rules above: by default, do not give the answer to a wrong or incomplete answer. The reader decides when to see it. When the reader asks for the answer ("show the answer", "just tell me", "what is the answer", or similar), reply in this order, in one message:
+1. Why the reader's answer was wrong, or what it left out.
+2. A correct example answer to the exact question asked, on its own line that starts with "Example answer:". Write it as the full answer the reader could have given, in a few sentences, with the worked numbers when the question has numbers.
+3. The next question.
+An answer the reader asked for does not count as their own recall: test the same idea again later from a different angle.
+
+TEST RESULTS
+When the message holds the reader's results from a test (each question, the reader's answer, the correct answer, and the score), do this first, in one message:
+1. A summary: the score, what the reader knows well, and each weak area with the exact misunderstanding the wrong answers show. Group the questions by subskill.
+2. A skill map built from the results.
+3. One question: does the reader want to work on the weak areas now?
+If the reader says yes, start the teaching loop on the weakest subskill, with new questions that are not copies of the test questions.
+
+NO CITATIONS (hard rule)
+The reader knows the material comes from their books. Do not spend words on the source: no book titles, authors, chapter, module or page numbers, no "the book says", "according to" or "the text explains", no Sources line, reference list or URL. Name a page only when the reader asks where something is.
+
+STYLE (hard rules)
+Plain words. Define a term the first time it appears and reuse the same word for the same idea. Keep formulas exact, with every variable defined. No headings in your messages. No em dashes or en dashes: use a period, a comma or parentheses. Straight quotes only. No analogies or metaphors. No filler words (crucial, key, pivotal, landscape, robust, delve, underscore, showcase). No upbeat closing paragraph."""
+
+LOCAL_TUTOR_SYSTEM = SOCRATIC_TUTOR_SKILL + "\n\n" + TUTOR_LOCAL_RULES
+
+# Added to a Learn test request when the reader picks "Socratic questions".
+SOCRATIC_QUIZ_GUIDANCE = """
+
+SOCRATIC STYLE
+Write the questions in the Socratic style. Each question makes the reader do one of these: predict an outcome, explain why something is true, find the flaw in a claim that sounds right but is wrong, apply an idea to a new case, or connect two ideas. Use worked numbers when the subject is numerical. Do not ask for a definition that the reader can repeat from memory. In multiple choice, each wrong choice is a mistake a real learner makes."""
+
+PROMPTS = {"LOCAL_ASK_SYSTEM": LOCAL_ASK_SYSTEM, "LOCAL_TUTOR_SYSTEM": LOCAL_TUTOR_SYSTEM,
+           "SOCRATIC_QUIZ_GUIDANCE": SOCRATIC_QUIZ_GUIDANCE}
+
+EFFORT_BY_LABEL = {"/local/ask": "medium", "/local/tutor": "medium", "/local/learn/cards": "medium", "/local/learn/quiz": "medium"}
 ASK_MAX_TURNS, ASK_BUDGET_USD = 30, 4.0
 LEARN_MAX_TURNS, LEARN_BUDGET_USD = 30, 4.0
 FAST_MAX_TURNS = 3             # the book text is in the prompt: write, no tool round trips
@@ -76,6 +216,9 @@ MAX_BOOKS = 5                  # books one question may reference
 SOURCE_MAX_CHARS = 160_000     # book text put in one deck/test request (about 40k tokens)
 MAX_SLICES = 8                 # batches that may split one page range
 MAX_HISTORY_TURNS, MAX_HISTORY_CHARS = 4, 1_500
+# Tutor mode: a session needs the diagnostic answers and the latest skill map.
+TUTOR_HISTORY_TURNS, TUTOR_HISTORY_CHARS = 12, 4_000
+MAX_TUTOR_QUESTION = 40_000      # a finished test's full results
 MAX_PAGES_PER_READ, MAX_READ_CHARS = 25, 80_000
 MAX_LIST, MAX_TOC, MAX_HITS, SNIPPET = 40, 400, 15, 320
 TEXT_CACHE_BOOKS = 4
@@ -397,11 +540,12 @@ def learn_book_guidance(book: dict) -> str:
 def validate_ask(data) -> tuple[str | None, dict | None]:
     if not isinstance(data, dict):
         return ERR_QUESTION, None
+    tutor = data.get("mode") == "tutor"
     q = data.get("question")
     q = q.strip() if isinstance(q, str) else ""
     if not q:
         return ERR_QUESTION, None
-    if len(q) > MAX_QUESTION:
+    if len(q) > (MAX_TUTOR_QUESTION if tutor else MAX_QUESTION):
         return ERR_QUESTION_LONG, None
     err, book = parse_book(data.get("book"))
     if err:
@@ -420,13 +564,15 @@ def validate_ask(data) -> tuple[str | None, dict | None]:
                 books.append(b)
     books = books[:MAX_BOOKS]
     page = learn._whole(data.get("page"))
+    turns, chars = (TUTOR_HISTORY_TURNS, TUTOR_HISTORY_CHARS) if tutor else (MAX_HISTORY_TURNS, MAX_HISTORY_CHARS)
     history = []
-    for t in (data.get("history") or [])[-MAX_HISTORY_TURNS:] if isinstance(data.get("history"), list) else []:
+    for t in (data.get("history") or [])[-turns:] if isinstance(data.get("history"), list) else []:
         if isinstance(t, dict) and isinstance(t.get("question"), str) and isinstance(t.get("answer"), str):
-            history.append({"question": t["question"][:MAX_HISTORY_CHARS],
-                            "answer": t["answer"][:MAX_HISTORY_CHARS]})
+            # A tutor turn keeps its END: the skill map and the open question are last.
+            history.append({"question": t["question"][-chars:] if tutor else t["question"][:chars],
+                            "answer": t["answer"][-chars:] if tutor else t["answer"][:chars]})
     return None, {"question": q, "book": books[0] if books else None, "books": books,
-                  "page": page if page and page > 0 else None, "history": history}
+                  "page": page if page and page > 0 else None, "history": history, "tutor": tutor}
 
 
 def build_ask_prompt(p: dict) -> str:
@@ -609,15 +755,16 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         err, payload = validate_ask(data)
         if err:
             return _fail(400, err)
-        text = await run(build_ask_prompt(payload), data, LOCAL_ASK_SYSTEM, "/local/ask",
-                         ASK_MAX_TURNS, ASK_BUDGET_USD)
+        # Tutor mode (Learn page only): the Socratic tutor prompt, same tools.
+        system, label = (LOCAL_TUTOR_SYSTEM, "/local/tutor") if payload["tutor"] else (LOCAL_ASK_SYSTEM, "/local/ask")
+        text = await run(build_ask_prompt(payload), data, system, label, ASK_MAX_TURNS, ASK_BUDGET_USD)
         if text is None:
             return _fail(503, learn.ERR_BACKEND)
         answer = learn.tidy(text)
         payload = {"answer": answer}
         if verifier is not None:
             report = verifier.tier0(answer, "", [])
-            verifier.log_line("/local/ask", report)
+            verifier.log_line(label, report)
             if report:
                 payload["verification"] = verifier.public(report)
         return web.json_response(payload)
@@ -650,21 +797,26 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
             raise web.HTTPNotFound()
         data = await _body(request)
         berr, book = parse_book((data or {}).get("book") if isinstance(data, dict) else None)
-        if berr or book is None:
+        # "Socratic questions" (Learn test builder) may come with no book: the
+        # model then uses the vault and the web, as /learn/quiz does.
+        socratic = isinstance(data, dict) and data.get("style") == "socratic"
+        if berr or (book is None and not socratic):
             return _fail(400, berr or ERR_BOOK)
         body = dict(data)
-        if not str(body.get("request") or "").strip() and not body.get("cards"):
+        if book and not str(body.get("request") or "").strip() and not body.get("cards"):
             body["request"] = f"A practice test on {book['pages'] or 'this book'}."
         err, payload = learn.validate_quiz_request(body)
         if err:
             return _fail(400, err)
-        fast = await _fast_source(book, data)
+        style = SOCRATIC_QUIZ_GUIDANCE if socratic else ""
+        fast = await _fast_source(book, data) if book else None
         if fast:
             print(f"[/local/learn/quiz] fast path, {fast[1]}", flush=True)
-            text = await run(learn.build_quiz_prompt(payload, fast[0]), data, learn.LEARN_QUIZ_SYSTEM,
+            text = await run(learn.build_quiz_prompt(payload, fast[0] + style), data, learn.LEARN_QUIZ_SYSTEM,
                              "/local/learn/quiz", FAST_MAX_TURNS, LEARN_BUDGET_USD, tools=False)
         else:
-            text = await run(learn.build_quiz_prompt(payload, learn_book_guidance(book)), data,
+            guidance = (learn_book_guidance(book) if book else "") + style
+            text = await run(learn.build_quiz_prompt(payload, guidance), data,
                              learn.LEARN_QUIZ_SYSTEM, "/local/learn/quiz", LEARN_MAX_TURNS, LEARN_BUDGET_USD)
         if text is None:
             return _fail(503, learn.ERR_BACKEND)
