@@ -1,8 +1,9 @@
 // One book's notes: a picture of each mark, its kind and page, filterable by
 // kind. Tapping a page number opens the book at that page.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { askAboutBook, getAiPanelWidth, subscribeAi } from "../../lib/aiPanelStore";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MARK_KIND_LABEL, MARK_KINDS, normRect, type MarkKind, type Rect } from "../../lib/bookMarks/types";
@@ -37,6 +38,7 @@ export function BookNotesList({ bookId, title, localPath, onBack }: BookNotesLis
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const storedUrl = useQuery(api.books.bookFileUrl, open && !localPath ? { bookId } : "skip");
   const fileUrl = localPath ? localBookUrl(localPath) : storedUrl;
+  const panelWidth = useSyncExternalStore(subscribeAi, getAiPanelWidth);
 
   const counts = useMemo(() => {
     const c: Partial<Record<MarkKind, number>> = {};
@@ -153,6 +155,9 @@ export function BookNotesList({ bookId, title, localPath, onBack }: BookNotesLis
           initialPage={open.page}
           focusRect={open.rect}
           onClose={() => setOpen(null)}
+          // Only a book in the Books folder can be read by the local AI.
+          onAsk={localPath ? (page) => askAboutBook({ id: localPath, name: title }, page) : undefined}
+          rightInset={panelWidth}
         />
       )}
     </div>

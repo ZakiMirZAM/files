@@ -9,6 +9,8 @@ import { RefreshCw, Sparkles, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { buildDeckCards, type LearnCard } from "../../lib/learnApi";
+import type { BookSource } from "../../lib/localAi";
+import { BookPicker, bookLabel, useLocalShelf } from "./BookPicker";
 
 export interface AiDeckGeneratorProps {
   onCreated: (deckId: Id<"learnDecks">) => void;
@@ -39,10 +41,17 @@ export function AiDeckGenerator({ onCreated }: AiDeckGeneratorProps) {
   const [partial, setPartial] = useState<{ deckId: Id<"learnDecks">; sent: number } | null>(null);
   const [saved, setSaved] = useState(0);
   const stopRef = useRef(false);
+  // Local site only: a book from the Books folder for the AI to read.
+  const shelf = useLocalShelf();
+  const [book, setBook] = useState<BookSource | null>(null);
+  // With a book and no typed request, the request names the book and its pages.
+  const effectiveRequest =
+    request.trim() ||
+    (book ? `Cards on ${bookLabel(book.name)}${book.pages?.trim() ? `, ${book.pages.trim()}` : ""}` : "");
 
   const count = Math.floor(Number(countText));
   const countOk = Number.isFinite(count) && count >= 1;
-  const canMake = !busy && !saving && request.trim().length > 0 && countOk;
+  const canMake = !busy && !saving && effectiveRequest.length > 0 && countOk;
 
   async function make() {
     if (!canMake) return;
@@ -53,13 +62,18 @@ export function AiDeckGenerator({ onCreated }: AiDeckGeneratorProps) {
     setCards([]);
     setPartial(null);
     setTarget(count);
-    if (!name.trim()) setName(defaultName(request));
+    if (!name.trim()) setName(defaultName(effectiveRequest));
     let made: LearnCard[] = [];
     try {
-      made = await buildDeckCards(request.trim(), count, {
-        onProgress: (so) => setCards(so),
-        shouldStop: () => stopRef.current,
-      });
+      made = await buildDeckCards(
+        effectiveRequest,
+        count,
+        {
+          onProgress: (so) => setCards(so),
+          shouldStop: () => stopRef.current,
+        },
+        book,
+      );
       setCards(made);
       if (made.length < count && !stopRef.current) {
         setNote(`The AI made ${made.length} cards before it ran out of new ones for this request.`);
@@ -83,9 +97,9 @@ export function AiDeckGenerator({ onCreated }: AiDeckGeneratorProps) {
       if (!deckId) {
         const first = cards.slice(0, SAVE_CHUNK);
         deckId = await createDeck({
-          name: name.trim() || defaultName(request),
+          name: name.trim() || defaultName(effectiveRequest),
           source: "ai",
-          prompt: request.trim(),
+          prompt: effectiveRequest,
           cards: first.map(toInput),
         });
         sent = first.length;
@@ -138,6 +152,8 @@ export function AiDeckGenerator({ onCreated }: AiDeckGeneratorProps) {
           disabled={busy}
         />
       </label>
+
+      {shelf && <BookPicker books={shelf} value={book} onChange={setBook} withPages disabled={busy} />}
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1.5">

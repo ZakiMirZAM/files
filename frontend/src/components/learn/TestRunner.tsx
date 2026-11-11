@@ -13,12 +13,54 @@ import {
   formatScore,
   gradeShortAnswer,
   parseStoredQuestions,
+  questionPoints,
   scoreTest,
   type McQuestion,
   type QuestionResponse,
   type Score,
   type ShortQuestion,
+  type TestQuestion,
 } from "../../lib/learnApi";
+import { openAi } from "../../lib/aiPanelStore";
+import { wrongAnswersPrompt } from "../../lib/localAi";
+
+/**
+ * Opens the AI chat with the questions not fully right placed in the box (the
+ * reader presses Send). When the test was made from a Books-folder book, the
+ * chat reads that book.
+ */
+function reviewWrong(
+  title: string,
+  questions: TestQuestion[],
+  responses: Record<number, QuestionResponse>,
+  sourceBook?: { id: string; name: string; pages?: string },
+): number {
+  const wrong = questions
+    .map((q, i) => ({ q, r: responses[i] }))
+    .filter(({ q, r }) => questionPoints(q, r) < 1)
+    .map(({ q, r }) =>
+      q.type === "mc"
+        ? {
+            prompt: q.prompt,
+            choices: q.choices,
+            yourAnswer: r?.choice !== undefined ? `${LETTERS[r.choice]}. ${q.choices[r.choice]}` : "",
+            correctAnswer: `${LETTERS[q.answer]}. ${q.choices[q.answer]}`,
+          }
+        : { prompt: q.prompt, yourAnswer: r?.text ?? "", correctAnswer: q.answer },
+    );
+  if (wrong.length === 0) return 0;
+  openAi({ mode: "chat", title: "Ask AI", draft: wrongAnswersPrompt(title, wrong), ...(sourceBook ? { book: sourceBook } : {}) });
+  return wrong.length;
+}
+
+function parseAnswers(json: string): Record<number, QuestionResponse> {
+  try {
+    const v = JSON.parse(json) as unknown;
+    return v && typeof v === "object" ? (v as Record<number, QuestionResponse>) : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface TestRunnerProps {
   testId: Id<"learnTests">;
@@ -317,9 +359,20 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
             <p className="text-sm text-white">
               Your score: <span className="text-gold font-semibold">{formatScore(result.score, result.total)}</span>
             </p>
-            <button type="button" className="btn-outline px-3 py-1.5" onClick={retake}>
-              Take it again
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {result.score < result.total && (
+                <button
+                  type="button"
+                  className="btn-gold px-3 py-1.5"
+                  onClick={() => reviewWrong(test.title, questions, responses, test.sourceBook)}
+                >
+                  Review my wrong answers with AI
+                </button>
+              )}
+              <button type="button" className="btn-outline px-3 py-1.5" onClick={retake}>
+                Take it again
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -347,9 +400,20 @@ export function TestRunner({ testId, onBack }: TestRunnerProps) {
         ) : (
           <ul className="space-y-1.5">
             {attempts.map((a) => (
-              <li key={a._id} className="panel-soft px-3 py-2 flex flex-wrap justify-between gap-2 text-sm">
+              <li key={a._id} className="panel-soft px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="text-white/60">{new Date(a.completedAt).toLocaleString()}</span>
-                <span className="text-white">{formatScore(a.score, a.total)}</span>
+                <span className="flex items-center gap-3">
+                  {a.score < a.total && (
+                    <button
+                      type="button"
+                      className="text-xs text-gold underline underline-offset-2 decoration-gold/50"
+                      onClick={() => reviewWrong(test.title, questions, parseAnswers(a.answers), test.sourceBook)}
+                    >
+                      Review wrong answers
+                    </button>
+                  )}
+                  <span className="text-white">{formatScore(a.score, a.total)}</span>
+                </span>
               </li>
             ))}
           </ul>

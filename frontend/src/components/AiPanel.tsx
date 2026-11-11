@@ -28,7 +28,7 @@ import {
   AiVerificationStrip,
   reviewCount,
 } from "./AiVerification";
-import { closeAi, getOpenAi, subscribeAi, toggleChat } from "../lib/aiPanelStore";
+import { closeAi, getOpenAi, setAiPanelWidth, subscribeAi, toggleChat } from "../lib/aiPanelStore";
 import { CONNECT_AI } from "../lib/connectQuestions";
 import { AiChat } from "./AiChat";
 import { getAiModel, modelIdFor, setAiModel, subscribeAiModel } from "../lib/aiModelStore";
@@ -81,6 +81,10 @@ export function AiPanel() {
   // Widen the panel for long AI answers (off by default so it matches the
   // definition sidebar's collapsed width).
   const [expanded, setExpanded] = useState(false);
+  // Tell full-screen overlays (the PDF viewer) how much room the panel takes.
+  useEffect(() => {
+    setAiPanelWidth(open ? (expanded ? 760 : 480) : 0);
+  }, [open, expanded]);
   const [regenStamp, setRegenStamp] = useState(0);
   const [gathering, setGathering] = useState(false);
   const gatherAbort = useRef<AbortController | null>(null);

@@ -98,6 +98,7 @@ export const createTest = mutation({
     title: v.string(),
     prompt: v.string(),
     deckId: v.optional(v.id("learnDecks")),
+    sourceBook: v.optional(v.object({ id: v.string(), name: v.string(), pages: v.optional(v.string()) })),
     questions: v.string(),
   },
   handler: async (ctx, args) => {
@@ -121,6 +122,15 @@ export const createTest = mutation({
       title: args.title.trim().slice(0, MAX_TITLE) || "Practice test",
       prompt: args.prompt.trim().slice(0, MAX_PROMPT),
       deckId: args.deckId,
+      ...(args.sourceBook
+        ? {
+            sourceBook: {
+              id: args.sourceBook.id.slice(0, 1000),
+              name: args.sourceBook.name.slice(0, 300),
+              ...(args.sourceBook.pages ? { pages: args.sourceBook.pages.slice(0, 60) } : {}),
+            },
+          }
+        : {}),
       questions: args.questions,
       createdAt: Date.now(),
     });

@@ -12,10 +12,15 @@ import { budgetWaitMessage, secondsUntilAllowed, subscribeAskBudget } from "../l
 import { chatDataContext, pageNameFromTitle, type ChatTurn } from "../lib/chatContext";
 import { cn } from "../lib/cn";
 import { getAiModel } from "../lib/aiModelStore";
+import { getOpenAi, subscribeAi } from "../lib/aiPanelStore";
+import { askLocal, type BookSource } from "../lib/localAi";
+import { BookPicker, bookLabel, useLocalShelf } from "./learn/BookPicker";
 
 interface ChatMessage {
   id: number;
   question: string;
+  /** Set when the question went to the local book AI. */
+  bookName?: string;
   status: "loading" | "done" | "error";
   answer?: string;
   error?: string;
@@ -33,9 +38,25 @@ export function AiChat({ active }: AiChatProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seconds = useSyncExternalStore(subscribeAskBudget, () => secondsUntilAllowed());
+  // Local site only: a book from the Books folder for the AI to read.
+  const shelf = useLocalShelf();
+  const [book, setBook] = useState<BookSource | null>(null);
+  const [page, setPage] = useState<number | null>(null);
+  const req = useSyncExternalStore(subscribeAi, getOpenAi);
+
+  // Opened from the book viewer or a test review: take its book, page and text.
+  useEffect(() => {
+    if (req?.mode !== "chat") return;
+    if (req.book) {
+      setBook(req.book);
+      setPage(req.page ?? null);
+    }
+    if (req.draft) setDraft(req.draft);
+  }, [req?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const busy = messages.some((m) => m.status === "loading");
-  const canSend = draft.trim().length > 0 && !busy && seconds === 0;
+  // The local book AI has no shared per-minute budget; /ask keeps its own.
+  const canSend = draft.trim().length > 0 && !busy && (book !== null || seconds === 0);
 
   useEffect(() => {
     if (active) inputRef.current?.focus();
@@ -47,41 +68,46 @@ export function AiChat({ active }: AiChatProps) {
 
   const send = () => {
     const question = draft.trim();
-    if (!question || busy || seconds > 0) return;
-    const page = getPageAiContext();
+    if (!question || busy || (!book && seconds > 0)) return;
     const history: ChatTurn[] = messages
       .filter((m) => m.status === "done" && m.answer)
       .map((m) => ({ question: m.question, answer: m.answer! }));
     nextId.current += 1;
     const id = nextId.current;
-    setMessages((prev) => [...prev, { id, question, status: "loading" }]);
+    setMessages((prev) => [...prev, { id, question, status: "loading", bookName: book ? bookLabel(book.name) : undefined }]);
     setDraft("");
 
-    askQuestion({
-      question,
-      context: page.subjectKey ?? page.subject,
-      section: page.section,
-      // The Dashboard's tab title carries no section name, so fall back to the
-      // route; the chat block (JSON) then always travels with the question.
-      dataContext: chatDataContext(
-        page,
-        pageNameFromTitle(document.title) ?? window.location.pathname,
-        history,
-      ),
-      model: getAiModel(),
-    }).then(
-      (r) =>
-        setMessages((prev) =>
-          prev.map((m) => (m.id === id ? { ...m, status: "done", answer: r.text } : m)),
-        ),
-      (err: unknown) =>
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === id
-              ? { ...m, status: "error", error: err instanceof Error ? err.message : "Request failed" }
-              : m,
+    const settle = (p: Promise<string>) =>
+      p.then(
+        (answer) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: "done", answer } : m))),
+        (err: unknown) =>
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === id ? { ...m, status: "error", error: err instanceof Error ? err.message : "Request failed" } : m,
+            ),
           ),
+      );
+
+    if (book) {
+      settle(askLocal({ question, book, page, history, model: getAiModel() }));
+      return;
+    }
+
+    const pageCtx = getPageAiContext();
+    settle(
+      askQuestion({
+        question,
+        context: pageCtx.subjectKey ?? pageCtx.subject,
+        section: pageCtx.section,
+        // The Dashboard's tab title carries no section name, so fall back to the
+        // route; the chat block (JSON) then always travels with the question.
+        dataContext: chatDataContext(
+          pageCtx,
+          pageNameFromTitle(document.title) ?? window.location.pathname,
+          history,
         ),
+        model: getAiModel(),
+      }).then((r) => r.text),
     );
   };
 
@@ -105,8 +131,9 @@ export function AiChat({ active }: AiChatProps) {
       <div role="log" aria-live="polite" className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {messages.length === 0 && (
           <p className="text-sm text-white/45 leading-relaxed">
-            Ask anything about the app or the page you are on. The answer uses the figures on this page
-            and your last three questions.
+            {book
+              ? `Ask anything about ${bookLabel(book.name)}${page ? ` (open at page ${page})` : ""}. The AI reads the book on this computer before it answers.`
+              : "Ask anything about the app or the page you are on. The answer uses the figures on this page and your last three questions."}
           </p>
         )}
 
@@ -119,7 +146,7 @@ export function AiChat({ active }: AiChatProps) {
             {m.status === "loading" && (
               <div className="flex items-center gap-2.5 text-sm text-white/45 font-mono">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                Researching the vault and web…
+                {m.bookName ? `Reading ${m.bookName}…` : "Researching the vault and web…"}
               </div>
             )}
 
@@ -149,7 +176,19 @@ export function AiChat({ active }: AiChatProps) {
           send();
         }}
       >
-        {seconds > 0 && <p className="text-[0.7rem] text-white/45">{budgetWaitMessage(seconds)}</p>}
+        {shelf && (
+          <BookPicker
+            books={shelf}
+            value={book}
+            compact
+            disabled={busy}
+            onChange={(b) => {
+              setBook(b);
+              setPage(null);
+            }}
+          />
+        )}
+        {!book && seconds > 0 && <p className="text-[0.7rem] text-white/45">{budgetWaitMessage(seconds)}</p>}
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}

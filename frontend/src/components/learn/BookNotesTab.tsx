@@ -4,8 +4,9 @@
 // Books folder (the local bookshelf): open any of them, or find its notes,
 // without uploading the book.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "convex/react";
+import { askAboutBook, getAiPanelWidth, subscribeAi } from "../../lib/aiPanelStore";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { fetchLocalBooks, formatSize, localBookUrl, shelfRows, type LocalBook } from "../../lib/localBooks";
@@ -116,6 +117,7 @@ function BooksFolder({ local, saved, busy, onOpenNotes, onFindNotes }: BooksFold
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [viewing, setViewing] = useState<LocalBook | null>(null);
+  const panelWidth = useSyncExternalStore(subscribeAi, getAiPanelWidth);
 
   const rows = useMemo(() => shelfRows(local, saved), [local, saved]);
   const savedCount = rows.filter((r) => r.saved).length;
@@ -207,6 +209,8 @@ function BooksFolder({ local, saved, busy, onOpenNotes, onFindNotes }: BooksFold
           title={viewing.name.replace(/\.pdf$/i, "")}
           initialPage={1}
           onClose={() => setViewing(null)}
+          onAsk={(page) => askAboutBook({ id: viewing.id, name: viewing.name }, page)}
+          rightInset={panelWidth}
         />
       )}
     </section>

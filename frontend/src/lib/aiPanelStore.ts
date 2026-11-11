@@ -41,6 +41,11 @@ export interface AiRequest {
   selection?: string;
   /** Optional: write the answer into the user's editable box ("Copy to my answer"). */
   onCopy?: (text: string) => void;
+  // chat mode, local site only: a book for the AI to read, the page in view,
+  // and text to place in the chat box (never sent until the reader sends it).
+  book?: { id: string; name: string; pages?: string };
+  page?: number;
+  draft?: string;
 }
 
 export type OpenAiInput = Omit<AiRequest, "id">;
@@ -81,4 +86,23 @@ export function getOpenAi(): AiRequest | null {
 export function subscribeAi(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+// Width of the open panel on large screens (0 when closed), so a full-screen
+// overlay such as the PDF viewer can leave room for it.
+let panelWidth = 0;
+
+export function setAiPanelWidth(width: number): void {
+  if (width === panelWidth) return;
+  panelWidth = width;
+  emit();
+}
+
+export function getAiPanelWidth(): number {
+  return panelWidth;
+}
+
+/** Opens the chat on a book from the Books folder, at the page in view (local site). */
+export function askAboutBook(book: { id: string; name: string }, page?: number): void {
+  openAi({ mode: "chat", title: "Ask AI", book, page });
 }

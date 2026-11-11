@@ -46,6 +46,7 @@ from claude_agent_sdk import (
     tool,
 )
 
+import book_tools
 import calc_tools
 import learn
 import rarr
@@ -117,6 +118,7 @@ EFFORT_BY_LABEL: dict[str, EffortLevel] = {
     "/ask": ASK_EFFORT, "/explain": EXPLAIN_EFFORT, "/define": DEFINE_EFFORT,
     "/story-inputs": STORY_EFFORT, "/story-answer": STORY_EFFORT,
     **learn.EFFORT_BY_LABEL,  # /learn/cards, /learn/quiz, /learn/grade (rag/learn.py)
+    **book_tools.EFFORT_BY_LABEL,  # /local/* (rag/book_tools.py; local site only)
 }
 VAULT_TOOL = "mcp__vault__search_vault"
 # The agent may use the vault search plus the web (vault-first sourcing, web for
@@ -1079,6 +1081,13 @@ def main() -> None:
     app.router.add_post("/learn/cards", learn_routes["cards"])
     app.router.add_post("/learn/quiz", learn_routes["quiz"])
     app.router.add_post("/learn/grade", learn_routes["grade"])
+    # Local bookshelf AI (rag/book_tools.py): reads the owner's Books folder. Every
+    # route 404s unless LOCAL_BOOKS=1 and the request is direct loopback.
+    book_routes = book_tools.make_handlers(pick_model, ASK_MODEL, VAULT_MCP, VAULT_TOOL)
+    app.router.add_get("/local/status", book_routes["status"])
+    app.router.add_post("/local/ask", book_routes["ask"])
+    app.router.add_post("/local/learn/cards", book_routes["cards"])
+    app.router.add_post("/local/learn/quiz", book_routes["quiz"])
     app.router.add_get("/health", handle_health)
     print(f"RAG server on http://localhost:{PORT}  (ask={ASK_MODEL}, explain={EXPLAIN_MODEL}, define={DEFINE_MODEL})")
     print(f"  vault.db: {DB_PATH}  | tools: vault search + web + company_news + social_reactions")

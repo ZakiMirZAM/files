@@ -14,6 +14,7 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import { cn } from "../../lib/cn";
 import { countText } from "../../lib/learnApi";
 import { RATINGS, describeDue, formatWait, previewDue, rate, type StudyRating } from "../../lib/learnSchedule";
+import { openAi } from "../../lib/aiPanelStore";
 import { getStudyDeck, setStudyDeck } from "./StudyDeckChoice";
 
 type Card = Doc<"learnCards">;
@@ -366,6 +367,20 @@ function StudySession({
           <>
             <div className="divider-gold" />
             <p className="text-base text-white/80 whitespace-pre-wrap break-words leading-relaxed">{card.back || " "}</p>
+            {/* Puts the card in the chat box; the reader may pick a book there and sends it. */}
+            <button
+              type="button"
+              className="text-xs text-gold underline underline-offset-2 decoration-gold/50"
+              onClick={() =>
+                openAi({
+                  mode: "chat",
+                  title: "Ask AI",
+                  draft: `Explain this flashcard to me in more depth.\n\nFront: ${card.front}\n\nBack: ${card.back}`,
+                })
+              }
+            >
+              Ask AI about this card
+            </button>
           </>
         )}
       </div>

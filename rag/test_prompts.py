@@ -505,3 +505,31 @@ def test_learn_prompts_keep_house_rules(name):
 def test_learn_routes_run_medium_effort():
     for label in ("/learn/cards", "/learn/quiz", "/learn/grade"):
         assert server.EFFORT_BY_LABEL[label] == "medium"
+
+
+# Local bookshelf AI (rag/book_tools.py). Owner approval required to change.
+BOOKS_EXPECTED = {
+    "LOCAL_ASK_SYSTEM": "beaec481b966fa36bba0bb0b25f29f944c37dce065e6a008ce5bdbf6ce3a89c1",
+}
+
+
+@pytest.mark.parametrize("name", sorted(BOOKS_EXPECTED))
+def test_book_prompt_text_is_unchanged(name):
+    import book_tools
+    assert set(book_tools.PROMPTS) == set(BOOKS_EXPECTED)
+    assert digest(book_tools.PROMPTS[name]) == BOOKS_EXPECTED[name], (
+        f"{name} changed. If this edit is owner-approved, update BOOKS_EXPECTED in the same commit.")
+
+
+def test_book_prompt_keeps_house_rules():
+    import book_tools
+    text = book_tools.LOCAL_ASK_SYSTEM
+    assert "em dash" in text.lower()
+    assert "—" not in text and "–" not in text
+    for ch in ("“", "”", "‘", "’"):
+        assert ch not in text
+
+
+def test_book_routes_run_medium_effort():
+    for label in ("/local/ask", "/local/learn/cards", "/local/learn/quiz"):
+        assert server.EFFORT_BY_LABEL[label] == "medium"

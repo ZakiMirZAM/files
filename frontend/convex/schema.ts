@@ -140,6 +140,8 @@ const applicationTables = {
     title: v.string(),
     prompt: v.string(),
     deckId: v.optional(v.id("learnDecks")),
+    /** Local site: the Books-folder book the test was written from (for review). */
+    sourceBook: v.optional(v.object({ id: v.string(), name: v.string(), pages: v.optional(v.string()) })),
     questions: v.string(),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),

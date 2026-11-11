@@ -7,6 +7,7 @@
 // cap on the total.
 
 import { getAiModel } from "./aiModelStore";
+import type { BookSource } from "./localAi";
 
 const AI_BASE = (import.meta.env.VITE_AI_BASE as string | undefined) ?? "http://localhost:3001";
 
@@ -166,9 +167,22 @@ function key(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-/** One batch of cards. `avoid` is the fronts already made for this deck. */
-export async function generateCards(request: string, count: number, avoid: string[] = []): Promise<LearnCard[]> {
-  const data = await postLearn("/learn/cards", { request, count, avoid: clipAvoid(avoid) }, TIMEOUT_MS);
+/**
+ * One batch of cards. `avoid` is the fronts already made for this deck. With a
+ * `book` (local site only) the local AI server reads that book from the Books
+ * folder and writes the cards from its pages.
+ */
+export async function generateCards(
+  request: string,
+  count: number,
+  avoid: string[] = [],
+  book?: BookSource | null,
+): Promise<LearnCard[]> {
+  const data = await postLearn(
+    book ? "/local/learn/cards" : "/learn/cards",
+    { request, count, avoid: clipAvoid(avoid), ...(book ? { book } : {}) },
+    TIMEOUT_MS,
+  );
   const cards = toCards(data.cards);
   if (cards.length === 0) throw new Error("The AI answer could not be read. Try again.");
   return cards;
@@ -181,15 +195,17 @@ export async function generateQuestions(p: {
   mcCount: number;
   shortCount: number;
   avoid?: string[];
+  book?: BookSource | null;
 }): Promise<TestQuestion[]> {
   const data = await postLearn(
-    "/learn/quiz",
+    p.book ? "/local/learn/quiz" : "/learn/quiz",
     {
       request: p.request ?? "",
       cards: clipSourceCards(p.cards ?? []),
       mcCount: p.mcCount,
       shortCount: p.shortCount,
       avoid: clipAvoid(p.avoid ?? []),
+      ...(p.book ? { book: p.book } : {}),
     },
     TIMEOUT_MS,
   );
@@ -225,14 +241,19 @@ export interface BatchHooks<T> {
  * already has, so a later batch moves on instead of repeating. Stops early when
  * two batches in a row add nothing new; the caller sees the shortfall.
  */
-export async function buildDeckCards(request: string, total: number, hooks: BatchHooks<LearnCard> = {}): Promise<LearnCard[]> {
+export async function buildDeckCards(
+  request: string,
+  total: number,
+  hooks: BatchHooks<LearnCard> = {},
+  book?: BookSource | null,
+): Promise<LearnCard[]> {
   const made: LearnCard[] = [];
   const seen = new Set<string>();
   let empty = 0;
   while (made.length < total && empty < MAX_EMPTY_BATCHES) {
     if (hooks.shouldStop?.()) break;
     const n = Math.min(CARDS_PER_CALL, total - made.length);
-    const batch = await generateCards(request, n, clipAvoid(made.map((c) => c.front)));
+    const batch = await generateCards(request, n, clipAvoid(made.map((c) => c.front)), book);
     let added = 0;
     for (const c of batch) {
       const k = key(c.front);
@@ -256,7 +277,7 @@ export function nextQuestionBatch(mcLeft: number, shortLeft: number): { mc: numb
 
 /** Build a test with `mcTotal` multiple-choice and `shortTotal` short-answer questions. */
 export async function buildTestQuestions(
-  source: { request?: string; cards?: { front: string; back: string }[] },
+  source: { request?: string; cards?: { front: string; back: string }[]; book?: BookSource | null },
   mcTotal: number,
   shortTotal: number,
   hooks: BatchHooks<TestQuestion> = {},

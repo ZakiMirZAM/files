@@ -9,6 +9,8 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { cn } from "../../lib/cn";
 import { buildTestQuestions, splitTestQuestions, type TestQuestion } from "../../lib/learnApi";
+import type { BookSource } from "../../lib/localAi";
+import { BookPicker, bookLabel, useLocalShelf } from "./BookPicker";
 
 export interface TestBuilderProps {
   onCreated: (testId: Id<"learnTests">) => void;
@@ -21,6 +23,7 @@ interface Pending {
   title: string;
   prompt: string;
   deckId?: Id<"learnDecks">;
+  sourceBook?: BookSource;
   parts: TestQuestion[][];
   count: number;
   /** Parts already saved, in order. */
@@ -47,6 +50,9 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
+  // Local site only: a book from the Books folder for the AI to read.
+  const shelf = useLocalShelf();
+  const [book, setBook] = useState<BookSource | null>(null);
   const [saving, setSaving] = useState(false);
   const stopRef = useRef(false);
   const progressRef = useRef<TestQuestion[]>([]);
@@ -56,7 +62,9 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
   const countsOk = mc >= 0 && short >= 0 && mc + short >= 1;
   const deck = decks?.find((d) => d._id === deckId);
   const subjectOk =
-    source === "request" ? request.trim().length > 0 : Boolean(deckId) && (deckCards?.length ?? 0) > 0;
+    source === "request"
+      ? request.trim().length > 0 || book !== null
+      : Boolean(deckId) && (deckCards?.length ?? 0) > 0;
   const canMake = !busy && !saving && countsOk && subjectOk;
 
   /** Save a made test as one or more parts; on failure the unsaved parts stay for a retry. */
@@ -71,6 +79,7 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
           title: name,
           prompt: p.prompt,
           deckId: p.deckId,
+          ...(p.sourceBook ? { sourceBook: p.sourceBook } : {}),
           questions: JSON.stringify(p.parts[i]),
         });
         ids.push(testId);
@@ -105,9 +114,13 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
     setTarget(mc + short);
     const subject =
       source === "request"
-        ? { request: request.trim() }
-        : { request: request.trim(), cards: deckCards ?? [] };
-    const prompt = source === "request" ? request.trim() : `Deck: ${deck?.name ?? ""}${request.trim() ? `. ${request.trim()}` : ""}`;
+        ? { request: request.trim(), book }
+        : { request: request.trim(), cards: deckCards ?? [], book };
+    const bookPart = book ? `${bookLabel(book.name)}${book.pages?.trim() ? `, ${book.pages.trim()}` : ""}` : "";
+    const prompt =
+      source === "request"
+        ? request.trim() || bookPart
+        : `Deck: ${deck?.name ?? ""}${request.trim() ? `. ${request.trim()}` : ""}`;
     let questions: TestQuestion[] = [];
     try {
       questions = await buildTestQuestions(subject, mc, short, {
@@ -125,11 +138,14 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
     const keep = questions.length > 0 ? questions : progressRef.current;
     setBusy(false);
     if (keep.length === 0) return;
-    const name = title.trim() || (source === "deck" ? `${deck?.name ?? "Deck"} test` : request.trim().split("\n")[0].slice(0, 80));
+    const name =
+      title.trim() ||
+      (source === "deck" ? `${deck?.name ?? "Deck"} test` : (request.trim().split("\n")[0] || bookPart).slice(0, 80));
     await save({
       title: name,
       prompt,
       deckId: source === "deck" && deckId ? deckId : undefined,
+      sourceBook: book ?? undefined,
       parts: splitTestQuestions(keep),
       count: keep.length,
       savedIds: [],
@@ -206,6 +222,8 @@ export function TestBuilder({ onCreated }: TestBuilderProps) {
           disabled={busy}
         />
       </label>
+
+      {shelf && <BookPicker books={shelf} value={book} onChange={setBook} withPages disabled={busy} />}
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1.5">
