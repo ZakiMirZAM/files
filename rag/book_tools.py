@@ -11,7 +11,7 @@ The model gets four read-only tools limited to that folder:
   search_book(book, query)     the pages that mention the words, with snippets
 
 No filesystem tool (Read, Bash, Glob) is ever given. Page numbers are PDF page
-numbers, the same numbers the in-app viewer shows.
+numbers (page 1 is the first page of the file).
 
 Routes (added by server.py, all 404 unless local_allowed(request)):
   GET  /local/status        -> {"ok": true}
@@ -43,7 +43,7 @@ import learn
 
 # --- prompt (owner approval required to change; hash in test_prompts.py) --------
 LOCAL_ASK_SYSTEM = """\
-You answer questions for a reader who studies finance, accounting, economics and investing from the books on their own computer. You can read those books with four tools: list_books finds a book by words in its title, book_contents gives its chapters with page numbers, read_pages returns the text of a range of pages, and search_book finds the pages that mention given words. The user message may name the book open in the viewer, the page in view, and the reader's last questions with your answers.
+You answer questions for a reader who studies finance, accounting, economics and investing from the books on their own computer. You can read those books with four tools: list_books finds a book by words in its title, book_contents gives its chapters with page numbers, read_pages returns the text of a range of pages, and search_book finds the pages that mention given words. The user message may name the books the reader picked or mentioned with @, and the reader's last questions with your answers.
 
 HOW TO WORK
 1. When a question is about a book, read the book before you answer. Find the chapter with book_contents or search_book, then read its pages with read_pages. Answer from the text you read, not from memory, and read more pages when the first ones do not settle the question.
@@ -52,7 +52,7 @@ HOW TO WORK
 4. Never invent a figure, a formula, a quotation or a page number. When a page has no readable text (a scanned page), say so.
 
 STYLE
-Answer the question directly, with no headings and no source list. Name the page where the reader can find each idea, written as "page 42"; these are the page numbers the viewer shows. Plain words. Define a term the first time it appears. Keep formulas exact and define every variable. No em dashes or en dashes: use a period, a comma or parentheses. Straight quotes only. No filler words and no closing pleasantries."""
+Answer the question directly, with no headings and no source list. Name the page where the reader can find each idea, written as "page 42"; these are the page numbers of the PDF file, as the tools give them. Plain words. Define a term the first time it appears. Keep formulas exact and define every variable. No em dashes or en dashes: use a period, a comma or parentheses. Straight quotes only. No filler words and no closing pleasantries."""
 
 PROMPTS = {"LOCAL_ASK_SYSTEM": LOCAL_ASK_SYSTEM}
 
@@ -226,7 +226,7 @@ def book_note(book: dict, page: int | None = None) -> str:
     if book.get("pages"):
         parts.append(f"Pages or chapter to use: {book['pages']}.")
     if page:
-        parts.append(f"The viewer is open at page {page}.")
+        parts.append(f"The reader is looking at page {page}.")
     return " ".join(parts)
 
 
@@ -345,7 +345,7 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         return await _with_book(args, contents_text)
 
     @tool("read_pages", f"The text of pages `start` to `end` of a book (at most {MAX_PAGES_PER_READ} pages "
-          "per call). Page numbers are PDF page numbers, as book_contents and the viewer show them.",
+          "per call). Page numbers are PDF page numbers, as book_contents shows them.",
           {"book": str, "start": int, "end": int})
     async def read_pages(args):
         start = learn._whole(args.get("start")) or 1
