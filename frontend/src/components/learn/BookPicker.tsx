@@ -25,7 +25,8 @@ export function useLocalShelf(): LocalBook[] | null {
 }
 
 export function bookLabel(name: string): string {
-  return name.replace(/\.pdf$/i, "");
+  // Trimmed: some downloaded files end "... Anna's .pdf", with a space before .pdf.
+  return name.replace(/\.pdf$/i, "").trim();
 }
 
 interface BookPickerProps {
