@@ -17,10 +17,20 @@ import { askLocal, type BookSource } from "../lib/localAi";
 import { matchBooks, mentionAt, type LocalBook } from "../lib/localBooks";
 import { BookPicker, bookLabel, useLocalShelf } from "./learn/BookPicker";
 
-/** The text inserted for an @-mention: the title, cut at a sensible length. */
-function mentionLabel(b: LocalBook): string {
-  const t = bookLabel(b.name).split(/ -- |_ /)[0].trim();
-  return t.length > 60 ? t.slice(0, 60).trim() : t;
+/**
+ * The text inserted for an @-mention: a readable title. Download-site prefixes
+ * (dokumen.pub_, OceanofPDF, pdfcoffee.com_) go, dashes and underscores become
+ * spaces, and the title is cut at a word near 50 characters.
+ */
+export function mentionLabel(b: { name: string }): string {
+  let t = bookLabel(b.name)
+    .replace(/^(_?oceanofpdf[._]?com_?|dokumen\.pub_|pdfcoffee\.com_|\d{6,}[-_ ])/i, "")
+    .split(/ -- /)[0]
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (t.length > 50) t = t.slice(0, 50).replace(/\s+\S*$/, "");
+  return t || bookLabel(b.name).slice(0, 50);
 }
 
 interface ChatMessage {

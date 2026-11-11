@@ -27,6 +27,17 @@ describe("mentionAt", () => {
   });
 });
 
+it("mentionLabel makes download-site names readable", async () => {
+  const { mentionLabel } = await import("../components/AiChat");
+  expect(mentionLabel({ name: "dokumen.pub_investment-valuation-university-edition-tools-and-techniques-for.pdf" })).toBe(
+    "investment valuation university edition tools and",
+  );
+  expect(mentionLabel({ name: "_OceanofPDFcom_Principles_for_Success_-_Ray_Dalio.pdf" })).toBe("Principles for Success Ray Dalio");
+  expect(mentionLabel({ name: "Good strategy, bad strategy _ the difference -- Richard Rumelt.pdf" })).toBe(
+    "Good strategy, bad strategy the difference",
+  );
+});
+
 it("bookTitle drops .pdf", () => {
   expect(bookTitle("Good strategy.PDF")).toBe("Good strategy");
 });
