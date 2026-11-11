@@ -61,3 +61,7 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     404 unless the server runs with `LOCAL_BOOKS=1` and the request is direct loopback with no
     forwarding header. `server.py` only imports `book_tools`, merges its effort labels and adds four
     routes; the prompt is pinned in `BOOKS_EXPECTED` in `rag/test_prompts.py`.
+  - **2026-11-10** (same day, owner OK): `LOCAL_ASK_SYSTEM` wording only. The in-app viewer was
+    removed, so the prompt no longer calls page numbers "the page numbers the viewer shows" or names
+    "the book open in the viewer"; it now says PDF page numbers as the tools give them, and books
+    picked or mentioned with @. Hash re-recorded in `BOOKS_EXPECTED`.
