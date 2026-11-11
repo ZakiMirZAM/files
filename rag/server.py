@@ -1083,7 +1083,7 @@ def main() -> None:
     app.router.add_post("/learn/grade", learn_routes["grade"])
     # Local bookshelf AI (rag/book_tools.py): reads the owner's Books folder. Every
     # route 404s unless LOCAL_BOOKS=1 and the request is direct loopback.
-    book_routes = book_tools.make_handlers(pick_model, ASK_MODEL, VAULT_MCP, VAULT_TOOL)
+    book_routes = book_tools.make_handlers(pick_model, ASK_MODEL, VAULT_MCP, VAULT_TOOL, verify)
     app.router.add_get("/local/status", book_routes["status"])
     app.router.add_post("/local/ask", book_routes["ask"])
     app.router.add_post("/local/learn/cards", book_routes["cards"])

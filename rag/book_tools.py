@@ -287,9 +287,11 @@ def build_ask_prompt(p: dict) -> str:
 
 
 # --- the agent ----------------------------------------------------------------------
-def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str) -> dict:
+def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, verifier=None) -> dict:
     """Routes bound to server.py's vault server and model switch (injected, as in
-    learn.make_handlers, because server.py runs as __main__)."""
+    learn.make_handlers, because server.py runs as __main__). `verifier` is the
+    RARR module (rag/verify.py): each /local/ask answer gets the same Tier 0 pass
+    as /ask. With no page data block, its useful part here is the arithmetic check."""
     from claude_agent_sdk import (
         AssistantMessage,
         ClaudeAgentOptions,
@@ -424,7 +426,14 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str) ->
                          ASK_MAX_TURNS, ASK_BUDGET_USD)
         if text is None:
             return _fail(503, learn.ERR_BACKEND)
-        return web.json_response({"answer": learn.tidy(text)})
+        answer = learn.tidy(text)
+        payload = {"answer": answer}
+        if verifier is not None:
+            report = verifier.tier0(answer, "", [])
+            verifier.log_line("/local/ask", report)
+            if report:
+                payload["verification"] = verifier.public(report)
+        return web.json_response(payload)
 
     async def cards(request: web.Request) -> web.Response:
         if not local_allowed(request):

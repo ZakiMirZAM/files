@@ -11,7 +11,7 @@ import { getPageAiContext } from "../lib/aiContextStore";
 import { budgetWaitMessage, secondsUntilAllowed, subscribeAskBudget } from "../lib/askBudget";
 import { chatDataContext, pageNameFromTitle, type ChatTurn } from "../lib/chatContext";
 import { cn } from "../lib/cn";
-import { getAiModel } from "../lib/aiModelStore";
+import { getAiModel, setAiModel, subscribeAiModel, type AiModelChoice } from "../lib/aiModelStore";
 import { getOpenAi, subscribeAi } from "../lib/aiPanelStore";
 import { askLocal, type BookSource } from "../lib/localAi";
 import { matchBooks, mentionAt, type LocalBook } from "../lib/localBooks";
@@ -46,9 +46,36 @@ interface ChatMessage {
 interface AiChatProps {
   /** True while the panel is in chat mode. */
   active: boolean;
+  /**
+   * The Learn page's Ask AI tab (study companion). On the local site every
+   * question goes to the book AI, which reads the Books folder, the vault and
+   * the web; the Opus/Haiku switch sits above the box. Ignores the sidebar's
+   * open requests.
+   */
+  companion?: boolean;
 }
 
-export function AiChat({ active }: AiChatProps) {
+function ModelSwitch() {
+  const model = useSyncExternalStore(subscribeAiModel, getAiModel);
+  return (
+    <div className="inline-flex rounded-sm border border-gold/20 text-xs overflow-hidden" role="group" aria-label="AI model">
+      {(["opus", "haiku"] as AiModelChoice[]).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => setAiModel(m)}
+          aria-pressed={model === m}
+          title={m === "opus" ? "Opus 5.5: deeper answers" : "Haiku 5.5: faster answers, for a quick conversation"}
+          className={cn("px-2.5 py-1 transition-colors", model === m ? "bg-gold/15 text-gold" : "text-white/50 hover:text-white")}
+        >
+          {m === "opus" ? "Opus 5.5" : "Haiku 5.5"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AiChat({ active, companion = false }: AiChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const nextId = useRef(0);
@@ -67,14 +94,15 @@ export function AiChat({ active }: AiChatProps) {
 
   // Opened from a test review: take its book and text.
   useEffect(() => {
-    if (req?.mode !== "chat") return;
+    if (companion || req?.mode !== "chat") return;
     if (req.book) setBook(req.book);
     if (req.draft) setDraft(req.draft);
   }, [req?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Books the question still mentions (an @-mention deleted from the text drops out). */
   const mentionedNow = (text: string) => mentioned.filter((m) => text.includes(`@${m.label}`)).map((m) => m.book);
-  const usesBooks = book !== null || mentionedNow(draft).length > 0;
+  // The companion on the local site always uses the book AI (books + vault + web).
+  const usesBooks = (companion && shelf !== null) || book !== null || mentionedNow(draft).length > 0;
 
   const busy = messages.some((m) => m.status === "loading");
   // The local book AI has no shared per-minute budget; /ask keeps its own.
@@ -120,7 +148,7 @@ export function AiChat({ active }: AiChatProps) {
     nextId.current += 1;
     const id = nextId.current;
     const names = [...(book ? [bookLabel(book.name)] : []), ...refs.map((b) => bookLabel(b.name))];
-    const bookName = names.length > 1 ? `${names.length} books` : names[0];
+    const bookName = names.length > 1 ? `${names.length} books` : names[0] ?? (companion && shelf ? "your books, the library and the web" : undefined);
     setMessages((prev) => [...prev, { id, question, status: "loading", bookName }]);
     setDraft("");
     setMention(null);
@@ -136,7 +164,7 @@ export function AiChat({ active }: AiChatProps) {
           ),
       );
 
-    if (book || refs.length > 0) {
+    if (book || refs.length > 0 || (companion && shelf)) {
       settle(askLocal({ question, book, books: refs, history, model: getAiModel() }));
       return;
     }
@@ -197,7 +225,11 @@ export function AiChat({ active }: AiChatProps) {
       <div role="log" aria-live="polite" className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {messages.length === 0 && (
           <p className="text-sm text-white/45 leading-relaxed">
-            {book
+            {companion
+              ? shelf
+                ? "Your study companion. Ask about anything you are learning. The AI looks in your books, the library and the web, and checks its arithmetic. Type @ to point it at a specific book. Switch to Haiku for a quick conversation."
+                : "Your study companion. Ask about anything you are learning; the AI uses the library and the web. Switch to Haiku for a quick conversation."
+              : book
               ? `Ask anything about ${bookLabel(book.name)}. The AI reads the book on this computer before it answers.`
               : shelf
                 ? "Ask anything about the app or the page you are on. Type @ to bring in a book from your Books folder; the AI then reads it before it answers."
@@ -244,6 +276,7 @@ export function AiChat({ active }: AiChatProps) {
           send();
         }}
       >
+        {companion && <ModelSwitch />}
         {shelf && (
           <BookPicker
             books={shelf}
