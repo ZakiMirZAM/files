@@ -103,7 +103,11 @@ def build_prompt(payload: dict, guidance: str = "") -> str:
 
 
 def parse_answer_output(text: str) -> dict | None:
-    """{answer, sources, builtOnReader}, or None when the output is unusable."""
+    """{answer, sources, builtOnReader}, or None when the output is unusable.
+
+    `sources` is always empty (owner rule 2026-11-10: no AI feature spends text on
+    citations). The key stays so the page's reply shape does not change; anything
+    the model still sends there is dropped."""
     if not isinstance(text, str):
         return None
     start, end = text.find("{"), text.rfind("}")
@@ -116,11 +120,7 @@ def parse_answer_output(text: str) -> dict | None:
         return None
     if not isinstance(obj, dict) or not isinstance(obj.get("builtOnReader"), bool):
         return None
-    answer, sources = obj.get("answer"), obj.get("sources", [])
+    answer = obj.get("answer")
     if not isinstance(answer, str) or not answer.strip():
         return None
-    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
-        return None
-    return {"answer": answer.strip()[:MAX_OUT_ANSWER],
-            "sources": [s.strip()[:MAX_SOURCE] for s in sources if s.strip()][:MAX_SOURCES],
-            "builtOnReader": obj["builtOnReader"]}
+    return {"answer": answer.strip()[:MAX_OUT_ANSWER], "sources": [], "builtOnReader": obj["builtOnReader"]}

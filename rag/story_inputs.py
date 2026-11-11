@@ -182,7 +182,8 @@ def parse_story_output(text: str) -> dict | None:
                          else _number(row.get("value")),
                 "unit": UNITS[name],
                 "proof": _text(row.get("proof"), MAX_PROOF),
-                "sources": _texts(row.get("sources"), MAX_SOURCE, MAX_SOURCES),
+                # Always empty: no AI feature cites its source (owner rule 2026-11-10).
+                "sources": [],
             }
         if len(by_name) != len(INPUT_NAMES):
             return None

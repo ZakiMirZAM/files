@@ -72,3 +72,8 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     says", Sources lines or URLs; a page only when the reader asks where something is). Reading the book
     stays required. The wrong-answer review text no longer asks where the book explains each idea. Hash
     re-recorded in `BOOKS_EXPECTED`.
+  - **2026-11-10** (owner: "Yes, drop it", under the universal no-citation rule): `STORY_SYSTEM` and
+    `STORY_ANSWER_SYSTEM` drop their JSON `"sources"` field and every instruction to name a book,
+    chapter or URL (the story proof still quotes the page's data-block figures, which the checker needs).
+    `story_answer.parse_answer_output` and `story_inputs` return `"sources": []` so the reply shape and the
+    page code stay the same. Both hashes re-recorded in `EXPECTED`.

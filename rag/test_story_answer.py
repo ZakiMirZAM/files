@@ -68,8 +68,8 @@ def test_parse_the_answer_shape():
     parse = story_answer.parse_answer_output
     out = parse('Here:\n```json\n{"answer": "Line one.\nLine two.", "builtOnReader": true, '
                 '"sources": ["Competitive Strategy, chapter 1", " ", "https://x.com/10k"]}\n```')
-    assert out == {"answer": "Line one.\nLine two.", "builtOnReader": True,
-                   "sources": ["Competitive Strategy, chapter 1", "https://x.com/10k"]}
+    # Sources the model still sends are dropped (owner rule 2026-11-10: no citations).
+    assert out == {"answer": "Line one.\nLine two.", "builtOnReader": True, "sources": []}
     assert parse('{"answer": "a", "builtOnReader": false}') == \
         {"answer": "a", "sources": [], "builtOnReader": False}
 
@@ -78,17 +78,17 @@ def test_parse_rejects_malformed_output():
     # The old verdict shape is refused too: every reply must carry a written answer.
     for bad in ("no json", "[]", '{"answer": "a"}', '{"answer": "a", "builtOnReader": "no"}',
                 '{"adequate": true, "answer": "", "sources": []}',
-                '{"answer": "", "builtOnReader": false}', '{"answer": 3, "builtOnReader": false}',
-                '{"answer": "a", "builtOnReader": true, "sources": "x"}',
-                '{"answer": "a", "builtOnReader": true, "sources": [1]}'):
+                '{"answer": "", "builtOnReader": false}', '{"answer": 3, "builtOnReader": false}'):
         assert story_answer.parse_answer_output(bad) is None, bad
+    # A stray or malformed sources field no longer matters: it is dropped.
+    assert story_answer.parse_answer_output('{"answer": "a", "builtOnReader": true, "sources": [1]}')["sources"] == []
 
 
-def test_parse_caps_the_answer_and_the_sources():
+def test_parse_caps_the_answer_and_drops_sources():
     raw = json.dumps({"builtOnReader": False, "answer": "x" * 9000, "sources": ["s" * 500] * 20})
     out = story_answer.parse_answer_output(raw)
     assert len(out["answer"]) == story_answer.MAX_OUT_ANSWER
-    assert len(out["sources"]) == story_answer.MAX_SOURCES and len(out["sources"][0]) == story_answer.MAX_SOURCE
+    assert out["sources"] == []
 
 
 # --- server wiring ---
@@ -117,7 +117,7 @@ def test_handler_runs_the_answer_prompt_with_web_and_research(monkeypatch):
     monkeypatch.setattr(server.research_tools, "MODE", "on")
     status, body = call(OK)
     assert status == 200
-    assert body == {"answer": "A researched answer.", "sources": ["Book, chapter 2"], "builtOnReader": True}
+    assert body == {"answer": "A researched answer.", "sources": [], "builtOnReader": True}
     assert seen["model"] == server.ASK_MODEL and seen["system"] == server.STORY_ANSWER_SYSTEM
     assert seen["turns"] == server.STORY_ANSWER_MAX_TURNS == 16
     assert seen["budget"] == server.STORY_ANSWER_BUDGET_USD == 1.5

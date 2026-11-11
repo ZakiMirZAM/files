@@ -11,7 +11,7 @@ in this process. Run `claude login` (Max) once before starting.
   POST /story-inputs  {ticker, company, answers, data}
                                        -> {rows, riskFlags, weakestLink, counterStory}
   POST /story-answer  {ticker, company, questionId, question, userAnswer, data, otherAnswers?}
-                                       -> {answer, sources, builtOnReader}
+                                       -> {answer, sources (always empty), builtOnReader}
 
 Start:  python server.py        (listens on http://localhost:3001)
 Needs:  ollama serve + `ollama pull nomic-embed-text`, and `claude login`.
@@ -516,7 +516,7 @@ WHAT YOU RETURN
 Return one JSON object and nothing else: no text before or after it and no code fence. The object has exactly four keys:
 {"rows": [...], "riskFlags": [...], "weakestLink": "...", "counterStory": "..."}
 "rows" holds exactly nine objects, one per input, in this order: totalMarket, marketGrowth10y, shareYear10, targetMargin, salesToCapital, failureProbability, distressProceeds, stableRoic, stages. Each object is:
-{"input": "<name>", "storyQuote": "<the reader's words>", "value": <number or null>, "unit": "<unit>", "proof": "<why this number>", "sources": ["<book title, chapter number>"]}
+{"input": "<name>", "storyQuote": "<the reader's words>", "value": <number or null>, "unit": "<unit>", "proof": "<why this number>"}
 Units: totalMarket and distressProceeds are "currency", a full amount in the company's reporting currency, never in thousands or millions. marketGrowth10y is "rate", a yearly decimal (0.05 means 5 percent a year). shareYear10, targetMargin, failureProbability and stableRoic are "fraction", a decimal (0.2 means 20 percent). salesToCapital is "ratio" (1.42 means 1.42 of new sales for each 1 of capital invested). stages is "count", the whole number 1, 2 or 3.
 
 THE CONVERSION RULES
@@ -533,14 +533,14 @@ Question 6 sets no input. The site builds the cost of capital itself, and you ne
 Question 9, when present, is the reader's whole story. Check the nine numbers against it and against each other. When two answers pull in different directions, follow the one with more evidence and say so in the proof.
 
 PROOF
-Every proof cites at least one figure from the data block. Cite each figure with its exact block label, then "is", then its value exactly as the block writes it, for example "Firm operating margin is 18.20%" or "Peer top decile operating margin is 12.30%". Cite only figures that appear in the data block, and do not restate the input's own number, which is already in value. A site checker matches every figure in a proof to the block line whose label it shares, so any other figure can be read as a wrong block figure. The checker also cannot confirm a figure in a sentence that uses the words if, versus, compared with, would be, for example, typical, typically, historically or estimates, or a figure introduced as "a ... of" its value, so keep those words out of every sentence that cites a figure. Say where the number sits against the company's own history and against the industry range, and name the rule it follows. Name the book title and chapter behind the rule, and search the vault library with search_vault when you need the passage. Write two to four sentences. Never give a number without proof. When the answers and the data cannot support a number, set value to null and say why in the proof.
+Every proof cites at least one figure from the data block. Cite each figure with its exact block label, then "is", then its value exactly as the block writes it, for example "Firm operating margin is 18.20%" or "Peer top decile operating margin is 12.30%". Cite only figures that appear in the data block, and do not restate the input's own number, which is already in value. A site checker matches every figure in a proof to the block line whose label it shares, so any other figure can be read as a wrong block figure. The checker also cannot confirm a figure in a sentence that uses the words if, versus, compared with, would be, for example, typical, typically, historically or estimates, or a figure introduced as "a ... of" its value, so keep those words out of every sentence that cites a figure. Say where the number sits against the company's own history and against the industry range, and name the rule it follows. Search the vault library with search_vault when you need the passage behind a rule, but do not name the book or the chapter. Write two to four sentences. Never give a number without proof. When the answers and the data cannot support a number, set value to null and say why in the proof.
 storyQuote is a short quote of the reader's own words, at most 25 words, from the answer the input comes from. Use an empty string when the answer says nothing that bears on the input.
 
 WEAKEST LINK AND COUNTER-STORY
 weakestLink names the one answer with the least evidence behind it and says what evidence is missing, in one or two sentences. counterStory is the most plausible different story for the same company, in two sentences, with no numbers.
 
 STYLE
-Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. Never name an author; name a book by its title. Apply no grades, labels or verdicts such as strong, weak, good or bad: state the figures and the rule."""
+Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No citations: never name an author, a book, a chapter or a web page, and add no source list. Apply no grades, labels or verdicts such as strong, weak, good or bad: state the figures and the rule."""
 
 # --- Prompt E: answer one story question (POST /story-answer) ---
 # Owner-approved 2026-09-27, its own hash in rag/test_prompts.py. When the reader
@@ -565,11 +565,11 @@ First work through the question's own steps in order. Where a step asks for a ch
 
 WHAT YOU RETURN
 Return one JSON object and nothing else: no text before or after it and no code fence.
-{"answer": "<your answer>", "sources": ["<book title, chapter>", "<full URL>"], "builtOnReader": <true or false>}
-builtOnReader is true when the reader's answer was not empty and you built on it, and false when it was empty. List every source the answer rests on: each book as its title and chapter, each web page as its full URL.
+{"answer": "<your answer>", "builtOnReader": <true or false>}
+builtOnReader is true when the reader's answer was not empty and you built on it, and false when it was empty.
 
 STYLE
-Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No headings. Never name an author, and never name a book in the answer text: book titles go only in the sources list."""
+Use plain words a beginner can follow, and define a term the first time it appears. Never use an em dash or an en dash: use a comma, a period, a colon or parentheses instead. Use straight quotes only. No headings. No citations: never name an author, a book, a chapter or a web page, and add no source list."""
 
 # --- local retrieval (no Claude) ---
 _db_lock = threading.Lock()

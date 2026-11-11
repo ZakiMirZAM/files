@@ -110,12 +110,18 @@ calc_tools = pytest.importorskip("calc_tools", reason="claude_agent_sdk not inst
 # Same day, second owner request ("does not waste time listing titles. Just get
 # straight to the point"): ASK and EXPLAIN drop headings; the first sentence is
 # the answer and the nine frames are written as prose or tables, untitled.
+#
+# STORY_SYSTEM and STORY_ANSWER_SYSTEM re-recorded 2026-11-10: owner rule that no
+# AI feature spends text citing its source ("Yes, drop it"). Both drop their JSON
+# "sources" field and any instruction to name a book, chapter or URL; the story
+# proof still quotes the page's data-block figures, which the checker needs.
+# The parsers return "sources": [] so the reply shape stays the same.
 EXPECTED = {
     "ASK_SYSTEM": "4a8596d1a8afca40a7add6e36cd7ebaee2424b11c0fef96cb22c2c9d1d7d90f2",
     "EXPLAIN_SYSTEM": "c8529f2900c12ca70e11339f52f4a1e4c411fd319010878ae8f58942e2249dd1",
     "DEFINE_SYSTEM": "166795c5e2cb00f72e4b358d04a68d56652baf0289a033032ce9e388dfd16a90",
-    "STORY_SYSTEM": "ac3a68ab0f2a400ea37659ab2660801c03c3d57f91dc90afeb9bef2ae0d377db",
-    "STORY_ANSWER_SYSTEM": "c39948d6e78d633c901286015e5f73f10e7cdb96582e379769f4e3ece6be82a2",
+    "STORY_SYSTEM": "c74dfe3a982e210740435aa4930112e841311f0b18d13cd9894af21039513faf",
+    "STORY_ANSWER_SYSTEM": "81dec628a4b62717d7d0fbeb8c42039a6b57ac9dba8636f1da1fdd0d911d1324",
 }
 
 PROMPTS = ("ASK_SYSTEM", "EXPLAIN_SYSTEM", "DEFINE_SYSTEM", "STORY_SYSTEM", "STORY_ANSWER_SYSTEM")
