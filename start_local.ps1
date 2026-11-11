@@ -10,6 +10,9 @@
 #  This never touches the live site: production uses start_all.ps1 on ports
 #  8000 / 3001 / 3002 / 8080, and the book routes stay off there.
 # ============================================================================
+#  -Restart  stops the three local servers (8001, 3013, 5173) and their windows
+#            first, then starts them again: use it after a code change.
+param([switch]$Restart)
 $ErrorActionPreference = "Continue"
 $ROOT = $PSScriptRoot
 # The financial databases live in the main folder (they are not in git), so a
@@ -45,15 +48,33 @@ function Wait-Port($port, $label, $seconds = 90) {
 }
 
 # Starts a command in its own minimized PowerShell window with its own settings,
-# so the window shows the server's log and closing it stops the server.
+# so the window shows the server's log and closing it stops the server. No -NoExit:
+# the window closes when its server stops, so stopped servers leave no empty windows.
 function Start-Window($title, $dir, $envVars, $command) {
     $sets = ($envVars.GetEnumerator() | ForEach-Object { "`$env:$($_.Key) = '$($_.Value)'" }) -join "; "
     $script = "`$Host.UI.RawUI.WindowTitle = '$title'; $sets; Set-Location '$dir'; $command"
-    Start-Process powershell.exe -ArgumentList "-NoProfile", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $script -WindowStyle Minimized
+    Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $script -WindowStyle Minimized
+}
+
+# Stops every local-site window (title "IFE local ...") and the server inside it.
+# Never touches the live site's processes, which this launcher does not start.
+function Stop-LocalSite {
+    $all = Get-CimInstance Win32_Process
+    $wins = $all | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match "WindowTitle = 'IFE local" }
+    foreach ($w in $wins) {
+        # The server (python or node via npx) and anything it started, then the window.
+        $tree = @($w.ProcessId); $i = 0
+        while ($i -lt $tree.Count) { $tree += @($all | Where-Object { $_.ParentProcessId -eq $tree[$i] } | ForEach-Object ProcessId); $i++ }
+        [array]::Reverse($tree)
+        foreach ($id in $tree) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+    }
+    Write-Host "Stopped $(@($wins).Count) local-site window(s)."
+    Start-Sleep -Seconds 2
 }
 
 Write-Host ""
 Write-Host "=== IntrinsicFinEd local site ===" -ForegroundColor Cyan
+if ($Restart) { Stop-LocalSite }
 
 # 1. Ollama (11434): embeddings for the AI's book-library search. Shared with the live site.
 if (Test-Port 11434) { Write-Host "1. Ollama: already running" }
