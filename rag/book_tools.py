@@ -62,6 +62,7 @@ LEARN_MAX_TURNS, LEARN_BUDGET_USD = 30, 4.0
 
 # --- limits ----------------------------------------------------------------------
 MAX_QUESTION = 12_000          # room for a pasted list of wrong test answers
+MAX_BOOKS = 5                  # books one question may reference
 MAX_HISTORY_TURNS, MAX_HISTORY_CHARS = 4, 1_500
 MAX_PAGES_PER_READ, MAX_READ_CHARS = 25, 80_000
 MAX_LIST, MAX_TOC, MAX_HITS, SNIPPET = 40, 400, 15, 320
@@ -247,20 +248,37 @@ def validate_ask(data) -> tuple[str | None, dict | None]:
     err, book = parse_book(data.get("book"))
     if err:
         return err, None
+    # Books @-mentioned in the chat (up to MAX_BOOKS), besides the picked one.
+    books: list[dict] = [book] if book else []
+    raw = data.get("books")
+    if raw is not None:
+        if not isinstance(raw, list):
+            return ERR_BOOK, None
+        for item in raw:
+            berr, b = parse_book(item)
+            if berr:
+                return berr, None
+            if b and all(b["id"] != x["id"] for x in books):
+                books.append(b)
+    books = books[:MAX_BOOKS]
     page = learn._whole(data.get("page"))
     history = []
     for t in (data.get("history") or [])[-MAX_HISTORY_TURNS:] if isinstance(data.get("history"), list) else []:
         if isinstance(t, dict) and isinstance(t.get("question"), str) and isinstance(t.get("answer"), str):
             history.append({"question": t["question"][:MAX_HISTORY_CHARS],
                             "answer": t["answer"][:MAX_HISTORY_CHARS]})
-    return None, {"question": q, "book": book, "page": page if page and page > 0 else None,
-                  "history": history}
+    return None, {"question": q, "book": books[0] if books else None, "books": books,
+                  "page": page if page and page > 0 else None, "history": history}
 
 
 def build_ask_prompt(p: dict) -> str:
     parts = []
-    if p["book"]:
-        parts.append(book_note(p["book"], p["page"]))
+    books = p.get("books") or ([p["book"]] if p.get("book") else [])
+    if len(books) == 1:
+        parts.append(book_note(books[0], p["page"]))
+    elif books:
+        parts.append("The reader referenced these books; read each one the question needs:\n" + "\n".join(
+            f"- {book_note(b)}" for b in books))
     if p["history"]:
         parts.append("Earlier in this chat:\n" + "\n\n".join(
             f"Reader: {t['question']}\nYou: {t['answer']}" for t in p["history"]))

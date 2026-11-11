@@ -1,9 +1,8 @@
 """Local bookshelf: the PDFs in the owner's Books folder, for the LOCAL site only.
 
-The live site keeps uploading a private copy of each book (Book notes, slice A7).
-On this PC the books are already on disk, so the local site reads them from the
-folder instead of uploading 4 GB to Convex. api.py exposes two routes on top of
-this module and turns both off when ENV=production.
+The local site lists them so the reader can pick or @-mention a book for the book
+AI (rag/book_tools.py reads the files). api.py exposes GET /api/learn/local-books
+on top of this module and turns it off when ENV=production.
 
 Pure functions only (no FastAPI), tested in test_local_books.py.
 """
@@ -49,24 +48,3 @@ def list_books(root: Path) -> list[dict]:
         out.append({"id": rel.as_posix(), "name": path.name, "size": size})
     out.sort(key=lambda b: b["name"].lower())
     return out
-
-
-def resolve_book(root: Path, book_id: str) -> Path | None:
-    """The PDF for an id from list_books, or None. Refuses anything that is not a
-    .pdf inside root (absolute paths, '..', drive letters, hidden folders)."""
-    if not book_id or len(book_id) > 1000 or "\x00" in book_id:
-        return None
-    rel = Path(book_id)
-    if rel.is_absolute() or rel.drive or ".." in rel.parts or _hidden(rel):
-        return None
-    try:
-        path = (root / rel).resolve(strict=True)
-    except OSError:
-        return None
-    if not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() != ".pdf":
-        return None
-    # Check the real (resolved) names too: a short 8.3 name such as RECEIP~1
-    # passes the check on the id but resolves to the hidden folder.
-    if _hidden(path.relative_to(root)):
-        return None
-    return path

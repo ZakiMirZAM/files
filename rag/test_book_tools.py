@@ -104,7 +104,21 @@ def test_validate_ask_keeps_book_page_and_recent_history():
     assert "book id for the tools: Investment Valuation.pdf" in prompt and "page 12" in prompt
 
 
+def test_validate_ask_merges_mentioned_books():
+    err, p = book_tools.validate_ask({
+        "question": "Compare the two",
+        "book": {"id": "a.pdf", "name": "A"},
+        "books": [{"id": "a.pdf", "name": "A"}, {"id": "b.pdf", "name": "B"}],
+    })
+    assert err is None and [b["id"] for b in p["books"]] == ["a.pdf", "b.pdf"]
+    prompt = book_tools.build_ask_prompt(p)
+    assert "referenced these books" in prompt and "a.pdf" in prompt and "b.pdf" in prompt
+    err, p = book_tools.validate_ask({"question": "x", "books": [{"id": f"{i}.pdf"} for i in range(9)]})
+    assert len(p["books"]) == book_tools.MAX_BOOKS
+
+
 @pytest.mark.parametrize("data", [None, {}, {"question": "  "}, {"question": "x", "book": "not a dict"},
+                                  {"question": "x", "books": "nope"}, {"question": "x", "books": [{"id": ""}]},
                                   {"question": "x" * (book_tools.MAX_QUESTION + 1)}])
 def test_validate_ask_refuses(data):
     err, _ = book_tools.validate_ask(data)

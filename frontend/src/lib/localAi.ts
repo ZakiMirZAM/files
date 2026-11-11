@@ -34,6 +34,8 @@ export interface LocalAskTurn {
 export async function askLocal(p: {
   question: string;
   book?: BookSource | null;
+  /** Books @-mentioned in the question. */
+  books?: BookSource[];
   page?: number | null;
   history?: LocalAskTurn[];
   model?: string;
@@ -46,6 +48,7 @@ export async function askLocal(p: {
       body: JSON.stringify({
         question: p.question,
         ...(p.book ? { book: p.book } : {}),
+        ...(p.books?.length ? { books: p.books } : {}),
         ...(p.page ? { page: p.page } : {}),
         history: (p.history ?? []).slice(-4),
         ...(p.model ? { model: p.model } : {}),

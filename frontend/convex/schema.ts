@@ -156,57 +156,6 @@ const applicationTables = {
     completedAt: v.number(),
   }).index("by_user_test", ["userId", "testId"]),
 
-  // A7: a book the user imported. The marked copy is kept privately; the clean
-  // original is optional (needed only when the marks are flattened). A book from
-  // the local bookshelf has no copy: `localPath` names the PDF in the owner's
-  // Books folder, which only the local site can open.
-  learnBooks: defineTable({
-    userId: v.id("users"),
-    title: v.string(),
-    fileName: v.string(),
-    storageId: v.optional(v.id("_storage")),
-    localPath: v.optional(v.string()),
-    cleanStorageId: v.optional(v.id("_storage")),
-    pageCount: v.number(),
-    noteCount: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
-  // A7: who uploaded each Learn file (book PDFs, mark pictures). The first
-  // claim wins, as with noteFiles; nothing is served or deleted without it.
-  learnFiles: defineTable({
-    userId: v.id("users"),
-    storageId: v.id("_storage"),
-    createdAt: v.number(),
-  })
-    .index("by_storage", ["storageId"])
-    .index("by_user_storage", ["userId", "storageId"]),
-
-  // A7: one mark found in a book. `method` says how it was found: a real PDF
-  // annotation object, or a page comparison with the clean original.
-  learnBookNotes: defineTable({
-    userId: v.id("users"),
-    bookId: v.id("learnBooks"),
-    page: v.number(),
-    kind: v.union(
-      v.literal("handwriting"),
-      v.literal("underline"),
-      v.literal("highlight"),
-      v.literal("note"),
-      v.literal("mark"),
-    ),
-    method: v.union(v.literal("annotation"), v.literal("comparison")),
-    imageStorageId: v.optional(v.id("_storage")),
-    /** [x0, y0, x1, y1] in PDF points, as JSON. */
-    rect: v.optional(v.string()),
-    /** Typed note text, when the annotation carries one. */
-    text: v.optional(v.string()),
-    createdAt: v.number(),
-  })
-    .index("by_user_book", ["userId", "bookId"])
-    .index("by_user_book_page", ["userId", "bookId", "page"]),
-
   // Saved tickers / industries the user is analyzing (recents)
   watchlist: defineTable({
     userId: v.id("users"),

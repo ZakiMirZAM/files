@@ -10,7 +10,6 @@
 
 import type * as aiAnswers from "../aiAnswers.js";
 import type * as auth from "../auth.js";
-import type * as books from "../books.js";
 import type * as http from "../http.js";
 import type * as learn from "../learn.js";
 import type * as learnTests from "../learnTests.js";
@@ -30,7 +29,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   aiAnswers: typeof aiAnswers;
   auth: typeof auth;
-  books: typeof books;
   http: typeof http;
   learn: typeof learn;
   learnTests: typeof learnTests;

@@ -14,7 +14,14 @@ import { cn } from "../lib/cn";
 import { getAiModel } from "../lib/aiModelStore";
 import { getOpenAi, subscribeAi } from "../lib/aiPanelStore";
 import { askLocal, type BookSource } from "../lib/localAi";
+import { matchBooks, mentionAt, type LocalBook } from "../lib/localBooks";
 import { BookPicker, bookLabel, useLocalShelf } from "./learn/BookPicker";
+
+/** The text inserted for an @-mention: the title, cut at a sensible length. */
+function mentionLabel(b: LocalBook): string {
+  const t = bookLabel(b.name).split(/ -- |_ /)[0].trim();
+  return t.length > 60 ? t.slice(0, 60).trim() : t;
+}
 
 interface ChatMessage {
   id: number;
@@ -41,22 +48,49 @@ export function AiChat({ active }: AiChatProps) {
   // Local site only: a book from the Books folder for the AI to read.
   const shelf = useLocalShelf();
   const [book, setBook] = useState<BookSource | null>(null);
-  const [page, setPage] = useState<number | null>(null);
   const req = useSyncExternalStore(subscribeAi, getOpenAi);
+  // @-mentions: books referenced in the text, and the list shown while typing one.
+  const [mentioned, setMentioned] = useState<{ label: string; book: BookSource }[]>([]);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [pick, setPick] = useState(0);
+  const suggestions = shelf && mention ? matchBooks(shelf, mention.query) : [];
 
-  // Opened from the book viewer or a test review: take its book, page and text.
+  // Opened from a test review: take its book and text.
   useEffect(() => {
     if (req?.mode !== "chat") return;
-    if (req.book) {
-      setBook(req.book);
-      setPage(req.page ?? null);
-    }
+    if (req.book) setBook(req.book);
     if (req.draft) setDraft(req.draft);
   }, [req?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Books the question still mentions (an @-mention deleted from the text drops out). */
+  const mentionedNow = (text: string) => mentioned.filter((m) => text.includes(`@${m.label}`)).map((m) => m.book);
+  const usesBooks = book !== null || mentionedNow(draft).length > 0;
+
   const busy = messages.some((m) => m.status === "loading");
   // The local book AI has no shared per-minute budget; /ask keeps its own.
-  const canSend = draft.trim().length > 0 && !busy && (book !== null || seconds === 0);
+  const canSend = draft.trim().length > 0 && !busy && (usesBooks || seconds === 0);
+
+  const onDraft = (value: string, caret: number) => {
+    setDraft(value);
+    const m = shelf ? mentionAt(value, caret) : null;
+    setMention(m);
+    setPick(0);
+  };
+
+  const choose = (b: LocalBook) => {
+    if (!mention) return;
+    const label = mentionLabel(b);
+    const caret = inputRef.current?.selectionStart ?? draft.length;
+    const next = `${draft.slice(0, mention.start)}@${label} ${draft.slice(caret)}`;
+    setDraft(next);
+    setMentioned((prev) => [...prev.filter((x) => x.book.id !== b.id), { label, book: { id: b.id, name: b.name } }]);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const pos = mention.start + label.length + 2;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(pos, pos);
+    });
+  };
 
   useEffect(() => {
     if (active) inputRef.current?.focus();
@@ -68,14 +102,18 @@ export function AiChat({ active }: AiChatProps) {
 
   const send = () => {
     const question = draft.trim();
-    if (!question || busy || (!book && seconds > 0)) return;
+    if (!question || busy || (!usesBooks && seconds > 0)) return;
+    const refs = mentionedNow(question);
     const history: ChatTurn[] = messages
       .filter((m) => m.status === "done" && m.answer)
       .map((m) => ({ question: m.question, answer: m.answer! }));
     nextId.current += 1;
     const id = nextId.current;
-    setMessages((prev) => [...prev, { id, question, status: "loading", bookName: book ? bookLabel(book.name) : undefined }]);
+    const names = [...(book ? [bookLabel(book.name)] : []), ...refs.map((b) => bookLabel(b.name))];
+    const bookName = names.length > 1 ? `${names.length} books` : names[0];
+    setMessages((prev) => [...prev, { id, question, status: "loading", bookName }]);
     setDraft("");
+    setMention(null);
 
     const settle = (p: Promise<string>) =>
       p.then(
@@ -88,8 +126,8 @@ export function AiChat({ active }: AiChatProps) {
           ),
       );
 
-    if (book) {
-      settle(askLocal({ question, book, page, history, model: getAiModel() }));
+    if (book || refs.length > 0) {
+      settle(askLocal({ question, book, books: refs, history, model: getAiModel() }));
       return;
     }
 
@@ -119,6 +157,24 @@ export function AiChat({ active }: AiChatProps) {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // While the @-mention list is open, arrows move, Enter or Tab picks, Escape closes.
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setPick((i) => (i + (e.key === "ArrowDown" ? 1 : suggestions.length - 1)) % suggestions.length);
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        choose(suggestions[Math.min(pick, suggestions.length - 1)]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
     // isComposing: Enter that confirms an input-method candidate must not send.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -132,8 +188,10 @@ export function AiChat({ active }: AiChatProps) {
         {messages.length === 0 && (
           <p className="text-sm text-white/45 leading-relaxed">
             {book
-              ? `Ask anything about ${bookLabel(book.name)}${page ? ` (open at page ${page})` : ""}. The AI reads the book on this computer before it answers.`
-              : "Ask anything about the app or the page you are on. The answer uses the figures on this page and your last three questions."}
+              ? `Ask anything about ${bookLabel(book.name)}. The AI reads the book on this computer before it answers.`
+              : shelf
+                ? "Ask anything about the app or the page you are on. Type @ to bring in a book from your Books folder; the AI then reads it before it answers."
+                : "Ask anything about the app or the page you are on. The answer uses the figures on this page and your last three questions."}
           </p>
         )}
 
@@ -182,21 +240,41 @@ export function AiChat({ active }: AiChatProps) {
             value={book}
             compact
             disabled={busy}
-            onChange={(b) => {
-              setBook(b);
-              setPage(null);
-            }}
+            onChange={setBook}
           />
         )}
-        {!book && seconds > 0 && <p className="text-[0.7rem] text-white/45">{budgetWaitMessage(seconds)}</p>}
+        {!usesBooks && seconds > 0 && <p className="text-[0.7rem] text-white/45">{budgetWaitMessage(seconds)}</p>}
+        {suggestions.length > 0 && (
+          <ul role="listbox" aria-label="Books" className="max-h-56 overflow-y-auto rounded-sm border border-gold/20 bg-ink-800">
+            {suggestions.map((b, i) => (
+              <li key={b.id} role="option" aria-selected={i === pick}>
+                <button
+                  type="button"
+                  // mousedown keeps the textarea's caret, so the mention lands where it was typed
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    choose(b);
+                  }}
+                  className={cn(
+                    "block w-full truncate px-3 py-2 text-left text-sm",
+                    i === pick ? "bg-gold/10 text-gold" : "text-white/75 hover:bg-white/5",
+                  )}
+                  title={b.name}
+                >
+                  {bookLabel(b.name)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => onDraft(e.target.value, e.target.selectionStart ?? e.target.value.length)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="Ask a question"
+            placeholder={shelf ? "Ask a question (type @ to reference a book)" : "Ask a question"}
             aria-label="Your question"
             className="flex-1 resize-none rounded-sm bg-ink-800 border border-gold/15 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-gold/40"
           />
@@ -213,7 +291,10 @@ export function AiChat({ active }: AiChatProps) {
         {messages.length > 0 && (
           <button
             type="button"
-            onClick={() => setMessages([])}
+            onClick={() => {
+              setMessages([]);
+              setMentioned([]);
+            }}
             disabled={busy}
             className="inline-flex items-center gap-1.5 text-[0.7rem] text-white/40 hover:text-white/70 disabled:opacity-40"
           >

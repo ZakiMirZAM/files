@@ -1,18 +1,16 @@
-// The Learn section (slices A4-A7): flashcard decks, the study schedule, tests,
-// and book notes. Each tab is its own component in components/learn/.
+// The Learn section (slices A4-A6): flashcard decks, the study schedule and
+// tests. Each tab is its own component in components/learn/.
 
 import { useState } from "react";
 import { cn } from "../lib/cn";
 import { DecksTab } from "../components/learn/DecksTab";
 import { StudyTab } from "../components/learn/StudyTab";
 import { TestsTab } from "../components/learn/TestsTab";
-import { BookNotesTab } from "../components/learn/BookNotesTab";
 
 const TABS = [
   { key: "decks", label: "Decks" },
   { key: "study", label: "Study" },
   { key: "tests", label: "Tests" },
-  { key: "books", label: "Book notes" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -44,7 +42,7 @@ export function LearnPage() {
         <p className="eyebrow">Learn</p>
         <h1 className="font-display text-3xl font-semibold text-white mt-1">Learn</h1>
         <p className="text-sm text-white/55 mt-2">
-          Study with flashcards and tests, and review the notes you made in your books.
+          Study with flashcards and tests.
         </p>
       </header>
 
@@ -70,7 +68,6 @@ export function LearnPage() {
         {tab === "decks" && <DecksTab onStudy={() => choose("study")} />}
         {tab === "study" && <StudyTab />}
         {tab === "tests" && <TestsTab />}
-        {tab === "books" && <BookNotesTab />}
       </div>
     </div>
   );

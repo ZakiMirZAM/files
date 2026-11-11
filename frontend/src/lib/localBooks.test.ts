@@ -1,36 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { formatSize, localBookUrl, shelfRows, type LocalBook, type ShelfBookRef } from "./localBooks";
+import { bookTitle, matchBooks, mentionAt, type LocalBook } from "./localBooks";
 
-const local: LocalBook[] = [
-  { id: "27598267.pdf", name: "27598267.pdf", size: 48_733_964 },
-  { id: "sub/Good Strategy.pdf", name: "Good Strategy.pdf", size: 2048 },
-  { id: "Lean Startup.pdf", name: "Lean Startup.pdf", size: 10 },
+const books: LocalBook[] = [
+  { id: "a.pdf", name: "dokumen.pub_investment-valuation-university-edition.pdf", size: 1 },
+  { id: "b.pdf", name: "Investment Valuation 3rd.pdf", size: 1 },
+  { id: "c.pdf", name: "Good strategy, bad strategy.pdf", size: 1 },
 ];
 
-const saved: ShelfBookRef[] = [
-  { _id: "a", fileName: "27598267.PDF", localPath: null, noteCount: 89 },
-  { _id: "b", fileName: "Good Strategy.pdf", localPath: "sub/Good Strategy.pdf", noteCount: 4 },
-];
-
-describe("shelfRows", () => {
-  it("matches a shelf book by path and an uploaded book by file name", () => {
-    const rows = shelfRows(local, saved);
-    expect(rows.map((r) => r.saved?._id ?? null)).toEqual(["a", "b", null]);
-  });
-
-  it("does not match a shelf book to another folder's book of the same name", () => {
-    const rows = shelfRows([{ id: "other/Good Strategy.pdf", name: "Good Strategy.pdf", size: 1 }], saved);
-    expect(rows[0].saved).toBeNull();
+describe("matchBooks", () => {
+  it("matches every typed word, hyphens and spaces alike, title-start first", () => {
+    expect(matchBooks(books, "investment valuation").map((b) => b.id)).toEqual(["b.pdf", "a.pdf"]);
+    expect(matchBooks(books, "strategy").map((b) => b.id)).toEqual(["c.pdf"]);
+    expect(matchBooks(books, "zebra")).toEqual([]);
   });
 });
 
-describe("helpers", () => {
-  it("encodes the id in the file URL", () => {
-    expect(localBookUrl("sub/A & B.pdf")).toContain("id=sub%2FA%20%26%20B.pdf");
+describe("mentionAt", () => {
+  it("finds the @ query at the caret", () => {
+    const t = "Explain chapter 1 of @invest";
+    expect(mentionAt(t, t.length)).toEqual({ start: 21, query: "invest" });
   });
 
-  it("formats sizes", () => {
-    expect(formatSize(48_733_964)).toBe("46.5 MB");
-    expect(formatSize(2048)).toBe("2 KB");
+  it("ignores an @ inside a word or with no @", () => {
+    expect(mentionAt("mail me@home", 12)).toBeNull();
+    expect(mentionAt("no mention", 10)).toBeNull();
   });
+});
+
+it("bookTitle drops .pdf", () => {
+  expect(bookTitle("Good strategy.PDF")).toBe("Good strategy");
 });

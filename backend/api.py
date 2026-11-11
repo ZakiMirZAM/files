@@ -300,8 +300,6 @@ app.add_middleware(
     allow_origin_regex=None if _allowed_origins else r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
-    # The local bookshelf's PDF reader asks for byte ranges and must see these.
-    expose_headers=["Accept-Ranges", "Content-Range", "Content-Length"],
 )
 
 # ── Unhandled-error handler (must exist for CORS to work on 500s) ────────────
@@ -7712,8 +7710,8 @@ async def learn_import_endpoint(request: Request) -> dict[str, Any]:
 
 
 # ── Learn: local bookshelf (local site only) ─────────────────────────────────
-# Lists and serves the PDFs in the owner's Books folder so the local site can
-# open any book without uploading it. Paths are checked in local_books.py.
+# Lists the PDFs in the owner's Books folder so the local site can pick or
+# @-mention a book for the book AI (rag/book_tools.py reads the files itself).
 # Three guards, because the production backend runs on this same PC behind the
 # Cloudflare tunnel: (1) off in production, (2) off unless the local launcher
 # sets LOCAL_BOOKS=1, so a backend started without ENV=production still serves
@@ -7743,14 +7741,3 @@ def _local_books_root(request: Request):
 def local_books_list(request: Request) -> dict[str, Any]:
     local_books, root = _local_books_root(request)
     return {"books": local_books.list_books(root)}
-
-
-@app.get("/api/learn/local-books/file")
-def local_books_file(request: Request, id: str = Query(..., max_length=1000)):  # noqa: A002
-    from fastapi.responses import FileResponse  # noqa: PLC0415
-
-    local_books, root = _local_books_root(request)
-    path = local_books.resolve_book(root, id)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return FileResponse(path, media_type="application/pdf", headers={"Cache-Control": "private, max-age=3600"})
