@@ -153,12 +153,12 @@ check("Comparative panel", f"{len(cm_data)} companies side by side",
 
 # ── Stage 5: Individual (incl. the repaired tickers) ─────────────────────────
 INDIV = [
-    ("GS",    "Goldman", 2012),   # was EMPTY pre-remediation
-    ("MS",    "Morgan",  2012),   # re-keyed from MS-PO
-    ("BAC",   "Bank of America", 2012),
+    ("GS",    "Goldman", 2008),   # was EMPTY pre-remediation
+    ("MS",    "Morgan",  2008),   # re-keyed from MS-PO
+    ("BAC",   "Bank of America", 2008),
     ("ABBV",  "AbbVie",  None),   # sentinel-CIK bug victim
-    ("AAPL",  "Apple",   2012),
-    ("BRK-A", "Berkshire", 2012),
+    ("AAPL",  "Apple",   2008),
+    ("BRK-A", "Berkshire", 2008),
 ]
 for tk, expect_name, expect_first_year in INDIV:
     d = get(f"/api/individual/{tk}")
@@ -207,7 +207,7 @@ check("Simulator quotes", f"batch returned {len(qs)} quotes "
       f"{[(q.get('ticker'), q.get('price')) for q in qs][:3]}", len(qs) >= 2)
 
 # ── Search (every stage's entry point) ───────────────────────────────────────
-for q_, want in [("GS", "GS"), ("BRK.B", "BRK-A"), ("Goldman", "GS")]:
+for q_, want in [("GS", "GS"), ("BRK.B", "BRK-B"), ("Goldman", "GS")]:
     r = get(f"/api/tickers/search?q={urllib.parse.quote(q_)}&limit=5")
     tickers = [x["ticker"] for x in r]
     check("Search", f"'{q_}' -> {tickers[:3]}", want in tickers)

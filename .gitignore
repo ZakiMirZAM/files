@@ -47,6 +47,7 @@ data_manual/
 # each ~630MB. They must never enter history: a single careless `git add -A` put
 # 1.26GB of them into a commit and inflated the pack to 5GB.
 financials.db.pre-swap-*
+financials.db.pre-*
 financials_remediation.db
 *.db
 !frontend/**/*.db

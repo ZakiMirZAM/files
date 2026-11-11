@@ -12,6 +12,9 @@ Before building any item: re-check the "Evidence" files, build only the "Minimal
 
 | Item | Evidence |
 |---|---|
+| USD warehouse from the owner's workbook (2008-2025, 43k companies), month-end FX per row, live writes converted | data/usd_ingest.py; remediation/fx_history.py --monthly; FinancialDB._usd_records; backend/test_usd_ingest.py |
+| Market-cap check against Yahoo prices (split, currency and impossible-cap errors), audited | data/cap_check.py; backend/test_cap_check.py; tables cap_check_audit, usd_ingest_cap_quarantine |
+| One company one ticker (removed listings + second listings resolve to the kept ticker) | symbol_alias, duplicate_listing_audit; api._load_symbol_alias_map |
 | Understanding-first questions (company/industry/economy) | 6fcad6e; EconomicPage "Understand the Economy First"; IndividualPage "What This Company Does" |
 | Inflation lesson: priced-in + durability gates, pricing-power teaching | lib/rotationAutoFill.ts gates; content/help/rotationWeights.md |
 | Company share of industry revenue | company_profile/generic_strategy.py `revenueShare`; KeyPlayersPanel Share column |

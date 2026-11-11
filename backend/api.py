@@ -5540,6 +5540,28 @@ def strategic_groups_endpoint(
 # ranking only — the scorecard is unchanged.
 
 # Currency is the only reliable region signal in the dataset.
+_filer_currency_has_source: bool | None = None
+
+
+def _filer_currency_sql(alias: str) -> str:
+    """SQL for the currency a company FILES in. In a USD warehouse every row's
+    "Reported Currency" is 'USD' and the filing currency lives in "Source
+    Currency"; a legacy DB has no such column. The column is probed once: SQLite
+    reads an unknown double-quoted identifier as a string literal, so naming a
+    missing column would silently match nothing instead of raising."""
+    global _filer_currency_has_source
+    if _filer_currency_has_source is None:
+        try:
+            with db_conn() as conn:
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(financials)")}
+            _filer_currency_has_source = "Source Currency" in cols
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, HTTPException):
+            return f'{alias}."Reported Currency"'
+    if _filer_currency_has_source:
+        return f'COALESCE({alias}."Source Currency", {alias}."Reported Currency")'
+    return f'{alias}."Reported Currency"'
+
+
 _DEVELOPED_CURRENCIES = (
     "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD",
     "SEK", "NOK", "DKK", "SGD", "HKD", "ILS",
@@ -5597,7 +5619,8 @@ def _ranking_for_industry(industry: str, developed: bool, min_mcap: float | None
     cur_clause = ""
     cur_params: tuple[Any, ...] = ()
     if developed:
-        cur_clause = ' AND f."Reported Currency" IN (%s)' % ",".join("?" * len(_DEVELOPED_CURRENCIES))
+        cur_clause = ' AND %s IN (%s)' % (
+            _filer_currency_sql("f"), ",".join("?" * len(_DEVELOPED_CURRENCIES)))
         cur_params = _DEVELOPED_CURRENCIES
 
     with db_conn() as conn:
@@ -6773,10 +6796,19 @@ def _load_symbol_alias_map() -> dict[str, str] | None:
                   AND a.cik != '0000000000'
                 """
             ).fetchall()
+            # The USD ingest's own map: a listing the owner removed as a repeat
+            # of a company (TSM, GOOG, BRK-A) -> the listing that was kept
+            # (2330.TW, GOOGL, BRK-B). These pairs share no CIK, so the JOIN
+            # above cannot see them. Absent on a pre-ingest DB.
+            has_alias = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='symbol_alias'"
+            ).fetchone()
+            kept = conn.execute(
+                "SELECT alias, primary_symbol FROM symbol_alias").fetchall() if has_alias else []
     except (sqlite3.OperationalError, sqlite3.DatabaseError, HTTPException):
         return None
     out: dict[str, str] = {}
-    for r in rows:
+    for r in list(rows) + list(kept):
         alias, primary = r["alias"], r["primary_symbol"]
         if alias and primary:
             out[str(alias).strip().upper()] = str(primary).strip().upper()

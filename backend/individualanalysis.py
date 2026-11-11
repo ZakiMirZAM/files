@@ -5534,7 +5534,11 @@ def _rnd_tax_method(latest: sqlite3.Row, facts: Any = None,
         if tcja:
             return "rule_us_capitalized"
         return "footnote_expensed" if readable else "rule_us_expensed"
-    if (_row_str(latest, "Reported Currency") or currency or "").strip().upper() == "USD":
+    # A USD warehouse says 'USD' on every row; the currency the company FILES
+    # in ("Source Currency") is what separates a US taxpayer from the rest.
+    filed_in = (_row_str(latest, "Source Currency")
+                or _row_str(latest, "Reported Currency") or currency or "")
+    if filed_in.strip().upper() == "USD":
         return "rule_us_capitalized" if tcja else "rule_us_expensed"
     return "rule_non_us_expensed"
 

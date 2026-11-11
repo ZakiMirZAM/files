@@ -223,6 +223,15 @@ MAX_VALID_YEAR = 2035
 VALID_PERIODS = {"FY", "Q1", "Q2", "Q3", "Q4", "TTM"}
 
 
+def _fiscal_year_of(dt) -> int:
+    """Year key of an annual period ending on `dt`. Same rule as
+    `usd_ingest._fiscal_year` (kept here to avoid a circular import; a test
+    compares the two): a 52/53-week year that ends on 1-10 January belongs to
+    the year before, so the next year (ending in December of the same calendar
+    year) still has its own key."""
+    return dt.year - 1 if (dt.month == 1 and dt.day <= 10) else dt.year
+
+
 def is_valid_year_period(year, period=None) -> bool:
     """True when `year` parses to a plausible fiscal year (4 digits,
     1990-2035) and `period`, if given, is a known tag (FY/Q1-Q4/TTM)."""
@@ -1143,13 +1152,22 @@ class FinancialDB:
         were stored. Currencies that can't be resolved are skipped (left absent), so
         callers can treat a missing rate as "not size-comparable"."""
         with self._connect() as conn:
-            currencies = [
+            seen = {
                 r[0] for r in conn.execute(
                     'SELECT DISTINCT "Reported Currency" FROM financials '
                     'WHERE "Reported Currency" IS NOT NULL '
                     'AND "Reported Currency" NOT IN (\'Unavailable\', \'USD\')'
                 ).fetchall()
-            ]
+            }
+            if self._usd_mode():
+                # Every row says 'USD' now. Quotes still arrive in the listing
+                # currency, so keep refreshing each currency a filer reports in
+                # and each one already on file.
+                seen |= {r[0] for r in conn.execute(
+                    'SELECT DISTINCT "Source Currency" FROM financials '
+                    'WHERE "Source Currency" IS NOT NULL')}
+                seen |= {r[0] for r in conn.execute("SELECT currency FROM fx_rates")}
+            currencies = sorted(seen - {"USD"})
         asof = date.today().isoformat()
         rates: dict[str, float] = {"USD": 1.0}
         for ccy in currencies:
@@ -1165,6 +1183,16 @@ class FinancialDB:
                 "  usd_per_unit = excluded.usd_per_unit, asof = excluded.asof",
                 [(c, r, asof) for c, r in rates.items()],
             )
+            if self._usd_mode():
+                # Roll the current month forward in the monthly table, so a
+                # statement that ends this month has a rate. The last refresh
+                # of a month leaves that month's close behind.
+                conn.executemany(
+                    "INSERT INTO fx_rates_monthly(currency, month, close, avg) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(currency, month) DO UPDATE SET "
+                    "  close = excluded.close",
+                    [(c, asof[:7], r, r) for c, r in rates.items() if c != "USD"],
+                )
             conn.commit()
         if verbose:
             print(f"  [fx] stored {len(rates)} rates ({len(currencies)} non-USD currencies seen)", flush=True)
@@ -1192,6 +1220,56 @@ class FinancialDB:
         """{currency: usd_per_unit} for converting local figures to USD."""
         with self._connect() as conn:
             return fx_rates_from(conn)
+
+    # ------------------------------------------------------------------
+    # USD warehouse (data/usd_ingest.py)
+    # ------------------------------------------------------------------
+
+    def _usd_mode(self) -> bool:
+        """True when this DB is a USD warehouse: it has the monthly rate table
+        and the `"Source Currency"` column the USD ingest adds. A legacy or
+        fixture DB has neither, and every write path then behaves as before."""
+        cached = getattr(self, "_usd_mode_cached", None)
+        if cached is None:
+            with self._connect() as conn:
+                has_rates = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' "
+                    "AND name='fx_rates_monthly'").fetchone() is not None
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(financials)")}
+            cached = self._usd_mode_cached = has_rates and "Source Currency" in cols
+        return cached
+
+    def _usd_records(self, records: list[dict]) -> list[dict]:
+        """Convert live-source records to USD before they are written. In a USD
+        warehouse a record that cannot be converted (no currency, no rate) is
+        DROPPED: a local-currency row inside a dollar history is the bug this
+        guards against. Outside USD mode the records pass through untouched."""
+        if not records or not self._usd_mode():
+            return records
+        root = str(Path(__file__).resolve().parent.parent)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from data import usd_ingest  # local import: usd_ingest imports this module
+        with self._connect() as conn:
+            rates = usd_ingest.load_rates(conn)
+            spot = fx_rates_from(conn)
+        out = []
+        for rec in records:
+            usd = usd_ingest.convert_record(rec, rates, spot)
+            if usd is not None:
+                out.append(usd)
+        if len(out) != len(records):
+            print(f"  [usd] {records[0].get('Ticker')}: dropped "
+                  f"{len(records) - len(out)} of {len(records)} live records "
+                  f"(no currency or no rate; nothing written for them)", flush=True)
+        return out
+
+    def _write_cols(self) -> set[str]:
+        """Column names a live write may set."""
+        cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        if self._usd_mode():
+            cols |= {"Source Currency", "FX Rate"}
+        return cols
 
     # ------------------------------------------------------------------
     # Excel ingestion
@@ -1509,7 +1587,7 @@ class FinancialDB:
                 for col in df.columns:
                     try:
                         dt = pd.to_datetime(col)
-                        yf_years[dt.year] = str(col)[:10]
+                        yf_years[_fiscal_year_of(dt)] = str(col)[:10]
                     except Exception:
                         pass
 
@@ -1526,7 +1604,7 @@ class FinancialDB:
                     return None
                 for col in df.columns:
                     try:
-                        if pd.to_datetime(col).year == target_yr:
+                        if _fiscal_year_of(pd.to_datetime(col)) == target_yr:
                             v = df.loc[key, col]
                             return float(v) if pd.notna(v) else None
                     except Exception:
@@ -1538,6 +1616,7 @@ class FinancialDB:
                 "Calendar Year": yr,
                 "Date":          fiscal_date,
                 "Period":        "FY",
+                "Reported Currency": info.get("financialCurrency") or None,
                 "Name":          info.get("longName"),
                 "Sector":        info.get("sector"),
                 "Industry":      info.get("industry"),
@@ -1593,16 +1672,26 @@ class FinancialDB:
         ticker = ticker.upper()
 
         # What years do we already have for this ticker?
+        # {year key: period-end month 'YYYY-MM' or None}. A stored row and a
+        # live record are the same fiscal year only when their PERIODS agree:
+        # the year key alone is not enough, because a source may key a fiscal
+        # year that ends early in the next calendar year under either year.
         with self._connect() as conn:
             existing_years = {
-                row[0] for row in conn.execute(
-                    'SELECT "Calendar Year" FROM financials WHERE Ticker = ?',
+                row[0]: (str(row[1])[:7] if row[1] else None)
+                for row in conn.execute(
+                    'SELECT "Calendar Year", "Date" FROM financials WHERE Ticker = ?',
                     [ticker]
                 )
             }
+        existing_periods = {m for m in existing_years.values() if m}
+
+        def _period(rec) -> "str | None":
+            d = rec.get("Date")
+            return str(d)[:7] if d else None
 
         # What years does yfinance now report?
-        yf_records = self._fetch_yf_annual(ticker)
+        yf_records = self._usd_records(self._fetch_yf_annual(ticker))
 
         if not yf_records:
             return 0
@@ -1612,6 +1701,9 @@ class FinancialDB:
         new_records = [
             r for r in yf_records
             if r["Calendar Year"] not in existing_years
+            # the same fiscal period already stored under another year key is
+            # NOT a new year: inserting it would duplicate the latest row
+            and _period(r) not in existing_periods
             and is_valid_year_period(r["Calendar Year"], r.get("Period"))
         ]
 
@@ -1620,6 +1712,8 @@ class FinancialDB:
             gap_records = [
                 r for r in yf_records
                 if r["Calendar Year"] in existing_years
+                # only complete a row with figures of the SAME fiscal period
+                and existing_years[r["Calendar Year"]] in (None, _period(r))
                 and is_valid_year_period(r["Calendar Year"], r.get("Period"))
             ]
 
@@ -1633,7 +1727,7 @@ class FinancialDB:
         # table so that ticker-level metadata (Exchange, Country) carried in rec
         # for the tickers upsert below does not break this INSERT when the
         # financials schema does not yet contain those columns.
-        fin_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        fin_cols = self._write_cols()
         with self._connect() as conn:
             for rec in new_records:
                 cols = [c for c in rec.keys() if c in fin_cols]
@@ -1998,12 +2092,14 @@ class FinancialDB:
             for our_col, yf_key in YF_CASHFLOW_MAP.items():
                 if rec.get(our_col) is None:
                     rec[our_col] = val(cf, yf_key, dt)
+            rec["Reported Currency"] = (data.get("info") or {}).get("financialCurrency")
             records.append(rec)
 
+        records = self._usd_records(records)
         if not records:
             return 0
 
-        q_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        q_cols = self._write_cols()
         inserted = 0
         with self._connect() as conn:
             for rec in records:
@@ -2045,12 +2141,17 @@ class FinancialDB:
             return False
 
         rec = {k: v for k, v in ttm.items() if k in EXCEL_COLUMNS}
+        rec.setdefault("Date", ttm_date)
+        converted = self._usd_records([rec])
+        if not converted:
+            return False
+        rec = converted[0]
         rec["Ticker"] = ticker
         rec["Calendar Year"] = cal_year
         rec["Period"] = "TTM"
         rec["last_updated"] = datetime.now().isoformat()
 
-        q_cols = set(EXCEL_COLUMNS) | {"last_updated"}
+        q_cols = self._write_cols()
         cols = [c for c in rec.keys() if c in q_cols]
         col_sql = ", ".join(f'"{c}"' for c in cols)
         ph = ", ".join("?" for _ in cols)

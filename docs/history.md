@@ -87,3 +87,40 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     New `SOCRATIC_QUIZ_GUIDANCE` is added to `/local/learn/quiz` when `style: "socratic"` (book optional
     then). The sidebar chat, /ask, Explain using AI and the question decks are unchanged. Both hashes
     recorded in `BOOKS_EXPECTED`.
+
+## 2026-11-10: USD warehouse (owner: "replace the old database", "Store USD")
+
+- New data: the owner's workbook `better data (version 1)` (28 tabs, 46,251 tickers, 2008-2025, 59
+  filing currencies), split per tab and staged as CSV in `Downloads/xcel/staging_csv`.
+- `data/usd_ingest.py` loads it into a COPY, converted to USD with one rate per row (month-end close
+  of the row's period end, `fx_rates_monthly`). Verified first that the workbook holds as-filed local
+  currency at the level of the time (SEC XBRL for 13 companies; vendor caps of USD filers use the rate
+  of the date). `"Reported Currency"`='USD', `"Source Currency"` + `"FX Rate"` keep the original.
+- Year key = fiscal year of the period end (`_fiscal_year`), with a shift-back for a change of year end.
+- Live write paths convert (`FinancialDB._usd_records`); `update_ticker` matches by period.
+- Readers moved to `"Source Currency"`: the `developed` ranking filter, `_rnd_tax_method`.
+- Swap done 2026-11-10 22:25 local; previous warehouse kept as `financials.db.pre-usd-swap-20261110`.
+- Known and NOT fixed: consensus estimates (`next_two_years._consensus`) are dropped for non-US
+  filers (row currency USD, Yahoo estimates local); 2,126 workbook rows hold a balance sheet only
+  (no income statement, date or currency) and are in `usd_ingest_rejects`; first request of a heavy
+  endpoint on a cold cache is slower on the larger table.
+- Price-side repair: `usd_ingest.quarantine_impossible_caps`, then `data/cap_check.py` (Yahoo price x
+  shares x FX of the date, share-count history for unrestated splits, own P/S anchor as fallback).
+
+- **2026-11-11 price-side repair** (owner: "fix all these errors with the most financially accurate
+  approach while not destroying valuation mechanisms", scope "only suspicious"): `data/cap_check.py`
+  checked 7,737 suspicious tickers against Yahoo. 4,127 caps replaced (unrestated share counts after a
+  split or consolidation, caps left in the listing currency, 10x vendor errors), 942 cleared, the
+  impossible-cap rule tightened to 200x BOTH revenue and book equity or 10 trillion USD. 556 duplicate
+  tickers removed (464 aliased to the kept ticker). No statement column changed (190 columns compared,
+  0 rows differ); DCF value per share and WACC identical for the 16 snapshot fixtures. Second swap
+  2026-11-11 00:19; pre-repair DB kept as `financials.db.pre-price-repair-20261111`.
+- **2026-11-11 second review repair:** `remove_duplicate_listings` deleted the whole history of a ticker
+  that carried another company's statements; it now deletes only the copied rows, and only against the
+  kept ticker (no transitive removal). 359 annual + 222 quarterly rows restored on the live DB. The
+  "traded price x shares of the date" path now needs a second witness (`exact_is_confirmed`: the
+  company's own P/S after its last split, else today's cap chained back); 1,122 unconfirmed split
+  replacements went back to the vendor value (3,005 replacements stay). Live inserts use the same
+  fiscal-year key (`_fiscal_year_of`); a dry run or a failed download no longer marks a ticker done;
+  a re-run keeps the original value in `cap_check_audit`. Backup before this repair:
+  `financials.db.pre-review2-20261111`.
