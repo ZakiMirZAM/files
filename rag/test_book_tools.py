@@ -89,6 +89,67 @@ def test_search_ranks_pages(shelf):
     assert "No page" in book_tools.search_text(shelf / "Investment Valuation.pdf", "zebra")
 
 
+# --- fast path: page ranges ---------------------------------------------------------
+@pytest.fixture
+def no_outline_book(tmp_path):
+    """A book like Porter's: no outline, a contents page, part pages opening with a
+    Roman numeral (one scanned as "Il"), chapters opening with a bare number, and a
+    running header "N / BOOK TITLE" on other pages."""
+    tops = ["Contents\nPart I\nChapter 1\nChapter 2\nChapter 3",
+            "I\nGeneral Techniques\nPart I lays the foundation.",
+            "1\nThe Structural Analysis\nChapter 1 text.",
+            "4\nBOOK TITLE\nChapter 1 described the forces of competition.",
+            "2\nGeneric Strategies\nChapter 2 text.",
+            "6\nBOOK TITLE\nmore text",
+            "Il\nGeneric Environments\nPart II begins.",
+            "3\nFragmented Industries\nChapter 3 text.",
+            "9\nBOOK TITLE\nmore text"]
+    doc = fitz.open()
+    for top in tops * 1:
+        page = doc.new_page()
+        page.insert_text((72, 72), top)
+    for _ in range(8):                      # pad so "BOOK TITLE" counts as a running header
+        doc.new_page().insert_text((72, 72), "12\nBOOK TITLE\nfiller")
+    path = tmp_path / "porter.pdf"
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_page_range_without_outline(no_outline_book):
+    p = no_outline_book
+    assert book_tools.page_range(p, "Chapter 1") == (3, 4)
+    assert book_tools.page_range(p, "chapters 1 to 2") == (3, 7)
+    assert book_tools.page_range(p, "Part I") == (2, 6)
+    assert book_tools.page_range(p, "Part II")[0] == 7
+    assert book_tools.page_range(p, "pages 2 to 5") == (2, 5)
+    assert book_tools.page_range(p, "the good bits") is None
+
+
+def test_page_range_with_outline(shelf):
+    p = shelf / "Investment Valuation.pdf"
+    assert book_tools.page_range(p, "Chapter 1") == (1, 3)
+    assert book_tools.page_range(p, "Chapter 2") == (4, 5)
+
+
+def test_slice_range_covers_the_range_once():
+    parts = [book_tools.slice_range(32, 219, i, 3) for i in range(3)]
+    assert parts[0][0] == 32 and parts[-1][1] == 219
+    assert all(parts[k][1] + 1 == parts[k + 1][0] for k in range(2))
+    assert book_tools.slice_range(41, 42, 2, 5) == (42, 42)      # more slices than pages
+    assert book_tools.parse_slice({"index": 1, "of": 3}) == (1, 3)
+    assert book_tools.parse_slice({"index": 3, "of": 3}) == (0, 1)
+    assert book_tools.parse_slice(None) == (0, 1)
+
+
+def test_source_text_labels_pages_and_caps(shelf):
+    p = shelf / "Investment Valuation.pdf"
+    text = book_tools.source_text(p, 1, 5)
+    assert "--- page 1 ---" in text and "--- page 5 ---" in text
+    short = book_tools.source_text(p, 1, 5, max_chars=120)
+    assert "the text stops here" in short
+
+
 # --- payloads ----------------------------------------------------------------------
 def test_validate_ask_keeps_book_page_and_recent_history():
     err, p = book_tools.validate_ask({

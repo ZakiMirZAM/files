@@ -59,10 +59,13 @@ PROMPTS = {"LOCAL_ASK_SYSTEM": LOCAL_ASK_SYSTEM}
 EFFORT_BY_LABEL = {"/local/ask": "medium", "/local/learn/cards": "medium", "/local/learn/quiz": "medium"}
 ASK_MAX_TURNS, ASK_BUDGET_USD = 30, 4.0
 LEARN_MAX_TURNS, LEARN_BUDGET_USD = 30, 4.0
+FAST_MAX_TURNS = 3             # the book text is in the prompt: write, no tool round trips
 
 # --- limits ----------------------------------------------------------------------
 MAX_QUESTION = 12_000          # room for a pasted list of wrong test answers
 MAX_BOOKS = 5                  # books one question may reference
+SOURCE_MAX_CHARS = 160_000     # book text put in one deck/test request (about 40k tokens)
+MAX_SLICES = 8                 # batches that may split one page range
 MAX_HISTORY_TURNS, MAX_HISTORY_CHARS = 4, 1_500
 MAX_PAGES_PER_READ, MAX_READ_CHARS = 25, 80_000
 MAX_LIST, MAX_TOC, MAX_HITS, SNIPPET = 40, 400, 15, 320
@@ -138,6 +141,7 @@ def book_id(root: Path, path: Path) -> str:
 # --- page text, cached per book ----------------------------------------------------
 _cache: "OrderedDict[tuple[str, float], list[str]]" = OrderedDict()
 _cache_lock = threading.Lock()
+_extract_locks: dict[tuple[str, float], threading.Lock] = {}
 
 
 def page_texts(path: Path) -> list[str]:
@@ -149,12 +153,18 @@ def page_texts(path: Path) -> list[str]:
         if key in _cache:
             _cache.move_to_end(key)
             return _cache[key]
-    with fitz.open(path) as doc:
-        texts = [page.get_text() for page in doc]
-    with _cache_lock:
-        _cache[key] = texts
-        while len(_cache) > TEXT_CACHE_BOOKS:
-            _cache.popitem(last=False)
+        book_lock = _extract_locks.setdefault(key, threading.Lock())
+    # One extraction per book: parallel batches on the same book wait for the first.
+    with book_lock:
+        with _cache_lock:
+            if key in _cache:
+                return _cache[key]
+        with fitz.open(path) as doc:
+            texts = [page.get_text() for page in doc]
+        with _cache_lock:
+            _cache[key] = texts
+            while len(_cache) > TEXT_CACHE_BOOKS:
+                _cache.popitem(last=False)
     return texts
 
 
@@ -205,6 +215,145 @@ def search_text(path: Path, query: str) -> str:
     scored.sort(key=lambda t: (-t[0], t[1]))
     return f"Pages of {path.name} that mention {', '.join(words)} (most mentions first):\n" + "\n".join(
         f"page {i}: ...{snip}..." for _, i, snip in scored[:MAX_HITS])
+
+
+# --- fast path: the server reads the pages once --------------------------------------
+# Decks and tests used to let the model find and read the pages through the tools on
+# every batch, which took about two minutes a batch. When the request names pages or
+# a chapter, the server now finds the range, reads that text itself (well under a
+# second once the book is cached) and puts it in the request, and the model only writes.
+_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+              "nine": 9, "ten": 10}
+_ROMAN = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9, "x": 10}
+_NUM = r"(\d{1,3}|[ivx]{1,4}|one|two|three|four|five|six|seven|eight|nine|ten)"
+
+
+def _num(tok: str | None) -> int | None:
+    if not tok:
+        return None
+    t = tok.lower()
+    if t.isdigit():
+        return int(t)
+    return _NUM_WORDS.get(t) or _ROMAN.get(t)
+
+
+def _roman(n: int) -> str:
+    return next((k for k, v in _ROMAN.items() if v == n), str(n))
+
+
+def _unit_start(path: Path, kind: str, k: int) -> int | None:
+    """First PDF page of chapter / module / part `k`: from the outline, else from a
+    heading at the top of a page (contents pages, which list many units, skipped)."""
+    import fitz
+
+    forms = {str(k), _roman(k)} if kind == "part" else {str(k)}
+    alt = "|".join(re.escape(f) for f in forms)
+    head = re.compile(rf"^\s*(?:learning\s+)?{kind}\s+(?:{alt})\b", re.I)
+    with fitz.open(path) as doc:
+        toc = doc.get_toc(simple=True)
+    for _lvl, title, page in toc:
+        if page > 0 and head.search(title.replace("\t", " ")):
+            return page
+    texts = page_texts(path)
+    listing = re.compile(rf"(?:learning\s+)?{kind}\s+\w+", re.I)
+    tops = [[ln.strip() for ln in t.strip().splitlines()[:6] if ln.strip()] for t in texts]
+    # 1. A short heading line: "CHAPTER 3", "Part II", "Learning Module 1 Rates and Returns".
+    #    Short, so a sentence that starts "Chapter 1 described..." does not count.
+    def is_contents(text: str, top: list[str]) -> bool:
+        return len(listing.findall(text)) >= 3 or any("contents" in ln.lower() for ln in top[:2])
+
+    for i, (text, top) in enumerate(zip(texts, tops), 1):
+        if top and not is_contents(text, top) and any(len(ln) <= 50 and head.search(ln) for ln in top):
+            return i
+    # 2. A bare number on the first line ("2" then the chapter title; "I" for a part),
+    #    unless the next line is a running header that repeats through the book.
+    from collections import Counter
+
+    second = Counter(top[1] for top in tops if len(top) > 1)
+    common = {line for line, c in second.items() if c >= max(8, len(texts) // 40)}
+    # A part opens with its Roman numeral; a bare Arabic number there is a chapter.
+    bare = {_roman(k).lower()} if kind == "part" else {str(k)}
+    for i, top in enumerate(tops, 1):
+        # "Il" for "II": a scanned Roman numeral often reads its I as a lowercase L.
+        if len(top) < 2:
+            continue
+        first = top[0].lower().replace("l", "i") if kind == "part" else top[0].lower()
+        if first in bare and top[1] not in common \
+                and not top[1][:1].isdigit():
+            return i
+    return None
+
+
+def page_range(path: Path, pages: str) -> tuple[int, int] | None:
+    """(first, last) PDF page for "pages 41 to 56", "11-52", "Chapter 1",
+    "Learning Module 1", "chapters 1 to 8" or "Part I"; None when it cannot tell."""
+    n = len(page_texts(path))
+    t = (pages or "").lower().replace("–", "-")
+    m = re.search(r"(?:pages?|pp?\.?)\s*(\d+)\s*(?:-|to|through)\s*(\d+)", t) or \
+        re.fullmatch(r"\s*(\d+)\s*(?:-|to)\s*(\d+)\s*", t)
+    if m:
+        a, b = sorted((int(m.group(1)), int(m.group(2))))
+        return (max(1, a), min(n, b)) if a <= n else None
+    for kind, pat in (("chapter", r"chapters?"), ("module", r"(?:learning\s+)?modules?"), ("part", r"parts?")):
+        m = re.search(rf"\b{pat}\s+{_NUM}(?:\s*(?:-|to|through|and)\s*{_NUM})?\b", t)
+        if not m:
+            continue
+        a = _num(m.group(1))
+        b = _num(m.group(2)) or a
+        if not a:
+            continue
+        start = _unit_start(path, kind, a)
+        if not start:
+            continue
+        nxt = _unit_start(path, kind, b + 1)
+        end = nxt - 1 if nxt and nxt > start else min(n, start + 59)
+        return start, end
+    return None
+
+
+def slice_range(first: int, last: int, index: int, of: int) -> tuple[int, int]:
+    """The `index`-th of `of` contiguous, near-equal parts of the page range."""
+    total = last - first + 1
+    of = max(1, min(of, total))
+    index = max(0, min(index, of - 1))
+    a = first + (total * index) // of
+    b = first + (total * (index + 1)) // of - 1
+    return a, max(a, b)
+
+
+def source_text(path: Path, first: int, last: int, max_chars: int = 0) -> str:
+    max_chars = max_chars or SOURCE_MAX_CHARS
+    texts = page_texts(path)
+    parts, total = [], 0
+    for p in range(first, last + 1):
+        body = " ".join(texts[p - 1].split())
+        if not body:
+            continue
+        block = f"--- page {p} ---\n{body}"
+        if total + len(block) > max_chars:
+            parts.append(f"(the text stops here, before page {p}, to keep the request small)")
+            break
+        parts.append(block)
+        total += len(block)
+    return "\n".join(parts)
+
+
+def parse_slice(raw) -> tuple[int, int]:
+    """{index, of} from a request: which share of the page range this batch covers."""
+    if isinstance(raw, dict):
+        i, o = learn._whole(raw.get("index")), learn._whole(raw.get("of"))
+        if i is not None and o is not None and 1 <= o <= MAX_SLICES and 0 <= i < o:
+            return i, o
+    return 0, 1
+
+
+def source_guidance(book: dict, first: int, last: int, text: str) -> str:
+    label = book["name"] or book["id"]
+    return (f'\n\nSOURCE ON THIS COMPUTER\nThe text below is pages {first} to {last} of the book "{label}", '
+            "the part this batch covers. Write every card or question from this text and its own wording. "
+            "No tool is available for this batch and none is needed: everything you need is below. "
+            "Spread the batch across the whole text, not only its first pages.\n\n<<<BOOK TEXT\n"
+            + text + "\nBOOK TEXT>>>")
 
 
 # --- request payloads --------------------------------------------------------------
@@ -371,13 +520,20 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
     async def _stream(text: str):
         yield {"type": "user", "message": {"role": "user", "content": text}}
 
-    async def run(prompt: str, data: dict, system: str, label: str, max_turns: int, budget: float) -> str | None:
+    async def no_tools(tool_name, tool_input, context):
+        return PermissionResultDeny(message="No tool is available for this request.")
+
+    async def run(prompt: str, data: dict, system: str, label: str, max_turns: int, budget: float,
+                  tools: bool = True) -> str | None:
+        # tools=False: the book text is already in the prompt (fast path), so no
+        # tool round trips; a tool call is denied and the model writes at once.
         options = ClaudeAgentOptions(
             model=pick_model(data, default_model),
             system_prompt=system,
-            mcp_servers={"vault": vault_mcp, "books": books_mcp},
-            allowed_tools=allowed,
-            can_use_tool=guard,
+            mcp_servers={"vault": vault_mcp, "books": books_mcp} if tools else {},
+            allowed_tools=allowed if tools else [],
+            disallowed_tools=[] if tools else ["WebSearch", "WebFetch"],
+            can_use_tool=guard if tools else no_tools,
             max_turns=max_turns,
             max_budget_usd=budget,
             effort=EFFORT_BY_LABEL.get(label),
@@ -403,6 +559,28 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
 
     def _fail(status: int, error: str) -> web.Response:
         return web.json_response({"error": error}, status=status)
+
+    async def _fast_source(book: dict, data: dict) -> tuple[str, str] | None:
+        """(guidance with the book text, label) when the pages can be found, else None."""
+        if not book.get("pages"):
+            return None
+        root = books_root()
+        path = resolve_book(root, book["id"]) if root else None
+        if path is None:
+            return None
+        try:
+            rng = await asyncio.to_thread(page_range, path, book["pages"])
+            if not rng:
+                return None
+            index, of = parse_slice(data.get("slice"))
+            first, last = slice_range(rng[0], rng[1], index, of)
+            text = await asyncio.to_thread(source_text, path, first, last)
+        except Exception as exc:  # noqa: BLE001 - fall back to the tools
+            print(f"[book_tools] fast path failed: {type(exc).__name__}: {exc}", flush=True)
+            return None
+        if len(text) < 200:          # scanned pages with no text layer: let the tools try
+            return None
+        return source_guidance(book, first, last, text), f"pages {first}-{last}"
 
     async def _body(request: web.Request):
         try:
@@ -443,8 +621,14 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         berr, book = parse_book((data or {}).get("book") if isinstance(data, dict) else None)
         if err or berr or book is None:
             return _fail(400, err or berr or ERR_BOOK)
-        text = await run(learn.build_cards_prompt(payload, learn_book_guidance(book)), data,
-                         learn.LEARN_CARDS_SYSTEM, "/local/learn/cards", LEARN_MAX_TURNS, LEARN_BUDGET_USD)
+        fast = await _fast_source(book, data)
+        if fast:
+            print(f"[/local/learn/cards] fast path, {fast[1]}", flush=True)
+            text = await run(learn.build_cards_prompt(payload, fast[0]), data, learn.LEARN_CARDS_SYSTEM,
+                             "/local/learn/cards", FAST_MAX_TURNS, LEARN_BUDGET_USD, tools=False)
+        else:
+            text = await run(learn.build_cards_prompt(payload, learn_book_guidance(book)), data,
+                             learn.LEARN_CARDS_SYSTEM, "/local/learn/cards", LEARN_MAX_TURNS, LEARN_BUDGET_USD)
         if text is None:
             return _fail(503, learn.ERR_BACKEND)
         parsed = learn.parse_cards_output(text, payload["count"], payload["avoid"])
@@ -465,8 +649,14 @@ def make_handlers(pick_model, default_model: str, vault_mcp, vault_tool: str, ve
         err, payload = learn.validate_quiz_request(body)
         if err:
             return _fail(400, err)
-        text = await run(learn.build_quiz_prompt(payload, learn_book_guidance(book)), data,
-                         learn.LEARN_QUIZ_SYSTEM, "/local/learn/quiz", LEARN_MAX_TURNS, LEARN_BUDGET_USD)
+        fast = await _fast_source(book, data)
+        if fast:
+            print(f"[/local/learn/quiz] fast path, {fast[1]}", flush=True)
+            text = await run(learn.build_quiz_prompt(payload, fast[0]), data, learn.LEARN_QUIZ_SYSTEM,
+                             "/local/learn/quiz", FAST_MAX_TURNS, LEARN_BUDGET_USD, tools=False)
+        else:
+            text = await run(learn.build_quiz_prompt(payload, learn_book_guidance(book)), data,
+                             learn.LEARN_QUIZ_SYSTEM, "/local/learn/quiz", LEARN_MAX_TURNS, LEARN_BUDGET_USD)
         if text is None:
             return _fail(503, learn.ERR_BACKEND)
         parsed = learn.parse_quiz_output(text, payload["mcCount"], payload["shortCount"], payload["avoid"])

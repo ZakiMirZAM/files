@@ -167,6 +167,45 @@ function key(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+/** Which share of a book's page range one parallel batch covers (index of `of`). */
+export interface Slice {
+  index: number;
+  of: number;
+}
+
+/** Batches a book-based deck or test sends at the same time. */
+export const PARALLEL_BATCHES = 4;
+
+/** `total` split into `n` near-equal whole parts, larger parts first. */
+export function splitEven(total: number, n: number): number[] {
+  const parts = Math.max(1, n);
+  return Array.from({ length: parts }, (_, i) => Math.floor(total / parts) + (i < total % parts ? 1 : 0));
+}
+
+/**
+ * Plans the batches of a book-based test: as few as fit QUESTIONS_PER_CALL, each
+ * with its share of the multiple-choice and short-answer counts.
+ */
+export function planQuestionBatches(mc: number, short: number): { mc: number; short: number }[] {
+  let n = Math.max(1, Math.ceil((mc + short) / QUESTIONS_PER_CALL));
+  for (;;) {
+    const mcs = splitEven(mc, n);
+    const shorts = splitEven(short, n).reverse(); // pair the larger mc share with the smaller short share
+    const plan = mcs.map((m, i) => ({ mc: m, short: shorts[i] })).filter((b) => b.mc + b.short > 0);
+    if (plan.every((b) => b.mc + b.short <= QUESTIONS_PER_CALL)) return plan;
+    n += 1;
+  }
+}
+
+/** Runs `jobs` at most `limit` at a time; settles every job. */
+async function inWaves<T>(jobs: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> {
+  const out: PromiseSettledResult<T>[] = [];
+  for (let i = 0; i < jobs.length; i += limit) {
+    out.push(...(await Promise.allSettled(jobs.slice(i, i + limit).map((j) => j()))));
+  }
+  return out;
+}
+
 /**
  * One batch of cards. `avoid` is the fronts already made for this deck. With a
  * `book` (local site only) the local AI server reads that book from the Books
@@ -177,10 +216,11 @@ export async function generateCards(
   count: number,
   avoid: string[] = [],
   book?: BookSource | null,
+  slice?: Slice,
 ): Promise<LearnCard[]> {
   const data = await postLearn(
     book ? "/local/learn/cards" : "/learn/cards",
-    { request, count, avoid: clipAvoid(avoid), ...(book ? { book } : {}) },
+    { request, count, avoid: clipAvoid(avoid), ...(book ? { book } : {}), ...(book && slice ? { slice } : {}) },
     TIMEOUT_MS,
   );
   const cards = toCards(data.cards);
@@ -196,6 +236,7 @@ export async function generateQuestions(p: {
   shortCount: number;
   avoid?: string[];
   book?: BookSource | null;
+  slice?: Slice;
 }): Promise<TestQuestion[]> {
   const data = await postLearn(
     p.book ? "/local/learn/quiz" : "/learn/quiz",
@@ -206,6 +247,7 @@ export async function generateQuestions(p: {
       shortCount: p.shortCount,
       avoid: clipAvoid(p.avoid ?? []),
       ...(p.book ? { book: p.book } : {}),
+      ...(p.book && p.slice ? { slice: p.slice } : {}),
     },
     TIMEOUT_MS,
   );
@@ -249,11 +291,7 @@ export async function buildDeckCards(
 ): Promise<LearnCard[]> {
   const made: LearnCard[] = [];
   const seen = new Set<string>();
-  let empty = 0;
-  while (made.length < total && empty < MAX_EMPTY_BATCHES) {
-    if (hooks.shouldStop?.()) break;
-    const n = Math.min(CARDS_PER_CALL, total - made.length);
-    const batch = await generateCards(request, n, clipAvoid(made.map((c) => c.front)), book);
+  const addCards = (batch: LearnCard[]): number => {
     let added = 0;
     for (const c of batch) {
       const k = key(c.front);
@@ -262,6 +300,35 @@ export async function buildDeckCards(
       made.push(c);
       added += 1;
     }
+    return added;
+  };
+
+  // With a book: the batches go out together, each on its own share of the pages
+  // (the local server reads them), then the gaps are topped up the usual way.
+  if (book) {
+    const counts = splitEven(total, Math.ceil(total / CARDS_PER_CALL));
+    let firstError: unknown = null;
+    await inWaves(
+      counts.map((count, index) => async () => {
+        if (hooks.shouldStop?.()) return;
+        try {
+          addCards(await generateCards(request, count, [], book, { index, of: counts.length }));
+          hooks.onProgress?.([...made]);
+        } catch (err) {
+          firstError ??= err;
+        }
+      }),
+      PARALLEL_BATCHES,
+    );
+    if (made.length === 0 && firstError) throw firstError;
+  }
+
+  let empty = 0;
+  while (made.length < total && empty < MAX_EMPTY_BATCHES) {
+    if (hooks.shouldStop?.()) break;
+    const n = Math.min(CARDS_PER_CALL, total - made.length);
+    const batch = await generateCards(request, n, clipAvoid(made.map((c) => c.front)), book);
+    const added = addCards(batch);
     empty = added === 0 ? empty + 1 : 0;
     hooks.onProgress?.([...made]);
   }
@@ -285,16 +352,7 @@ export async function buildTestQuestions(
   const mcs: TestQuestion[] = [];
   const shorts: TestQuestion[] = [];
   const seen = new Set<string>();
-  let empty = 0;
-  while ((mcs.length < mcTotal || shorts.length < shortTotal) && empty < MAX_EMPTY_BATCHES) {
-    if (hooks.shouldStop?.()) break;
-    const { mc, short } = nextQuestionBatch(mcTotal - mcs.length, shortTotal - shorts.length);
-    const batch = await generateQuestions({
-      ...source,
-      mcCount: mc,
-      shortCount: short,
-      avoid: clipAvoid([...mcs, ...shorts].map((q) => q.prompt)),
-    });
+  const addQuestions = (batch: TestQuestion[]): number => {
     let added = 0;
     for (const q of batch) {
       const k = key(q.prompt);
@@ -305,6 +363,39 @@ export async function buildTestQuestions(
       bucket.push(q);
       added += 1;
     }
+    return added;
+  };
+
+  // With a book: all batches at once, each on its own share of the pages.
+  if (source.book) {
+    const plan = planQuestionBatches(mcTotal, shortTotal);
+    let firstError: unknown = null;
+    await inWaves(
+      plan.map((b, index) => async () => {
+        if (hooks.shouldStop?.()) return;
+        try {
+          addQuestions(await generateQuestions({ ...source, mcCount: b.mc, shortCount: b.short, slice: { index, of: plan.length } }));
+          hooks.onProgress?.([...mcs, ...shorts]);
+        } catch (err) {
+          firstError ??= err;
+        }
+      }),
+      PARALLEL_BATCHES,
+    );
+    if (mcs.length + shorts.length === 0 && firstError) throw firstError;
+  }
+
+  let empty = 0;
+  while ((mcs.length < mcTotal || shorts.length < shortTotal) && empty < MAX_EMPTY_BATCHES) {
+    if (hooks.shouldStop?.()) break;
+    const { mc, short } = nextQuestionBatch(mcTotal - mcs.length, shortTotal - shorts.length);
+    const batch = await generateQuestions({
+      ...source,
+      mcCount: mc,
+      shortCount: short,
+      avoid: clipAvoid([...mcs, ...shorts].map((q) => q.prompt)),
+    });
+    const added = addQuestions(batch);
     empty = added === 0 ? empty + 1 : 0;
     hooks.onProgress?.([...mcs, ...shorts]);
   }
