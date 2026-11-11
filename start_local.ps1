@@ -22,11 +22,17 @@ if (-not $PYTHON) {
     $PYTHON = "C:\Users\Zaki_Mir\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe"
 }
 
+# Tries IPv4 and IPv6 loopback: Vite listens on "localhost", which Node binds to
+# ::1 only, while the Python servers bind 127.0.0.1.
 function Test-Port($port) {
-    $client = New-Object System.Net.Sockets.TcpClient
-    try { return ($client.ConnectAsync("127.0.0.1", $port).Wait(1000) -and $client.Connected) }
-    catch { return $false }
-    finally { $client.Close() }
+    foreach ($addr in @("127.0.0.1", "::1")) {
+        $family = if ($addr -eq "::1") { [System.Net.Sockets.AddressFamily]::InterNetworkV6 } else { [System.Net.Sockets.AddressFamily]::InterNetwork }
+        $client = New-Object System.Net.Sockets.TcpClient($family)
+        try { if ($client.ConnectAsync($addr, $port).Wait(1000) -and $client.Connected) { return $true } }
+        catch { }
+        finally { $client.Close() }
+    }
+    return $false
 }
 
 function Wait-Port($port, $label, $seconds = 90) {
