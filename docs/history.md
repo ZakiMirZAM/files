@@ -65,3 +65,10 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     removed, so the prompt no longer calls page numbers "the page numbers the viewer shows" or names
     "the book open in the viewer"; it now says PDF page numbers as the tools give them, and books
     picked or mentioned with @. Hash re-recorded in `BOOKS_EXPECTED`.
+  - **2026-11-10** (owner instruction: apply the chat sidebar's rules to the book AI; universal rule:
+    no AI addition spends text citing its source): `LOCAL_ASK_SYSTEM` drops the rule to name a page for
+    each idea and gains the /ask answer shape (answer first, no preamble, no headings, opposing view when
+    there is one) and a NO CITATIONS rule (no book titles, authors, chapter/module/page numbers, "the book
+    says", Sources lines or URLs; a page only when the reader asks where something is). Reading the book
+    stays required. The wrong-answer review text no longer asks where the book explains each idea. Hash
+    re-recorded in `BOOKS_EXPECTED`.

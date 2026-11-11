@@ -84,5 +84,5 @@ export function wrongAnswersPrompt(
     const choices = w.choices?.length ? `\nChoices: ${w.choices.map((c, k) => `${"ABCD"[k] ?? k + 1}. ${c}`).join(" | ")}` : "";
     return `${i + 1}. ${w.prompt}${choices}\nMy answer: ${w.yourAnswer || "(none)"}\nCorrect answer: ${w.correctAnswer}`;
   });
-  return `I got these questions wrong on the test "${testTitle}". Help me review each one, and show me where the book explains it.\n\n${lines.join("\n\n")}`;
+  return `I got these questions wrong on the test "${testTitle}". Help me review each one.\n\n${lines.join("\n\n")}`;
 }

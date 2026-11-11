@@ -509,7 +509,7 @@ def test_learn_routes_run_medium_effort():
 
 # Local bookshelf AI (rag/book_tools.py). Owner approval required to change.
 BOOKS_EXPECTED = {
-    "LOCAL_ASK_SYSTEM": "4849f118ca287548a571ffc620c79c41755b4a16be0cd011d23f83dbe02962bd",
+    "LOCAL_ASK_SYSTEM": "0ab4322ffc08c77b1f7755050a8731b15c48b415d62aea6e138bcfbaf08efe2f",
 }
 
 
