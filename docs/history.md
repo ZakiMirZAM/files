@@ -52,3 +52,12 @@ Moved verbatim from CLAUDE.md on 2026-09-27.
     0.5 or 0 with feedback to "you"). All three run on Opus 5.5 at `medium` effort and honour the
     Haiku switch. `server.py` only imports `learn`, merges its effort labels and adds three routes;
     the prompts are module constants pinned in `LEARN_EXPECTED` in `rag/test_prompts.py`.
+  - **2026-11-10** (local bookshelf AI, branch `feat/local-bookshelf`): owner approved
+    `LOCAL_ASK_SYSTEM` in `rag/book_tools.py` as written (`/local/ask`: read the book with the
+    four read-only book tools before answering, review wrong test answers one at a time with the
+    pages that explain them, page numbers as "page 42" but no source list or headings, never invent
+    a page or quotation). `/local/learn/cards` and `/local/learn/quiz` reuse the approved
+    `LEARN_*_SYSTEM` prompts unchanged; the book rides in the user message. All `/local/*` routes
+    404 unless the server runs with `LOCAL_BOOKS=1` and the request is direct loopback with no
+    forwarding header. `server.py` only imports `book_tools`, merges its effort labels and adds four
+    routes; the prompt is pinned in `BOOKS_EXPECTED` in `rag/test_prompts.py`.
